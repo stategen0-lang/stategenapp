@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(node --version)",
+      "PowerShell(npm --version)",
+      "PowerShell(cd \"c:\\\\Users\\\\USER\\\\Downloads\\\\caveman-main\\\\caveman-main\\\\stategenapp\"; New-Item -ItemType Directory -Force -Path @\\(\"src\\\\lib\\\\supabase\", \"src\\\\lib\\\\matching\", \"src\\\\lib\\\\whatsapp\", \"src\\\\types\", \"src\\\\app\\\\\\(auth\\)\\\\login\", \"src\\\\app\\\\\\(auth\\)\\\\onboarding\", \"src\\\\app\\\\\\(dashboard\\)\\\\dashboard\", \"src\\\\app\\\\\\(dashboard\\)\\\\properties\", \"src\\\\app\\\\\\(dashboard\\)\\\\clients\", \"src\\\\app\\\\\\(dashboard\\)\\\\notifications\", \"src\\\\app\\\\\\(dashboard\\)\\\\analytics\", \"src\\\\app\\\\\\(dashboard\\)\\\\settings\", \"src\\\\app\\\\api\\\\matching\", \"src\\\\app\\\\api\\\\whatsapp\", \"src\\\\components\\\\dashboard\", \"src\\\\components\\\\properties\", \"src\\\\components\\\\clients\", \"src\\\\components\\\\shared\"\\) | Out-Null; Write-Host \"Directories created\")",
+      "PowerShell(cd \"c:\\\\Users\\\\USER\\\\Downloads\\\\caveman-main\\\\caveman-main\\\\stategenapp\"; Start-Process -FilePath \"powershell.exe\" -ArgumentList \"-NoExit\", \"-Command\", \"cd 'c:\\\\Users\\\\USER\\\\Downloads\\\\caveman-main\\\\caveman-main\\\\stategenapp'; npm run dev\" -PassThru | Out-Null; Write-Host \"Dev server launched in new window at http://localhost:3000\")",
+      "mcp__Claude_in_Chrome__navigate",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "PowerShell($content = Get-Content \"C:\\\\Users\\\\USER\\\\OneDrive\\\\Desktop\\\\stategenappdesign.html\" -Raw; $matches = [regex]::Matches\\($content, '\"\\(dashboard|login|properties|clients|analytics|notifications|settings|matching\\)[^\"]{0,30}\"'\\); $matches | Select-Object -First 40 | ForEach-Object { $_.Value })",
+      "PowerShell($content = Get-Content \"C:\\\\Users\\\\USER\\\\OneDrive\\\\Desktop\\\\stategenappdesign.html\" -Raw; $content.Substring\\(0, 3000\\))",
+      "PowerShell($content = Get-Content \"C:\\\\Users\\\\USER\\\\OneDrive\\\\Desktop\\\\stategenappdesign.html\" -Raw; $m = [regex]::Matches\\($content, 'Welcome back|Dashboard|Properties|Clients|Analytics|Notifications|Settings|Matching'\\); $m | Select-Object -Unique | ForEach-Object { $_.Value })",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(ls '/c/Users/USER/OneDrive/Desktop/' | grep -i zip)",
+      "Bash(unzip -o '# Real Estate Agent Dashboard App__Here'\\\\''s a complete HTMLCSSJavaScript application for Visual Studio___```html__!DOCTYPE html___html.zip' -d '/c/Users/USER/OneDrive/Desktop/RealEstateDashboard')",
+      "Bash(npm install *)",
+      "Bash(node -e \"require\\('stripe'\\); console.log\\('ok'\\)\")",
+      "Bash(extract-text \"C:\\\\Users\\\\USER\\\\OneDrive\\\\Desktop\\\\matching-spec.docx\")",
+      "Read(//c/Users/USER/AppData/Roaming/Claude/local-agent-mode-sessions/skills-plugin/0ccce496-3ee8-4136-bc7e-b751fc5a7a4a/52de14da-f759-4468-964f-588a4a992e30/skills/docx/**)",
+      "Bash(python scripts/office/unpack.py \"C:\\\\Users\\\\USER\\\\OneDrive\\\\Desktop\\\\matching-spec.docx\" \"C:\\\\Users\\\\USER\\\\AppData\\\\Local\\\\Temp\\\\matching-spec-unpacked\")",
+      "Bash(pandoc \"C:\\\\Users\\\\USER\\\\OneDrive\\\\Desktop\\\\matching-spec.docx\" -t markdown)",
+      "Bash(npx tsc *)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
+    ]
+  }
+}
