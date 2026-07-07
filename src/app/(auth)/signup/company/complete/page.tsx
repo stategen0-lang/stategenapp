@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Building2, Lock, CheckCircle2, AlertCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -16,7 +16,7 @@ interface SessionInfo {
   subscriptionId: string
 }
 
-export default function CompanyCompletePage() {
+function CompanyCompleteInner() {
   const params = useSearchParams()
   const router = useRouter()
   const supabase = createClient()
@@ -215,5 +215,13 @@ export default function CompanyCompletePage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function CompanyCompletePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center" style={{ background: '#faf9f5' }}><div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: '#5E8FD6', borderTopColor: 'transparent' }} /></div>}>
+      <CompanyCompleteInner />
+    </Suspense>
   )
 }

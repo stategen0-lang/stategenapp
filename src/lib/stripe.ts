@@ -1,12 +1,17 @@
 // Server-only — never import this in client components
 import Stripe from 'stripe'
-import { PLANS, PlanId } from './stripe-plans'
+import { PLANS } from './stripe-plans'
+import type { PlanId } from './stripe-plans'
 
-export { PLANS, PlanId }
+export { PLANS }
+export type { PlanId }
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-05-28.basil',
-})
+export function getStripe() {
+  if (!process.env.STRIPE_SECRET_KEY) throw new Error('STRIPE_SECRET_KEY is not set')
+  return new Stripe(process.env.STRIPE_SECRET_KEY, {
+    apiVersion: '2026-05-27.dahlia',
+  })
+}
 
 export function getPriceId(planId: PlanId): string {
   const plan = PLANS.find(p => p.id === planId)

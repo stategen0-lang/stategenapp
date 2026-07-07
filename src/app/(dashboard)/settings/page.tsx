@@ -227,7 +227,7 @@ export default function ProfilePage() {
             <button onClick={() => setKpiPanel(null)} className="p-1 rounded-lg hover:bg-gray-100"><X className="h-4 w-4" style={{ color: SUB }} /></button>
           </div>
           {/* Summary band */}
-          <div className="grid grid-cols-3 divide-x" style={{ divideColor: '#EEF0F4', borderBottom: '1px solid #EEF0F4' }}>
+          <div className="grid grid-cols-3 divide-x" style={{ borderColor: '#EEF0F4', borderBottom: '1px solid #EEF0F4' }}>
             {[
               { label: 'Sales volume', value: formatPrice(salesVolumeYTD) },
               { label: 'Commission rate', value: `${COMMISSION_RATE}%` },

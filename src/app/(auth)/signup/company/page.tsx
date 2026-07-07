@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Building2, Mail, Globe, ChevronLeft, Check, Zap } from 'lucide-react'
@@ -8,7 +8,7 @@ import { PLANS, PlanId } from '@/lib/stripe-plans'
 
 type Step = 'info' | 'plan'
 
-export default function CompanySignupPage() {
+function CompanySignupInner() {
   const params = useSearchParams()
   const cancelled = params.get('cancelled') === '1'
 
@@ -237,5 +237,13 @@ export default function CompanySignupPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function CompanySignupPage() {
+  return (
+    <Suspense fallback={null}>
+      <CompanySignupInner />
+    </Suspense>
   )
 }

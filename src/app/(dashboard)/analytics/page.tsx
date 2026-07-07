@@ -150,7 +150,7 @@ export default function AnalyticsPage() {
 
       {kpiPanel === 'avgprice' && (
         <Panel title={`Avg Sale Price — $${avgPrice.toLocaleString()} per deal`} onClose={() => setKpiPanel(null)}>
-          <div className="divide-y" style={{ divideColor: '#F4F5F8' }}>
+          <div className="divide-y" style={{ borderColor: '#F4F5F8' }}>
             {agentDeals.map(({ agent, actualDeals }) => {
               const avg = actualDeals.length ? Math.round(actualDeals.reduce((s, d) => s + d.value, 0) / actualDeals.length) : 0
               return (
@@ -179,7 +179,7 @@ export default function AnalyticsPage() {
 
       {kpiPanel === 'commission' && (
         <Panel title={`Commission MTD — USD ${totalComm.toLocaleString()} total`} onClose={() => setKpiPanel(null)}>
-          <div className="divide-y" style={{ divideColor: '#F4F5F8' }}>
+          <div className="divide-y" style={{ borderColor: '#F4F5F8' }}>
             {agentDeals.map(({ agent, commission, actualDeals }) => (
               <div key={agent.id} className="flex items-center gap-4 px-5 py-3">
                 <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0" style={{ background: agent.color }}>{agent.initials}</div>
@@ -277,7 +277,7 @@ export default function AnalyticsPage() {
         const tc = typeCounts.find(x => x.type === typeFilter)!
         return (
           <Panel title={`${typeFilter} Listings (${tc.properties.length})`} onClose={() => setTypeFilter(null)}>
-            <div className="divide-y" style={{ divideColor: '#F4F5F8' }}>
+            <div className="divide-y" style={{ borderColor: '#F4F5F8' }}>
               {tc.properties.map(p => {
                 const agent = getAgent(p.agentId)
                 return (
