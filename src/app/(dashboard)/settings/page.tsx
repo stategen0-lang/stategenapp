@@ -80,7 +80,7 @@ export default function ProfilePage() {
   function addTemplate() {
     const t: DescriptionTemplate = { id: `t${Date.now()}`, name: 'New Template', body: '', active: false }
     saveTemplates([...templates, t])
-    startEdit(t.id)
+    startEdit(t)
   }
 
   function toggleKpi(k: KpiKey) { setKpiPanel(p => p === k ? null : k) }
