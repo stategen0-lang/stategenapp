@@ -112,14 +112,14 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <div className="p-6 space-y-5" style={{ fontFamily: 'var(--font-public-sans), -apple-system, BlinkMacSystemFont, sans-serif' }}>
+    <div className="p-4 md:p-6 space-y-4 md:space-y-5" style={{ fontFamily: 'var(--font-public-sans), -apple-system, BlinkMacSystemFont, sans-serif' }}>
       <div>
-        <h1 className="text-2xl font-bold" style={{ color: H, letterSpacing: '-0.3px' }}>Reports</h1>
-        <p className="text-sm mt-0.5" style={{ color: SUB }}>Agency performance overview — click anything to drill in</p>
+        <h1 className="text-xl md:text-2xl font-bold" style={{ color: H, letterSpacing: '-0.3px' }}>Reports</h1>
+        <p className="text-xs md:text-sm mt-0.5" style={{ color: SUB }}>Agency performance — click to drill in</p>
       </div>
 
       {/* ── KPI cards ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         {reportKpis.map(({ key, label, value, sub, subColor, iconBg, iconFg, Icon }) => (
           <div
             key={key}
@@ -307,13 +307,14 @@ export default function AnalyticsPage() {
         )
       })()}
 
-      {/* ── Top Closed Deals table ── */}
+      {/* ── Top Closed Deals ── */}
       <div className="rounded-2xl bg-white overflow-hidden" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #EEF0F4' }}>
         <div className="px-5 py-4" style={{ borderBottom: '1px solid #EEF0F4' }}>
           <h2 className="text-sm font-bold" style={{ color: H }}>Top Closed Deals</h2>
-          <p className="text-xs mt-0.5" style={{ color: SUB }}>Click a row for full details</p>
+          <p className="text-xs mt-0.5" style={{ color: SUB }}>Click for full details</p>
         </div>
-        <table className="w-full text-sm">
+        {/* Desktop table */}
+        <table className="hidden md:table w-full text-sm">
           <thead>
             <tr style={{ background: '#F7F8FB', borderBottom: '1px solid #EEF0F4' }}>
               {['Property', 'Location', 'Agent', 'Value', 'Days'].map(h => (
@@ -325,12 +326,7 @@ export default function AnalyticsPage() {
             {DEALS.slice(0, 3).map(deal => {
               const agent = getAgent(deal.agentId)
               return (
-                <tr
-                  key={deal.id}
-                  onClick={() => setDealModal(deal)}
-                  className="cursor-pointer hover:bg-gray-50 transition-colors"
-                  style={{ borderBottom: '1px solid #F4F5F8' }}
-                >
+                <tr key={deal.id} onClick={() => setDealModal(deal)} className="cursor-pointer hover:bg-gray-50 transition-colors" style={{ borderBottom: '1px solid #F4F5F8' }}>
                   <td className="px-4 py-3">
                     <p className="font-semibold" style={{ color: H }}>{deal.propTitle}</p>
                     <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: '#EAF0FA', color: '#2E5288' }}>{deal.type}</span>
@@ -349,16 +345,32 @@ export default function AnalyticsPage() {
             })}
           </tbody>
         </table>
+        {/* Mobile cards */}
+        <div className="md:hidden">
+          {DEALS.slice(0, 3).map(deal => {
+            const agent = getAgent(deal.agentId)
+            return (
+              <div key={deal.id} onClick={() => setDealModal(deal)} className="flex items-center gap-3 px-4 py-3 cursor-pointer active:bg-gray-50" style={{ borderBottom: '1px solid #F4F5F8' }}>
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0" style={{ background: agent.color }}>{agent.initials}</div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate" style={{ color: H }}>{deal.propTitle}</p>
+                  <p className="text-xs" style={{ color: SUB }}>{deal.location} · {deal.days}d</p>
+                </div>
+                <p className="text-sm font-bold shrink-0" style={{ color: H }}>${(deal.value/1000).toFixed(0)}K</p>
+              </div>
+            )
+          })}
+        </div>
       </div>
 
       {/* ── Deal detail modal ── */}
       {dealModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-4"
           style={{ background: 'rgba(14,31,61,0.45)' }}
           onClick={e => e.target === e.currentTarget && setDealModal(null)}
         >
-          <div className="w-full max-w-sm rounded-2xl overflow-hidden bg-white" style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
+          <div className="w-full md:max-w-sm md:rounded-2xl rounded-t-2xl overflow-hidden bg-white" style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
             <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid #EEF0F4' }}>
               <p className="font-semibold text-sm" style={{ color: H }}>Deal Details</p>
               <button onClick={() => setDealModal(null)} className="p-1 rounded-lg hover:bg-gray-100"><X className="h-4 w-4" style={{ color: SUB }} /></button>

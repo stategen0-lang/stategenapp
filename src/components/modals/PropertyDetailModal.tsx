@@ -20,13 +20,13 @@ export default function PropertyDetailModal({ property: p, agent, onClose }: Pro
   return (
     <>
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-4"
         style={{ background: 'rgba(14,31,61,0.5)' }}
         onClick={e => e.target === e.currentTarget && onClose()}
       >
         <div
-          className="w-full max-w-lg rounded-2xl overflow-hidden flex flex-col"
-          style={{ background: '#fff', boxShadow: '0 8px 40px rgba(0,0,0,0.2)', maxHeight: '90vh' }}
+          className="w-full md:max-w-lg md:rounded-2xl rounded-t-2xl overflow-hidden flex flex-col"
+          style={{ background: '#fff', boxShadow: '0 8px 40px rgba(0,0,0,0.2)', maxHeight: '92vh' }}
         >
           {/* ── Main photo / gradient hero ── */}
           <div className="relative shrink-0" style={{ height: 200 }}>

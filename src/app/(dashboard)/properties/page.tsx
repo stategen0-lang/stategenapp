@@ -28,35 +28,32 @@ export default function PropertiesPage() {
   }
 
   return (
-    <div className="p-6 space-y-6" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-extrabold" style={{ color: '#14223F', letterSpacing: '-0.5px' }}>Properties</h1>
-          <p className="text-sm mt-0.5" style={{ color: '#6A7488' }}>Manage your listings</p>
+          <h1 className="text-xl md:text-2xl font-extrabold" style={{ color: '#14223F', letterSpacing: '-0.5px' }}>Properties</h1>
+          <p className="text-xs md:text-sm mt-0.5" style={{ color: '#6A7488' }}>Manage your listings</p>
         </div>
-        <div className="flex items-center gap-3">
-          {/* Scope toggle */}
+        <div className="flex items-center gap-2">
           <div className="flex rounded-xl overflow-hidden" style={{ border: '1.5px solid #EEF0F4', background: '#F7F8FB' }}>
             {(['me','company'] as const).map(s => (
               <button
                 key={s}
                 onClick={() => setScope(s)}
-                className="px-4 py-1.5 text-sm font-semibold transition-colors"
-                style={scope === s
-                  ? { background: '#0E1F3D', color: '#fff' }
-                  : { background: 'transparent', color: '#6A7488' }}
+                className="px-3 py-1.5 text-xs md:text-sm font-semibold transition-colors"
+                style={scope === s ? { background: '#0E1F3D', color: '#fff' } : { background: 'transparent', color: '#6A7488' }}
               >
-                {s === 'me' ? 'My listings' : 'Company'}
+                {s === 'me' ? 'Mine' : 'All'}
               </button>
             ))}
           </div>
           <button
             onClick={() => setAddOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-white"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs md:text-sm font-bold text-white"
             style={{ background: '#0E1F3D' }}
           >
-            + Add listing
+            + Add
           </button>
         </div>
       </div>
@@ -83,7 +80,7 @@ export default function PropertiesPage() {
       {/* Toast */}
       {toast && (
         <div
-          className="fixed bottom-6 right-6 px-4 py-2.5 rounded-xl text-sm font-semibold text-white z-50"
+          className="fixed bottom-20 right-4 md:bottom-6 md:right-6 px-4 py-2.5 rounded-xl text-sm font-semibold text-white z-50"
           style={{ background: '#1F7A4D', boxShadow: '0 4px 16px rgba(0,0,0,0.15)' }}
         >
           {toast}

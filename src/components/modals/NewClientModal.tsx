@@ -60,11 +60,11 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = 80 }
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-4"
       style={{ background: 'rgba(14,31,61,0.45)' }}
       onClick={e => e.target === e.currentTarget && onClose()}
     >
-      <div className="w-full max-w-md rounded-2xl overflow-hidden" style={{ background: '#fff', boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
+      <div className="w-full md:max-w-md md:rounded-2xl rounded-t-2xl overflow-hidden" style={{ background: '#fff', boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
         {/* Header */}
         <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid #EEF0F4' }}>
           <div>

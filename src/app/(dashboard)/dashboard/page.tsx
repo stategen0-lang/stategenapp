@@ -105,51 +105,51 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="p-6 space-y-5" style={{ fontFamily: 'var(--font-public-sans), -apple-system, BlinkMacSystemFont, sans-serif' }}>
+    <div className="p-4 md:p-6 space-y-4 md:space-y-5" style={{ fontFamily: 'var(--font-public-sans), -apple-system, BlinkMacSystemFont, sans-serif' }}>
 
       {/* ── Header ── */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: H, letterSpacing: '-0.3px' }}>Dashboard</h1>
-          <p className="text-sm mt-0.5" style={{ color: SUB }}>Overview of your agency activity</p>
+          <h1 className="text-xl md:text-2xl font-bold" style={{ color: H, letterSpacing: '-0.3px' }}>Dashboard</h1>
+          <p className="text-xs md:text-sm mt-0.5" style={{ color: SUB }}>Overview of your agency activity</p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setNewClientOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs md:text-sm font-semibold transition-colors"
             style={{ border: '1.5px solid #D8DCE6', background: '#fff', color: '#1A2B4A' }}
           >
-            <Plus className="h-3.5 w-3.5" /> Add Client
+            <Plus className="h-3 w-3" /> Client
           </button>
           <button
             onClick={() => setNewPropOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs md:text-sm font-semibold text-white transition-colors"
             style={{ background: '#0E1F3D' }}
           >
-            <Plus className="h-3.5 w-3.5" /> Add Property
+            <Plus className="h-3 w-3" /> Property
           </button>
         </div>
       </div>
 
       {/* ── KPI cards ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         {kpis.map(({ key, label, value, sub, subColor, icon: Icon, iconBg, iconFg }) => (
           <div
             key={label}
             onClick={() => togglePanel(key as Panel)}
-            className="rounded-2xl p-5 bg-white transition-all cursor-pointer"
+            className="rounded-2xl p-3 md:p-5 bg-white transition-all cursor-pointer"
             style={{
               boxShadow: panel === key ? '0 0 0 2px #5E8FD6, 0 2px 8px rgba(0,0,0,0.08)' : '0 1px 4px rgba(0,0,0,0.06)',
               border: panel === key ? '1px solid #5E8FD6' : '1px solid #EEF0F4',
             }}
           >
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3" style={{ background: iconBg }}>
+            <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl flex items-center justify-center mb-2 md:mb-3" style={{ background: iconBg }}>
               <Icon className="h-4 w-4" style={{ color: iconFg }} />
             </div>
-            <p className="text-2xl font-bold" style={{ color: H }}>{value}</p>
+            <p className="text-lg md:text-2xl font-bold" style={{ color: H }}>{value}</p>
             <p className="text-xs mt-0.5 font-medium" style={{ color: SUB }}>{label}</p>
-            <p className="text-xs mt-1 font-medium" style={{ color: subColor }}>{sub}</p>
-            <p className="text-xs mt-2 font-semibold" style={{ color: '#5E8FD6' }}>Click to view →</p>
+            <p className="text-xs mt-1 font-medium hidden md:block" style={{ color: subColor }}>{sub}</p>
+            <p className="text-xs mt-1 md:mt-2 font-semibold" style={{ color: '#5E8FD6' }}>View →</p>
           </div>
         ))}
       </div>
@@ -371,10 +371,10 @@ export default function DashboardPage() {
 
       {/* ── Deal detail modal ── */}
       {detailDeal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-4"
           style={{ background: 'rgba(14,31,61,0.45)' }}
           onClick={e => e.target === e.currentTarget && setDetailDeal(null)}>
-          <div className="w-full max-w-sm rounded-2xl overflow-hidden bg-white" style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
+          <div className="w-full md:max-w-sm md:rounded-2xl rounded-t-2xl overflow-hidden bg-white" style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
             <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid #EEF0F4' }}>
               <p className="font-semibold text-sm" style={{ color: H }}>Closed Deal</p>
               <button onClick={() => setDetailDeal(null)} style={{ color: SUB }} className="text-lg leading-none hover:text-gray-600">✕</button>
@@ -423,7 +423,7 @@ export default function DashboardPage() {
 
       {/* ── Toast ── */}
       {toast && (
-        <div className="fixed bottom-6 right-6 px-4 py-2.5 rounded-xl text-sm font-medium text-white z-50"
+        <div className="fixed bottom-20 right-4 md:bottom-6 md:right-6 px-4 py-2.5 rounded-xl text-sm font-medium text-white z-50"
           style={{ background: '#1F7A4D', boxShadow: '0 4px 16px rgba(0,0,0,0.15)' }}>
           {toast}
         </div>

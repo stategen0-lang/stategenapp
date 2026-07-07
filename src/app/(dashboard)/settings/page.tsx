@@ -71,7 +71,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="p-6 space-y-5" style={{ fontFamily: 'var(--font-public-sans), -apple-system, BlinkMacSystemFont, sans-serif' }}>
+    <div className="p-4 md:p-6 space-y-4 md:space-y-5" style={{ fontFamily: 'var(--font-public-sans), -apple-system, BlinkMacSystemFont, sans-serif' }}>
 
       {/* Header */}
       <div className="flex items-center gap-4">
@@ -85,7 +85,7 @@ export default function ProfilePage() {
       </div>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         {kpis.map(({ key, label, value, sub, subColor, iconBg, iconFg, Icon }) => (
           <div
             key={key}
@@ -343,11 +343,11 @@ export default function ProfilePage() {
       {/* Deal detail modal */}
       {dealModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-4"
           style={{ background: 'rgba(14,31,61,0.45)' }}
           onClick={e => e.target === e.currentTarget && setDealModal(null)}
         >
-          <div className="w-full max-w-sm rounded-2xl overflow-hidden bg-white" style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
+          <div className="w-full md:max-w-sm md:rounded-2xl rounded-t-2xl overflow-hidden bg-white" style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
             <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid #EEF0F4' }}>
               <p className="font-semibold text-sm" style={{ color: H }}>Deal Details</p>
               <button onClick={() => setDealModal(null)} className="p-1 rounded-lg hover:bg-gray-100"><X className="h-4 w-4" style={{ color: SUB }} /></button>
