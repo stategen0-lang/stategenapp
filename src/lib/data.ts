@@ -39,6 +39,8 @@ export interface Property {
   garden: boolean
   balcony: boolean
   view: string
+  parkings?: number
+  aiDescription?: string
   notes?: string
   status: PropertyStatus
   agentId: AgentId

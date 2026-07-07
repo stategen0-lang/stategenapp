@@ -4,7 +4,7 @@ import { chat } from '@/lib/xai'
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { type, transaction, price, rent, district, city, size, beds, baths, garden, balcony, view, advancedPayment, notes } = body
+    const { type, transaction, price, rent, district, city, size, beds, baths, garden, balcony, view, advancedPayment, notes, template } = body
 
     const priceStr = transaction === 'For Rent'
       ? `USD ${Number(rent).toLocaleString()}/month`
@@ -34,7 +34,8 @@ Requirements:
 - Mention the most attractive features naturally
 - End with a subtle call to action
 - Do NOT use generic filler phrases like "don't miss this opportunity"
-- Write in English`
+- Write in English
+${template ? `\nStyle guide to follow:\n${template}` : ''}`
 
     const description = await chat([{ role: 'user', content: prompt }], {
       temperature: 0.7,

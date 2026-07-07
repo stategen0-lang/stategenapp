@@ -1,8 +1,21 @@
 'use client'
 
-import { useState } from 'react'
-import { TrendingUp, DollarSign, Home, BadgeDollarSign, X, ChevronRight } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { TrendingUp, DollarSign, Home, BadgeDollarSign, X, ChevronRight, Plus, Trash2, Check } from 'lucide-react'
 import { DEALS, getAgent, formatPrice, Deal, typeStyle } from '@/lib/data'
+
+interface DescriptionTemplate {
+  id: string
+  name: string
+  body: string
+  active: boolean
+}
+
+const DEFAULT_TEMPLATES: DescriptionTemplate[] = [
+  { id: 't1', name: 'Luxury', body: 'Emphasize exclusivity, premium finishes, and lifestyle. Use elegant language. Mention prestige of location.', active: false },
+  { id: 't2', name: 'Commercial', body: 'Focus on business potential, visibility, foot traffic, and ROI. Keep tone professional and concise.', active: false },
+  { id: 't3', name: 'Standard', body: 'Balanced, friendly tone. Highlight value for money, practical features, and neighborhood character.', active: false },
+]
 
 const COMMISSION_RATE = 2.5
 const MY_AGENT_ID = 'a1'
@@ -27,6 +40,48 @@ export default function ProfilePage() {
   const [kpiPanel,    setKpiPanel]   = useState<KpiKey | null>(null)
   const [dealModal,   setDealModal]  = useState<Deal | null>(null)
   const [volumeYear,  setVolumeYear] = useState<number | null>(2026)
+
+  const [templates, setTemplates] = useState<DescriptionTemplate[]>(DEFAULT_TEMPLATES)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [newName, setNewName] = useState('')
+  const [newBody, setNewBody] = useState('')
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('descriptionTemplates')
+      if (saved) setTemplates(JSON.parse(saved))
+    } catch { /* ignore */ }
+  }, [])
+
+  function saveTemplates(next: DescriptionTemplate[]) {
+    setTemplates(next)
+    try { localStorage.setItem('descriptionTemplates', JSON.stringify(next)) } catch { /* ignore */ }
+  }
+
+  function toggleActive(id: string) {
+    saveTemplates(templates.map(t => ({ ...t, active: t.id === id ? !t.active : false })))
+  }
+
+  function deleteTemplate(id: string) {
+    saveTemplates(templates.filter(t => t.id !== id))
+  }
+
+  function startEdit(t: DescriptionTemplate) {
+    setEditingId(t.id)
+    setNewName(t.name)
+    setNewBody(t.body)
+  }
+
+  function saveEdit(id: string) {
+    saveTemplates(templates.map(t => t.id === id ? { ...t, name: newName, body: newBody } : t))
+    setEditingId(null)
+  }
+
+  function addTemplate() {
+    const t: DescriptionTemplate = { id: `t${Date.now()}`, name: 'New Template', body: '', active: false }
+    saveTemplates([...templates, t])
+    startEdit(t.id)
+  }
 
   function toggleKpi(k: KpiKey) { setKpiPanel(p => p === k ? null : k) }
 
@@ -282,6 +337,87 @@ export default function ProfilePage() {
         </div>
         <div className="text-2xl font-bold px-5 py-2 rounded-xl" style={{ background: '#EAF0FA', color: '#2E5288' }}>
           {COMMISSION_RATE}%
+        </div>
+      </div>
+
+      {/* Description Templates */}
+      <div className="rounded-2xl bg-white overflow-hidden" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #EEF0F4' }}>
+        <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid #EEF0F4' }}>
+          <div>
+            <p className="text-sm font-bold" style={{ color: H }}>AI Description Templates</p>
+            <p className="text-xs mt-0.5" style={{ color: SUB }}>Set the active template to guide AI descriptions in new listings</p>
+          </div>
+          <button
+            onClick={addTemplate}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white"
+            style={{ background: '#0E1F3D' }}
+          >
+            <Plus className="h-3.5 w-3.5" /> Add
+          </button>
+        </div>
+        <div className="divide-y" style={{ borderColor: '#EEF0F4' }}>
+          {templates.length === 0 && (
+            <p className="px-5 py-6 text-xs text-center" style={{ color: '#9AA3B2' }}>No templates yet. Add one to guide AI descriptions.</p>
+          )}
+          {templates.map(t => (
+            <div key={t.id} className="p-4">
+              {editingId === t.id ? (
+                <div className="space-y-2">
+                  <input
+                    className="w-full rounded-xl px-3 py-2 text-sm outline-none font-semibold"
+                    style={{ border: '1.5px solid #5E8FD6', background: '#F7F8FB', color: '#14223F' }}
+                    value={newName}
+                    onChange={e => setNewName(e.target.value)}
+                    placeholder="Template name"
+                  />
+                  <textarea
+                    className="w-full rounded-xl px-3 py-2 text-sm outline-none"
+                    style={{ border: '1.5px solid #5E8FD6', background: '#F7F8FB', color: '#14223F', resize: 'none' }}
+                    rows={3}
+                    value={newBody}
+                    onChange={e => setNewBody(e.target.value)}
+                    placeholder="Describe the style guide for the AI (tone, focus, language…)"
+                  />
+                  <div className="flex gap-2 justify-end">
+                    <button onClick={() => setEditingId(null)} className="px-3 py-1.5 rounded-lg text-xs font-semibold" style={{ border: '1.5px solid #EEF0F4', color: '#6A7488' }}>Cancel</button>
+                    <button onClick={() => saveEdit(t.id)} disabled={!newName} className="px-3 py-1.5 rounded-lg text-xs font-bold text-white disabled:opacity-50" style={{ background: '#0E1F3D' }}>Save</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start gap-3">
+                  {/* Active toggle */}
+                  <button
+                    onClick={() => toggleActive(t.id)}
+                    title={t.active ? 'Active — click to deactivate' : 'Click to set as active'}
+                    className="shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors mt-0.5"
+                    style={t.active
+                      ? { background: '#1F7A4D', borderColor: '#1F7A4D' }
+                      : { background: 'transparent', borderColor: '#C4CAD6' }
+                    }
+                  >
+                    {t.active && <Check className="h-3.5 w-3.5 text-white" />}
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold" style={{ color: H }}>{t.name}</p>
+                      {t.active && (
+                        <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: '#E3F4EA', color: '#1F7A4D' }}>Active</span>
+                      )}
+                    </div>
+                    <p className="text-xs mt-1 leading-relaxed" style={{ color: SUB }}>{t.body || <span className="italic" style={{ color: '#C4CAD6' }}>No style guide yet</span>}</p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => startEdit(t)} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors" title="Edit">
+                      <ChevronRight className="h-3.5 w-3.5" style={{ color: SUB }} />
+                    </button>
+                    <button onClick={() => deleteTemplate(t.id)} className="p-1.5 rounded-lg hover:bg-red-50 transition-colors" title="Delete">
+                      <Trash2 className="h-3.5 w-3.5" style={{ color: '#A23434' }} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </div>
 

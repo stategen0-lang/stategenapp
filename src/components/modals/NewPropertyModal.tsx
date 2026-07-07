@@ -16,9 +16,10 @@ let _nextId = 100
 export default function NewPropertyModal({ onClose, onSaved }: Props) {
   const [form, setForm] = useState({
     title: '', type: 'Appartement' as PropertyType, transaction: 'For Sale' as Transaction,
-    price: '', rent: '', district: '', city: '', size: '', beds: '', baths: '',
+    price: '', rent: '', district: '', city: '', size: '', beds: '', baths: '', parkings: '',
     garden: false, balcony: false, view: '', status: 'Available' as PropertyStatus,
     advancedPayment: '' as AdvancedPayment | '',
+    aiDescription: '',
     notes: '',
   })
   const [photos, setPhotos]     = useState<string[]>([])
@@ -34,14 +35,24 @@ export default function NewPropertyModal({ onClose, onSaved }: Props) {
     setAiLoading(true)
     setAiError('')
     try {
+      let activeTemplate = ''
+      try {
+        const savedTemplates = localStorage.getItem('descriptionTemplates')
+        if (savedTemplates) {
+          const templates: { id: string; name: string; body: string; active: boolean }[] = JSON.parse(savedTemplates)
+          const active = templates.find(t => t.active)
+          if (active) activeTemplate = active.body
+        }
+      } catch { /* localStorage may be unavailable */ }
+
       const res = await fetch('/api/ai/property-description', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form }),
+        body: JSON.stringify({ ...form, template: activeTemplate || undefined }),
       })
       const data = await res.json()
       if (data.description) {
-        set('notes', data.description)
+        set('aiDescription', data.description)
       } else {
         setAiError('Could not generate description. Try again.')
       }
@@ -77,11 +88,13 @@ export default function NewPropertyModal({ onClose, onSaved }: Props) {
       size: parseInt(form.size) || 0,
       beds: parseInt(form.beds) || 0,
       baths: parseInt(form.baths) || 0,
+      parkings: parseInt(form.parkings) || undefined,
       garden: form.garden,
       balcony: form.balcony,
       view: form.view,
       status: form.status,
       agentId: CURRENT_AGENT_ID as AgentId,
+      aiDescription: form.aiDescription || undefined,
       notes: form.notes || undefined,
       advancedPayment: (form.transaction === 'For Rent' && form.advancedPayment) ? form.advancedPayment as AdvancedPayment : undefined,
       photos: photos.length > 0 ? photos : undefined,
@@ -176,8 +189,8 @@ export default function NewPropertyModal({ onClose, onSaved }: Props) {
             </div>
           </div>
 
-          {/* Size + Beds + Baths */}
-          <div className="grid grid-cols-3 gap-3">
+          {/* Size + Beds + Baths + Parking */}
+          <div className="grid grid-cols-4 gap-2">
             <div>
               <label className={label} style={labelStyle}>Size (m²)</label>
               <input className={inp} style={inpStyle} type="number" value={form.size} onChange={e => set('size', e.target.value)} placeholder="145" />
@@ -189,6 +202,10 @@ export default function NewPropertyModal({ onClose, onSaved }: Props) {
             <div>
               <label className={label} style={labelStyle}>Baths</label>
               <input className={inp} style={inpStyle} type="number" value={form.baths} onChange={e => set('baths', e.target.value)} placeholder="2" />
+            </div>
+            <div>
+              <label className={label} style={labelStyle}>Parking</label>
+              <input className={inp} style={inpStyle} type="number" value={form.parkings} onChange={e => set('parkings', e.target.value)} placeholder="1" />
             </div>
           </div>
 
@@ -210,10 +227,12 @@ export default function NewPropertyModal({ onClose, onSaved }: Props) {
             </label>
           </div>
 
-          {/* Notes + AI button */}
+          {/* AI Description */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className={label} style={{ ...labelStyle, marginBottom: 0 }}>Description / Notes <span style={{ color: '#B0B8C8', fontWeight: 400 }}>(optional)</span></label>
+              <label className={label} style={{ ...labelStyle, marginBottom: 0 }}>
+                AI Description <span style={{ color: '#B0B8C8', fontWeight: 400 }}>(client-facing)</span>
+              </label>
               <button
                 type="button"
                 onClick={handleAiDescription}
@@ -223,7 +242,7 @@ export default function NewPropertyModal({ onClose, onSaved }: Props) {
               >
                 {aiLoading
                   ? <><Loader2 className="h-3 w-3 animate-spin" /> Generating…</>
-                  : <><Sparkles className="h-3 w-3" /> AI Description</>
+                  : <><Sparkles className="h-3 w-3" /> Generate</>
                 }
               </button>
             </div>
@@ -232,9 +251,24 @@ export default function NewPropertyModal({ onClose, onSaved }: Props) {
               className={inp}
               style={{ ...inpStyle, resize: 'none' }}
               rows={3}
+              value={form.aiDescription}
+              onChange={e => set('aiDescription', e.target.value)}
+              placeholder="Generate with AI or write a marketing description…"
+            />
+          </div>
+
+          {/* Internal Notes */}
+          <div>
+            <label className={label} style={labelStyle}>
+              Internal Notes <span style={{ color: '#B0B8C8', fontWeight: 400 }}>(private)</span>
+            </label>
+            <textarea
+              className={inp}
+              style={{ ...inpStyle, resize: 'none' }}
+              rows={2}
               value={form.notes}
               onChange={e => set('notes', e.target.value)}
-              placeholder="Agent notes or property description…"
+              placeholder="Private notes for the team…"
             />
           </div>
 
@@ -253,7 +287,6 @@ export default function NewPropertyModal({ onClose, onSaved }: Props) {
                   >✕</button>
                 </div>
               ))}
-              {/* Add photos button — always last */}
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
