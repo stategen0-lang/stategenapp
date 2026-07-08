@@ -1,10 +1,12 @@
 'use client'
 
-import { useState, useRef } from 'react'
-import { Sparkles, Loader2, ImagePlus } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Sparkles, Loader2, ImagePlus, ChevronDown } from 'lucide-react'
 import { Property, PropertyType, Transaction, PropertyStatus, AdvancedPayment, AgentId, CURRENT_AGENT_ID } from '@/lib/data'
 
 const PROPERTY_TYPES: PropertyType[] = ['Appartement', 'Shop', 'Office', 'Building', 'Villa', 'Land', 'Showroom', 'Restaurant']
+
+interface DescriptionTemplate { id: string; name: string; body: string; active: boolean }
 
 interface Props {
   onClose: () => void
@@ -22,33 +24,43 @@ export default function NewPropertyModal({ onClose, onSaved }: Props) {
     aiDescription: '',
     notes: '',
   })
-  const [photos, setPhotos]     = useState<string[]>([])
+  const [photos, setPhotos] = useState<string[]>([])
   const [aiLoading, setAiLoading] = useState(false)
-  const [aiError, setAiError]     = useState('')
+  const [aiError, setAiError] = useState('')
+  const [templates, setTemplates] = useState<DescriptionTemplate[]>([])
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('none')
+  const [templateOpen, setTemplateOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('descriptionTemplates')
+      if (saved) {
+        const parsed: DescriptionTemplate[] = JSON.parse(saved)
+        setTemplates(parsed)
+        const active = parsed.find(t => t.active)
+        if (active) setSelectedTemplateId(active.id)
+      }
+    } catch { /* ignore */ }
+  }, [])
 
   function set(k: string, v: string | boolean) {
     setForm(f => ({ ...f, [k]: v }))
   }
 
+  const selectedTemplate = templates.find(t => t.id === selectedTemplateId)
+
   async function handleAiDescription() {
     setAiLoading(true)
     setAiError('')
     try {
-      let activeTemplate = ''
-      try {
-        const savedTemplates = localStorage.getItem('descriptionTemplates')
-        if (savedTemplates) {
-          const templates: { id: string; name: string; body: string; active: boolean }[] = JSON.parse(savedTemplates)
-          const active = templates.find(t => t.active)
-          if (active) activeTemplate = active.body
-        }
-      } catch { /* localStorage may be unavailable */ }
-
       const res = await fetch('/api/ai/property-description', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, template: activeTemplate || undefined }),
+        body: JSON.stringify({
+          ...form,
+          template: selectedTemplate?.body || undefined,
+        }),
       })
       const data = await res.json()
       if (data.description) {
@@ -111,7 +123,7 @@ export default function NewPropertyModal({ onClose, onSaved }: Props) {
     <div
       className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-4"
       style={{ background: 'rgba(14,31,61,0.45)' }}
-      onClick={e => e.target === e.currentTarget && onClose()}
+      onClick={e => { if (e.target === e.currentTarget) { setTemplateOpen(false); onClose() } }}
     >
       <div className="w-full md:max-w-md md:rounded-2xl rounded-t-2xl overflow-hidden" style={{ background: '#fff', boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
         <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid #EEF0F4' }}>
@@ -229,15 +241,61 @@ export default function NewPropertyModal({ onClose, onSaved }: Props) {
 
           {/* AI Description */}
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className={label} style={{ ...labelStyle, marginBottom: 0 }}>
-                AI Description <span style={{ color: '#B0B8C8', fontWeight: 400 }}>(client-facing)</span>
-              </label>
+            <label className={label} style={labelStyle}>
+              AI Description <span style={{ color: '#B0B8C8', fontWeight: 400 }}>(client-facing)</span>
+            </label>
+
+            {/* Template picker + Generate row */}
+            <div className="flex gap-2 mb-2">
+              {/* Template selector */}
+              <div className="relative flex-1">
+                <button
+                  type="button"
+                  onClick={() => setTemplateOpen(o => !o)}
+                  className="w-full flex items-center justify-between px-3 py-1.5 rounded-xl text-xs font-medium"
+                  style={{ border: '1.5px solid #EEF0F4', background: '#F7F8FB', color: selectedTemplate ? '#14223F' : '#9AA3B2' }}
+                >
+                  <span className="truncate">{selectedTemplate ? selectedTemplate.name : 'No template'}</span>
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0 ml-1" style={{ color: '#9AA3B2' }} />
+                </button>
+                {templateOpen && (
+                  <div
+                    className="absolute left-0 right-0 top-full mt-1 rounded-xl overflow-hidden z-10"
+                    style={{ background: '#fff', border: '1.5px solid #EEF0F4', boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => { setSelectedTemplateId('none'); setTemplateOpen(false) }}
+                      className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 transition-colors"
+                      style={{ color: selectedTemplateId === 'none' ? '#2E5288' : '#6A7488', fontWeight: selectedTemplateId === 'none' ? 600 : 400 }}
+                    >
+                      No template
+                    </button>
+                    {templates.length === 0 && (
+                      <p className="px-3 py-2 text-xs italic" style={{ color: '#B0B8C8' }}>No templates saved yet — add them in Profile settings.</p>
+                    )}
+                    {templates.map(t => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => { setSelectedTemplateId(t.id); setTemplateOpen(false) }}
+                        className="w-full text-left px-3 py-2 hover:bg-gray-50 transition-colors"
+                        style={{ borderTop: '1px solid #F4F5F8' }}
+                      >
+                        <p className="text-xs font-semibold" style={{ color: selectedTemplateId === t.id ? '#2E5288' : '#14223F' }}>{t.name}</p>
+                        <p className="text-xs mt-0.5 line-clamp-1" style={{ color: '#9AA3B2' }}>{t.body}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Generate button */}
               <button
                 type="button"
                 onClick={handleAiDescription}
                 disabled={aiLoading}
-                className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors disabled:opacity-60"
+                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors disabled:opacity-60 shrink-0"
                 style={{ background: '#EAF0FA', color: '#2E5288' }}
               >
                 {aiLoading
@@ -246,6 +304,7 @@ export default function NewPropertyModal({ onClose, onSaved }: Props) {
                 }
               </button>
             </div>
+
             {aiError && <p className="text-xs mb-1" style={{ color: '#A23434' }}>{aiError}</p>}
             <textarea
               className={inp}
@@ -254,6 +313,7 @@ export default function NewPropertyModal({ onClose, onSaved }: Props) {
               value={form.aiDescription}
               onChange={e => set('aiDescription', e.target.value)}
               placeholder="Generate with AI or write a marketing description…"
+              onClick={() => setTemplateOpen(false)}
             />
           </div>
 
@@ -269,6 +329,7 @@ export default function NewPropertyModal({ onClose, onSaved }: Props) {
               value={form.notes}
               onChange={e => set('notes', e.target.value)}
               placeholder="Private notes for the team…"
+              onClick={() => setTemplateOpen(false)}
             />
           </div>
 
