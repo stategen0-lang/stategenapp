@@ -205,17 +205,19 @@ export default function DashboardPage() {
             const initials = c.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0,2)
             return (
               <div key={c.id} onClick={() => setDetailClient(c)}
-                className="flex items-center gap-4 px-5 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
+                className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
                 style={{ borderBottom: '1px solid #F4F5F8' }}>
                 <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0" style={{ background: agent.color }}>
                   {initials}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold truncate" style={{ color: H }}>{c.name}</p>
-                  <p className="text-xs" style={{ color: SUB }}>{c.phone}</p>
+                  <p className="text-sm font-semibold" style={{ color: H }}>{c.name}</p>
+                  <p className="text-xs mt-0.5" style={{ color: SUB }}>{c.phone}</p>
+                  <div className="flex gap-1.5 mt-1">
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: tc.bg, color: tc.color }}>{c.type}</span>
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: sc.bg, color: sc.color }}>{c.status}</span>
+                  </div>
                 </div>
-                <span className="text-xs font-medium px-2 py-0.5 rounded-full shrink-0" style={{ background: tc.bg, color: tc.color }}>{c.type}</span>
-                <span className="text-xs font-medium px-2 py-0.5 rounded-full shrink-0" style={{ background: sc.bg, color: sc.color }}>{c.status}</span>
                 <p className="text-sm font-semibold shrink-0" style={{ color: H }}>{formatPrice(c.budget)}</p>
               </div>
             )
