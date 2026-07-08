@@ -1,13 +1,53 @@
 'use client'
 
-import { useState } from 'react'
-import { CLIENTS, CURRENT_AGENT_ID, getAgent, statusStyle, CLIENT_TYPE_STYLE, formatPrice, Client } from '@/lib/data'
+import { useState, useEffect } from 'react'
+import { CURRENT_AGENT_ID, getAgent, statusStyle, CLIENT_TYPE_STYLE, formatPrice, Client, ClientReq } from '@/lib/data'
 import ClientDetailModal from '@/components/modals/ClientDetailModal'
 import NewClientModal from '@/components/modals/NewClientModal'
 
+function dbRowToClient(row: Record<string, unknown>, idx: number): Client {
+  let extras: Record<string, unknown> = {}
+  try { extras = JSON.parse(row.notes as string || '{}') } catch {}
+  const req: ClientReq = {
+    transaction: (row['payment_terms'] as ClientReq['transaction']) ?? '',
+    type: ((extras.req as Record<string,unknown>)?.type as ClientReq['type']) ?? '',
+    location: (row['prefered-location'] as string) ?? '',
+    priceMin: (row['budget_min'] as number) ?? 0,
+    priceMax: (row['budget_max'] as number) ?? 0,
+    beds: (row['bedrooms'] as number) ?? 0,
+    baths: 0,
+    size: 0,
+    garden: false,
+    balcony: false,
+    notes: '',
+  }
+  return {
+    id: (row.id as number) ?? idx,
+    name: (row['Client Name'] as string) ?? '',
+    type: (extras.type as Client['type']) ?? 'Buyer',
+    email: (extras.email as string) ?? '',
+    phone: (row['client phone'] as string) ?? '',
+    budget: (row['budget_max'] as number) ?? 0,
+    agentId: (row['Agent_id'] as Client['agentId']) ?? 'a1',
+    status: (row['status'] as Client['status']) ?? 'Searching',
+    req,
+  }
+}
+
 export default function ClientsPage() {
   const [scope, setScope] = useState<'me' | 'company'>('company')
-  const [list, setList] = useState<Client[]>(CLIENTS)
+  const [list, setList] = useState<Client[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch('/api/clients')
+      .then(r => r.json())
+      .then(data => {
+        if (data.clients) setList(data.clients.map(dbRowToClient))
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
   const [detailId, setDetailId] = useState<number | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [toast, setToast] = useState('')
@@ -55,8 +95,14 @@ export default function ClientsPage() {
         </div>
       </div>
 
+      {loading && (
+        <div className="text-center py-20" style={{ color: '#9AA3B2' }}>
+          <p className="text-base font-medium">Loading...</p>
+        </div>
+      )}
+
       {/* Desktop table */}
-      <div className="hidden md:block rounded-2xl overflow-hidden bg-white" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #EEF0F4' }}>
+      {!loading && <div className="hidden md:block rounded-2xl overflow-hidden bg-white" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #EEF0F4' }}>
         <table className="w-full text-sm">
           <thead>
             <tr style={{ borderBottom: '1px solid #EEF0F4', background: '#F7F8FB' }}>
@@ -99,10 +145,10 @@ export default function ClientsPage() {
             )}
           </tbody>
         </table>
-      </div>
+      </div>}
 
       {/* Mobile card list */}
-      <div className="md:hidden rounded-2xl overflow-hidden bg-white" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #EEF0F4' }}>
+      {!loading && <div className="md:hidden rounded-2xl overflow-hidden bg-white" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #EEF0F4' }}>
         {filtered.length === 0 && (
           <p className="text-center py-12 text-sm" style={{ color: '#9AA3B2' }}>No clients found</p>
         )}
@@ -127,7 +173,7 @@ export default function ClientsPage() {
             </div>
           )
         })}
-      </div>
+      </div>}
 
       {toast && (
         <div className="fixed bottom-20 right-4 md:bottom-6 md:right-6 px-4 py-2.5 rounded-xl text-sm font-semibold text-white z-50"

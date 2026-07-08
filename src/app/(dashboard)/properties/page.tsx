@@ -1,16 +1,55 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
-  PROPERTIES, AGENTS, CURRENT_AGENT_ID, getAgent, Property,
+  CURRENT_AGENT_ID, getAgent, Property,
 } from '@/lib/data'
 import PropertyCard from '@/components/properties/MeridianPropertyCard'
 import PropertyDetailModal from '@/components/modals/PropertyDetailModal'
 import NewPropertyModal from '@/components/modals/NewPropertyModal'
 
+function dbRowToProperty(row: Record<string, unknown>, idx: number): Property {
+  let extras: Record<string, unknown> = {}
+  try { extras = JSON.parse(row.Amenities as string || '{}') } catch {}
+  return {
+    id: (row.id as number) ?? idx,
+    title: (row.Title as string) ?? '',
+    type: (extras.type as Property['type']) ?? 'Appartement',
+    transaction: (extras.transaction as Property['transaction']) ?? 'For Sale',
+    price: (row.Price as number) ?? 0,
+    rent: (extras.rent as number) ?? 0,
+    district: (row.Neighborhood as string) ?? '',
+    city: (row.Location as string) ?? '',
+    size: (row.size as number) ?? 0,
+    beds: (row.Bedrooms as number) ?? 0,
+    baths: (row.bathrooms as number) ?? 0,
+    garden: !!(extras.garden),
+    balcony: !!(extras.balcony),
+    view: (extras.view as string) ?? '',
+    status: (row.Status as Property['status']) ?? 'Available',
+    agentId: (extras.agentId as Property['agentId']) ?? 'a1',
+    advancedPayment: extras.advancedPayment as import('@/lib/data').AdvancedPayment | undefined,
+    notes: extras.notes as string | undefined,
+    aiDescription: extras.aiDescription as string | undefined,
+    parkings: extras.parkings as number | undefined,
+    photos: (() => { try { return JSON.parse(row.Photos as string || '[]') } catch { return [] } })(),
+  }
+}
+
 export default function PropertiesPage() {
   const [scope, setScope] = useState<'me' | 'company'>('company')
-  const [list, setList] = useState<Property[]>(PROPERTIES)
+  const [list, setList] = useState<Property[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch('/api/properties')
+      .then(r => r.json())
+      .then(data => {
+        if (data.properties) setList(data.properties.map(dbRowToProperty))
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
   const [detailId, setDetailId] = useState<number | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [toast, setToast] = useState('')
@@ -59,7 +98,11 @@ export default function PropertiesPage() {
       </div>
 
       {/* Grid */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="text-center py-20" style={{ color: '#9AA3B2' }}>
+          <p className="text-base font-medium">Loading...</p>
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="text-center py-20" style={{ color: '#9AA3B2' }}>
           <p className="text-base font-medium">No listings found</p>
           <p className="text-sm mt-1">Add a listing or switch to Company view</p>

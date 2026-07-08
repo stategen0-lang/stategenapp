@@ -41,15 +41,21 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = 80 }
     setStep(2)
   }
 
-  function handleSave() {
-    const c: Client = {
-      id: ++_nextId,
+  async function handleSave() {
+    const payload = {
       name, email, phone, type,
       budget: req.priceMax || 0,
       agentId: CURRENT_AGENT_ID,
-      status: 'Searching' as ClientStatus,
+      status: 'Searching',
       req,
     }
+    let savedId = ++_nextId
+    try {
+      const res = await fetch('/api/clients', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      const data = await res.json()
+      if (data.client?.id) savedId = data.client.id
+    } catch {}
+    const c: Client = { id: savedId, ...payload, agentId: CURRENT_AGENT_ID, status: 'Searching' as ClientStatus }
     onSaved(c)
   }
 

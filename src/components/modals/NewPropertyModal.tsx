@@ -86,10 +86,9 @@ export default function NewPropertyModal({ onClose, onSaved }: Props) {
     })
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!form.title || !form.district || !form.city) return
-    const p: Property = {
-      id: ++_nextId,
+    const payload = {
       title: form.title,
       type: form.type,
       transaction: form.transaction,
@@ -105,12 +104,19 @@ export default function NewPropertyModal({ onClose, onSaved }: Props) {
       balcony: form.balcony,
       view: form.view,
       status: form.status,
-      agentId: CURRENT_AGENT_ID as AgentId,
+      agentId: CURRENT_AGENT_ID,
       aiDescription: form.aiDescription || undefined,
       notes: form.notes || undefined,
-      advancedPayment: (form.transaction === 'For Rent' && form.advancedPayment) ? form.advancedPayment as AdvancedPayment : undefined,
+      advancedPayment: (form.transaction === 'For Rent' && form.advancedPayment) ? form.advancedPayment : undefined,
       photos: photos.length > 0 ? photos : undefined,
     }
+    let savedId = ++_nextId
+    try {
+      const res = await fetch('/api/properties', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      const data = await res.json()
+      if (data.property?.id) savedId = data.property.id
+    } catch {}
+    const p: Property = { id: savedId, ...payload, agentId: CURRENT_AGENT_ID as AgentId, advancedPayment: payload.advancedPayment as AdvancedPayment | undefined }
     onSaved(p)
   }
 
