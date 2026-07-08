@@ -26,7 +26,18 @@
       "Bash(git config *)",
       "Bash(git branch *)",
       "Bash(git remote *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(npx vercel *)",
+      "Bash(npm run *)",
+      "Bash(git commit -m 'fix: pass DescriptionTemplate object to startEdit in addTemplate *)",
+      "Bash(git checkout *)",
+      "Bash(git cherry-pick *)",
+      "Bash(gh pr create --title 'feat: property AI description, parking field, and description templates' --body ' *)",
+      "Bash(git commit -m 'fix: inject description template as system prompt so AI actually follows it *)",
+      "Bash(git merge *)",
+      "Bash(node -e ' *)",
+      "Bash(git mv *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

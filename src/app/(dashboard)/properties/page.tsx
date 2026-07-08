@@ -4,7 +4,7 @@ import { useState } from 'react'
 import {
   PROPERTIES, AGENTS, CURRENT_AGENT_ID, getAgent, Property,
 } from '@/lib/data'
-import MeridianPropertyCard from '@/components/properties/MeridianPropertyCard'
+import PropertyCard from '@/components/properties/MeridianPropertyCard'
 import PropertyDetailModal from '@/components/modals/PropertyDetailModal'
 import NewPropertyModal from '@/components/modals/NewPropertyModal'
 
@@ -67,7 +67,7 @@ export default function PropertiesPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map(p => (
-            <MeridianPropertyCard
+            <PropertyCard
               key={p.id}
               property={p}
               agent={getAgent(p.agentId)}

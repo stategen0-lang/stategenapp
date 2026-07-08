@@ -42,7 +42,7 @@ export default function LoginPage() {
           <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: '#5E8FD6' }}>
             <Building2 className="h-5 w-5 text-white" />
           </div>
-          <span className="font-bold text-white text-lg tracking-tight">Meridian</span>
+          <span className="font-bold text-white text-lg tracking-tight">StateGen</span>
         </div>
 
         <div>
@@ -50,7 +50,7 @@ export default function LoginPage() {
             The property intelligence<br />platform for agents.
           </h1>
           <p className="text-base mb-10" style={{ color: '#9DB2CC' }}>
-            Capture a client&apos;s brief in seconds and let Meridian surface<br />
+            Capture a client&apos;s brief in seconds and let StateGen surface<br />
             the listings — across the whole agency — that actually fit.
           </p>
 
@@ -69,7 +69,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-xs" style={{ color: '#6A7A94' }}>
-          © 2026 Meridian Estates · Agent Portal
+          © 2026 StateGen · Agent Portal
         </p>
       </div>
 

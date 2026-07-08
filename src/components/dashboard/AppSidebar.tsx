@@ -39,7 +39,7 @@ export default function AppSidebar({ profile, user }: AppSidebarProps) {
   }
 
   const displayName = profile?.Full_name ?? user.email ?? 'Agent'
-  const companyName = profile?.Companies?.Name ?? 'Meridian'
+  const companyName = profile?.Companies?.Name ?? 'StateGen'
   const initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
 
   function isActive(href: string) {
@@ -55,7 +55,7 @@ export default function AppSidebar({ profile, user }: AppSidebarProps) {
           <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#5E8FD6' }}>
             <Building2 className="h-4 w-4 text-white" />
           </div>
-          <span className="font-bold text-white text-base tracking-tight">Meridian</span>
+          <span className="font-bold text-white text-base tracking-tight">StateGen</span>
         </div>
 
         {/* Nav */}
@@ -103,7 +103,7 @@ export default function AppSidebar({ profile, user }: AppSidebarProps) {
           <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: '#5E8FD6' }}>
             <Building2 className="h-3.5 w-3.5 text-white" />
           </div>
-          <span className="font-bold text-white text-sm tracking-tight">Meridian</span>
+          <span className="font-bold text-white text-sm tracking-tight">StateGen</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: '#2E5288', color: '#fff' }}>

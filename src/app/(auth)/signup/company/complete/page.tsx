@@ -110,7 +110,7 @@ function CompanyCompleteInner() {
           </div>
           <h2 className="text-xl font-bold mb-2" style={{ color: '#1A2B4A' }}>You&apos;re all set!</h2>
           <p className="text-sm mb-2" style={{ color: '#7A8499' }}>
-            <span className="font-semibold" style={{ color: '#1A2B4A' }}>{info?.companyName}</span> is now live on Meridian.
+            <span className="font-semibold" style={{ color: '#1A2B4A' }}>{info?.companyName}</span> is now live on StateGen.
           </p>
           <p className="text-sm mb-6" style={{ color: '#7A8499' }}>
             Share your domain <span className="font-semibold" style={{ color: '#1A2B4A' }}>{info?.domain}</span> with your agents so they can request to join.

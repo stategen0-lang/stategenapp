@@ -12,11 +12,11 @@ export default function SignupLandingPage() {
           <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: '#5E8FD6' }}>
             <Building2 className="h-5 w-5 text-white" />
           </div>
-          <span className="font-bold text-white text-lg tracking-tight">Meridian</span>
+          <span className="font-bold text-white text-lg tracking-tight">StateGen</span>
         </div>
         <div>
           <h1 className="text-4xl font-bold text-white leading-tight mb-4" style={{ letterSpacing: '-0.3px' }}>
-            Set up your agency<br />on Meridian.
+            Set up your agency<br />on StateGen.
           </h1>
           <p className="text-base mb-10" style={{ color: '#9DB2CC' }}>
             Register your company once as a manager, then invite<br />
@@ -37,7 +37,7 @@ export default function SignupLandingPage() {
             ))}
           </div>
         </div>
-        <p className="text-xs" style={{ color: '#6A7A94' }}>© 2026 Meridian Estates · Agent Portal</p>
+        <p className="text-xs" style={{ color: '#6A7A94' }}>© 2026 StateGen · Agent Portal</p>
       </div>
 
       {/* Right panel */}
@@ -68,7 +68,7 @@ export default function SignupLandingPage() {
               <div>
                 <p className="text-sm font-semibold mb-0.5" style={{ color: '#1A2B4A' }}>I&apos;m a Manager</p>
                 <p className="text-xs leading-relaxed" style={{ color: '#7A8499' }}>
-                  Register a new company on Meridian. You&apos;ll control your agency&apos;s domain and approve agents who join.
+                  Register a new company on StateGen. You&apos;ll control your agency&apos;s domain and approve agents who join.
                 </p>
               </div>
             </Link>

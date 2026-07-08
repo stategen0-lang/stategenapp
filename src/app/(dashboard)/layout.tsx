@@ -2,7 +2,7 @@ import AppSidebar from '@/components/dashboard/AppSidebar'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const mockUser = { id: 'demo', email: 'demo@meridian.com' } as any
-  const mockProfile = { Full_name: 'Sami Abi Nader', role: 'Agent', Companies: { Name: 'Meridian Estates' } }
+  const mockProfile = { Full_name: 'Sami Abi Nader', role: 'Agent', Companies: { Name: 'StateGen' } }
 
   return (
     <div className="flex h-screen" style={{ background: '#faf9f5' }}>

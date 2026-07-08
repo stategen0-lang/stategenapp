@@ -1,4 +1,4 @@
-// Central mock data — Meridian CRM (Lebanese Real Estate Agency)
+// Central mock data — StateGen CRM (Lebanese Real Estate Agency)
 
 export type AgentId = 'a1' | 'a2' | 'a3' | 'a4'
 

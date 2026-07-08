@@ -182,11 +182,11 @@ export default function AgentSignupPage() {
           <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: '#5E8FD6' }}>
             <Building2 className="h-5 w-5 text-white" />
           </div>
-          <span className="font-bold text-white text-lg tracking-tight">Meridian</span>
+          <span className="font-bold text-white text-lg tracking-tight">StateGen</span>
         </div>
         <div>
           <h1 className="text-4xl font-bold text-white leading-tight mb-4" style={{ letterSpacing: '-0.3px' }}>
-            Join your agency<br />on Meridian.
+            Join your agency<br />on StateGen.
           </h1>
           <p className="text-sm mb-8" style={{ color: '#9DB2CC' }}>
             Your manager will review your request and approve your account before you can sign in.
@@ -209,7 +209,7 @@ export default function AgentSignupPage() {
             ))}
           </div>
         </div>
-        <p className="text-xs" style={{ color: '#6A7A94' }}>© 2026 Meridian Estates · Agent Portal</p>
+        <p className="text-xs" style={{ color: '#6A7A94' }}>© 2026 StateGen · Agent Portal</p>
       </div>
 
       {/* Right panel */}

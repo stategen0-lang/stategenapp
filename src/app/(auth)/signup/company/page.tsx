@@ -58,7 +58,7 @@ function CompanySignupInner() {
           <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: '#5E8FD6' }}>
             <Building2 className="h-5 w-5 text-white" />
           </div>
-          <span className="font-bold text-white text-lg tracking-tight">Meridian</span>
+          <span className="font-bold text-white text-lg tracking-tight">StateGen</span>
         </div>
         <div>
           <h1 className="text-4xl font-bold text-white leading-tight mb-4" style={{ letterSpacing: '-0.3px' }}>
@@ -85,7 +85,7 @@ function CompanySignupInner() {
             ))}
           </div>
         </div>
-        <p className="text-xs" style={{ color: '#6A7A94' }}>© 2026 Meridian Estates · Agent Portal</p>
+        <p className="text-xs" style={{ color: '#6A7A94' }}>© 2026 StateGen · Agent Portal</p>
       </div>
 
       {/* Right panel */}
@@ -118,7 +118,7 @@ function CompanySignupInner() {
                   <p className="text-xs font-bold tracking-wider mb-1.5 uppercase" style={labelStyle}>Company name</p>
                   <div className="relative">
                     <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: '#9AA3B2' }} />
-                    <input className={inp} style={inpStyle} required value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="Meridian Estates"
+                    <input className={inp} style={inpStyle} required value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="StateGen"
                       onFocus={e => (e.target.style.borderColor = '#5E8FD6')} onBlur={e => (e.target.style.borderColor = '#D7DCE5')} />
                   </div>
                 </div>

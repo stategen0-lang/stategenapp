@@ -131,7 +131,7 @@ export default function PropertyDetailModal({ property: p, agent, onClose }: Pro
               </div>
               <div>
                 <p className="text-sm font-semibold" style={{ color: '#14223F' }}>Listed by {agent.name}</p>
-                <p className="text-xs" style={{ color: '#9AA3B2' }}>Meridian Estates</p>
+                <p className="text-xs" style={{ color: '#9AA3B2' }}>StateGen</p>
               </div>
             </div>
 

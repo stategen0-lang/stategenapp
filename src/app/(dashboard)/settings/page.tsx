@@ -135,7 +135,7 @@ export default function ProfilePage() {
         </div>
         <div>
           <h1 className="text-2xl font-bold" style={{ color: H, letterSpacing: '-0.3px' }}>{agent.name}</h1>
-          <p className="text-sm mt-0.5" style={{ color: SUB }}>Senior Agent · Meridian Estates</p>
+          <p className="text-sm mt-0.5" style={{ color: SUB }}>Senior Agent · StateGen</p>
         </div>
       </div>
 

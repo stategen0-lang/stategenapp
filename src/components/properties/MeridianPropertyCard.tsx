@@ -8,7 +8,7 @@ interface Props {
   onClick: () => void
 }
 
-export default function MeridianPropertyCard({ property: p, agent, onClick }: Props) {
+export default function PropertyCard({ property: p, agent, onClick }: Props) {
   const sc = statusStyle(p.status)
 
   return (

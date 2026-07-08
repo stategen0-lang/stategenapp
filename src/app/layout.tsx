@@ -9,7 +9,7 @@ const publicSans = Public_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Meridian CRM",
+  title: "StateGen CRM",
   description: "Lebanese real estate agency CRM",
 };
 
