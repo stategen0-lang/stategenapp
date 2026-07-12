@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Building2, Users, Banknote, Clock, X, Plus, ChevronRight } from 'lucide-react'
 import {
   PROPERTIES, CLIENTS, DEALS, getAgent,
   statusStyle, CLIENT_TYPE_STYLE, formatPrice, TYPE_GRADIENTS, typeStyle,
   Property, Client, Deal,
 } from '@/lib/data'
+import { dbRowToProperty, dbRowToClient } from '@/lib/db-mappers'
 import PropertyDetailModal from '@/components/modals/PropertyDetailModal'
 import ClientDetailModal from '@/components/modals/ClientDetailModal'
 import NewPropertyModal from '@/components/modals/NewPropertyModal'
@@ -42,8 +43,32 @@ export default function DashboardPage() {
   const [newClientOpen, setNewClientOpen] = useState(false)
   const [props, setProps]               = useState<Property[]>(PROPERTIES)
   const [clients, setClients]           = useState<Client[]>(CLIENTS)
+  const [editProp, setEditProp]         = useState<Property | null>(null)
+  const [editClient, setEditClient]     = useState<Client | null>(null)
   const [toast, setToast]               = useState('')
   const [volumeYear, setVolumeYear]     = useState<number | null>(2026)
+
+  // Load live data from the database (falls back to demo data on failure).
+  useEffect(() => {
+    const ctrl = new AbortController()
+    const t = setTimeout(() => ctrl.abort(), 4000)
+    Promise.all([
+      fetch('/api/properties', { signal: ctrl.signal }).then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch('/api/clients', { signal: ctrl.signal }).then(r => r.ok ? r.json() : null).catch(() => null),
+    ]).then(([pRes, cRes]) => {
+      clearTimeout(t)
+      if (pRes?.properties?.length) setProps(pRes.properties.map(dbRowToProperty))
+      if (cRes?.clients?.length) setClients(cRes.clients.map(dbRowToClient))
+    }).catch(() => clearTimeout(t))
+    return () => { clearTimeout(t); ctrl.abort() }
+  }, [])
+
+  function upsertProp(p: Property) {
+    setProps(prev => prev.some(x => x.id === p.id) ? prev.map(x => x.id === p.id ? p : x) : [p, ...prev])
+  }
+  function upsertClient(c: Client) {
+    setClients(prev => prev.some(x => x.id === c.id) ? prev.map(x => x.id === c.id ? c : x) : [c, ...prev])
+  }
 
   const activeListings = props.filter(p => p.status === 'Available')
 
@@ -433,21 +458,46 @@ export default function DashboardPage() {
 
       {/* ── Modals ── */}
       {detailProp && (
-        <PropertyDetailModal property={detailProp} agent={getAgent(detailProp.agentId)} onClose={() => setDetailProp(null)} />
+        <PropertyDetailModal
+          property={detailProp}
+          agent={getAgent(detailProp.agentId)}
+          onClose={() => setDetailProp(null)}
+          onEdit={p => { setDetailProp(null); setEditProp(p) }}
+        />
       )}
       {detailClient && (
-        <ClientDetailModal client={detailClient} agent={getAgent(detailClient.agentId)} onClose={() => setDetailClient(null)} />
+        <ClientDetailModal
+          client={detailClient}
+          agent={getAgent(detailClient.agentId)}
+          onClose={() => setDetailClient(null)}
+          onEdit={c => { setDetailClient(null); setEditClient(c) }}
+          onStatusChange={(id, status) => setClients(prev => prev.map(x => x.id === id ? { ...x, status } : x))}
+        />
       )}
       {newPropOpen && (
         <NewPropertyModal
           onClose={() => setNewPropOpen(false)}
-          onSaved={p => { setProps(prev => [p, ...prev]); setNewPropOpen(false); showToast('Listing saved!') }}
+          onSaved={p => { upsertProp(p); setNewPropOpen(false); showToast('Listing saved!') }}
+        />
+      )}
+      {editProp && (
+        <NewPropertyModal
+          initial={editProp}
+          onClose={() => setEditProp(null)}
+          onSaved={p => { upsertProp(p); setEditProp(null); showToast('Changes saved!') }}
         />
       )}
       {newClientOpen && (
         <NewClientModal
           onClose={() => setNewClientOpen(false)}
-          onSaved={c => { setClients(prev => [c, ...prev]); setNewClientOpen(false); showToast('Client saved!') }}
+          onSaved={c => { upsertClient(c); setNewClientOpen(false); showToast('Client saved!') }}
+        />
+      )}
+      {editClient && (
+        <NewClientModal
+          initial={editClient}
+          onClose={() => setEditClient(null)}
+          onSaved={c => { upsertClient(c); setEditClient(null); showToast('Changes saved!') }}
         />
       )}
     </div>

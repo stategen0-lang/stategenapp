@@ -7,36 +7,7 @@ import {
 import PropertyCard from '@/components/properties/MeridianPropertyCard'
 import PropertyDetailModal from '@/components/modals/PropertyDetailModal'
 import NewPropertyModal from '@/components/modals/NewPropertyModal'
-
-function dbRowToProperty(row: Record<string, unknown>, idx: number): Property {
-  let extras: Record<string, unknown> = {}
-  try { extras = JSON.parse(row.Amenities as string || '{}') } catch {}
-  return {
-    id: (row.id as number) ?? idx,
-    title: (row.Title as string) ?? '',
-    type: (extras.type as Property['type']) ?? 'Appartement',
-    transaction: (extras.transaction as Property['transaction']) ?? 'For Sale',
-    price: (row.Price as number) ?? 0,
-    rent: (extras.rent as number) ?? 0,
-    district: (row.Neighborhood as string) ?? '',
-    city: (row.Location as string) ?? '',
-    size: (row.size as number) ?? 0,
-    beds: (row.Bedrooms as number) ?? 0,
-    baths: (row.bathrooms as number) ?? 0,
-    garden: !!(extras.garden),
-    balcony: !!(extras.balcony),
-    view: (extras.view as string) ?? '',
-    status: (row.Status as Property['status']) ?? 'Available',
-    agentId: (extras.agentId as Property['agentId']) ?? 'a1',
-    advancedPayment: extras.advancedPayment as import('@/lib/data').AdvancedPayment | undefined,
-    notes: extras.notes as string | undefined,
-    aiDescription: extras.aiDescription as string | undefined,
-    parkings: extras.parkings as number | undefined,
-    buildingAge: extras.buildingAge as number | undefined,
-    needsRenovation: !!(extras.needsRenovation),
-    photos: (() => { try { return JSON.parse(row.Photos as string || '[]') } catch { return [] } })(),
-  }
-}
+import { dbRowToProperty } from '@/lib/db-mappers'
 
 export default function PropertiesPage() {
   const [scope, setScope] = useState<'me' | 'company'>('company')
@@ -56,7 +27,12 @@ export default function PropertiesPage() {
   }, [])
   const [detailId, setDetailId] = useState<number | null>(null)
   const [addOpen, setAddOpen] = useState(false)
+  const [editProp, setEditProp] = useState<Property | null>(null)
   const [toast, setToast] = useState('')
+
+  function upsert(p: Property) {
+    setList(prev => prev.some(x => x.id === p.id) ? prev.map(x => x.id === p.id ? p : x) : [p, ...prev])
+  }
 
   const filtered = scope === 'me'
     ? list.filter(p => p.agentId === CURRENT_AGENT_ID)
@@ -136,15 +112,27 @@ export default function PropertiesPage() {
           property={detailProp}
           agent={detailAgent}
           onClose={() => setDetailId(null)}
+          onEdit={p => { setDetailId(null); setEditProp(p) }}
         />
       )}
       {addOpen && (
         <NewPropertyModal
           onClose={() => setAddOpen(false)}
           onSaved={p => {
-            setList(prev => [p, ...prev])
+            upsert(p)
             setAddOpen(false)
             showToast('Listing saved!')
+          }}
+        />
+      )}
+      {editProp && (
+        <NewPropertyModal
+          initial={editProp}
+          onClose={() => setEditProp(null)}
+          onSaved={p => {
+            upsert(p)
+            setEditProp(null)
+            showToast('Changes saved!')
           }}
         />
       )}

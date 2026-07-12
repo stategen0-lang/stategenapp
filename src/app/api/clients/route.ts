@@ -22,16 +22,41 @@ export async function GET() {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json()
-    const { id, status } = body
-    if (!id || !status) return NextResponse.json({ error: 'id and status required' }, { status: 400 })
+    const { id } = body
+    if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
     const supabase = await createClient()
-    const { error } = await supabase
+
+    // Build a partial update from whatever fields were sent. A status-only
+    // payload ({ id, status }) updates just the status; a full edit updates
+    // the client details too.
+    const update: Record<string, unknown> = {}
+    if (body.status !== undefined) update.status = body.status
+    if (body.name !== undefined) update['Client Name'] = body.name
+    if (body.phone !== undefined) update['client phone'] = body.phone
+    if (body.req?.location !== undefined) update['prefered-location'] = body.req.location
+    if (body.req?.priceMin !== undefined) update.budget_min = body.req.priceMin
+    if (body.budget !== undefined || body.req?.priceMax !== undefined) {
+      update.budget_max = body.budget ?? body.req?.priceMax ?? 0
+    }
+    if (body.req?.beds !== undefined) update.bedrooms = body.req.beds
+    if (body.req?.transaction !== undefined) update.payment_terms = body.req.transaction
+    if (body.name !== undefined || body.email !== undefined || body.type !== undefined || body.req !== undefined) {
+      update.notes = JSON.stringify({ email: body.email, type: body.type, agentId: body.agentId, req: body.req })
+    }
+
+    if (Object.keys(update).length === 0) {
+      return NextResponse.json({ error: 'nothing to update' }, { status: 400 })
+    }
+
+    const { data, error } = await supabase
       .from('client_requests')
-      .update({ status })
+      .update(update)
       .eq('id', id)
       .eq('company_id', COMPANY_ID)
+      .select()
+      .single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true, client: data })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }

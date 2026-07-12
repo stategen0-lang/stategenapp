@@ -12,9 +12,10 @@ interface Props {
   agent: Agent
   onClose: () => void
   onStatusChange?: (id: number, status: ClientStatus) => void
+  onEdit?: (c: Client) => void
 }
 
-export default function ClientDetailModal({ client: c, agent, onClose, onStatusChange }: Props) {
+export default function ClientDetailModal({ client: c, agent, onClose, onStatusChange, onEdit }: Props) {
   const [status, setStatus] = useState<ClientStatus>(c.status)
   const [saving, setSaving] = useState(false)
   const sc = statusStyle(status)
@@ -65,7 +66,18 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
                 </div>
               </div>
             </div>
-            <button onClick={onClose} style={{ color: '#9AA3B2' }} className="hover:text-gray-600 text-lg leading-none">✕</button>
+            <div className="flex items-center gap-2">
+              {onEdit && (
+                <button
+                  onClick={() => onEdit(c)}
+                  className="h-7 px-3 rounded-full text-xs font-semibold"
+                  style={{ background: '#EAF0FA', color: '#2E5288' }}
+                >
+                  Edit
+                </button>
+              )}
+              <button onClick={onClose} style={{ color: '#9AA3B2' }} className="hover:text-gray-600 text-lg leading-none">✕</button>
+            </div>
           </div>
 
           <div className="p-5 space-y-4 overflow-y-auto max-h-[80vh] md:max-h-[70vh]">

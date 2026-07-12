@@ -66,3 +66,55 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json()
+    const { id } = body
+    if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+    const supabase = await createClient()
+
+    const extras = {
+      type: body.type,
+      transaction: body.transaction,
+      garden: body.garden,
+      balcony: body.balcony,
+      view: body.view,
+      rent: body.rent,
+      advancedPayment: body.advancedPayment,
+      agentId: body.agentId,
+      notes: body.notes,
+      aiDescription: body.aiDescription,
+      parkings: body.parkings,
+      buildingAge: body.buildingAge,
+      needsRenovation: body.needsRenovation,
+      status: body.status,
+    }
+
+    const { data, error } = await supabase
+      .from('Properties')
+      .update({
+        Title: body.title,
+        Location: body.city,
+        Neighborhood: body.district,
+        Price: body.price || body.rent || 0,
+        Currency: 'USD',
+        Bedrooms: body.beds,
+        bathrooms: body.baths,
+        size: body.size,
+        Payment_terms: body.transaction,
+        Amenities: JSON.stringify(extras),
+        Photos: body.photos ? JSON.stringify(body.photos) : null,
+        Status: body.status ?? 'Available',
+      })
+      .eq('id', id)
+      .eq('company_id', COMPANY_ID)
+      .select()
+      .single()
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ property: data })
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
+}

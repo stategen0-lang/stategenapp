@@ -1,38 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { CLIENTS, CURRENT_AGENT_ID, getAgent, statusStyle, CLIENT_TYPE_STYLE, formatPrice, Client, ClientReq } from '@/lib/data'
+import { CLIENTS, CURRENT_AGENT_ID, getAgent, statusStyle, CLIENT_TYPE_STYLE, formatPrice, Client } from '@/lib/data'
 import ClientDetailModal from '@/components/modals/ClientDetailModal'
 import NewClientModal from '@/components/modals/NewClientModal'
-
-function dbRowToClient(row: Record<string, unknown>, idx: number): Client {
-  let extras: Record<string, unknown> = {}
-  try { extras = JSON.parse(row.notes as string || '{}') } catch {}
-  const req: ClientReq = {
-    transaction: (row['payment_terms'] as ClientReq['transaction']) ?? '',
-    type: ((extras.req as Record<string,unknown>)?.type as ClientReq['type']) ?? '',
-    location: (row['prefered-location'] as string) ?? '',
-    priceMin: (row['budget_min'] as number) ?? 0,
-    priceMax: (row['budget_max'] as number) ?? 0,
-    beds: (row['bedrooms'] as number) ?? 0,
-    baths: 0,
-    size: 0,
-    garden: false,
-    balcony: false,
-    notes: '',
-  }
-  return {
-    id: (row.id as number) ?? idx,
-    name: (row['Client Name'] as string) ?? '',
-    type: (extras.type as Client['type']) ?? 'Buyer',
-    email: (extras.email as string) ?? '',
-    phone: (row['client phone'] as string) ?? '',
-    budget: (row['budget_max'] as number) ?? 0,
-    agentId: (row['Agent_id'] as Client['agentId']) ?? 'a1',
-    status: (row['status'] as Client['status']) ?? 'Searching',
-    req,
-  }
-}
+import { dbRowToClient } from '@/lib/db-mappers'
 
 export default function ClientsPage() {
   const [scope, setScope] = useState<'me' | 'company'>('company')
@@ -52,7 +24,12 @@ export default function ClientsPage() {
   }, [])
   const [detailId, setDetailId] = useState<number | null>(null)
   const [addOpen, setAddOpen] = useState(false)
+  const [editClient, setEditClient] = useState<Client | null>(null)
   const [toast, setToast] = useState('')
+
+  function upsert(c: Client) {
+    setList(prev => prev.some(x => x.id === c.id) ? prev.map(x => x.id === c.id ? c : x) : [c, ...prev])
+  }
 
   const filtered = scope === 'me'
     ? list.filter(c => c.agentId === CURRENT_AGENT_ID)
@@ -179,12 +156,25 @@ export default function ClientsPage() {
       )}
 
       {detailClient && detailAgent && (
-        <ClientDetailModal client={detailClient} agent={detailAgent} onClose={() => setDetailId(null)} />
+        <ClientDetailModal
+          client={detailClient}
+          agent={detailAgent}
+          onClose={() => setDetailId(null)}
+          onEdit={c => { setDetailId(null); setEditClient(c) }}
+          onStatusChange={(id, status) => setList(prev => prev.map(x => x.id === id ? { ...x, status } : x))}
+        />
       )}
       {addOpen && (
         <NewClientModal
           onClose={() => setAddOpen(false)}
-          onSaved={c => { setList(prev => [c, ...prev]); setAddOpen(false); showToast('Client saved!') }}
+          onSaved={c => { upsert(c); setAddOpen(false); showToast('Client saved!') }}
+        />
+      )}
+      {editClient && (
+        <NewClientModal
+          initial={editClient}
+          onClose={() => setEditClient(null)}
+          onSaved={c => { upsert(c); setEditClient(null); showToast('Changes saved!') }}
         />
       )}
     </div>

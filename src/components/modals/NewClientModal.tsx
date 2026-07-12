@@ -12,6 +12,7 @@ interface Props {
   onClose: () => void
   onSaved: (c: Client) => void
   matchThreshold?: number
+  initial?: Client
 }
 
 let _nextId = 200
@@ -21,15 +22,16 @@ const emptyReq = (): ClientReq => ({
   beds: 0, baths: 0, size: 0, garden: false, balcony: false, notes: '',
 })
 
-export default function NewClientModal({ onClose, onSaved, matchThreshold = 80 }: Props) {
+export default function NewClientModal({ onClose, onSaved, matchThreshold = 80, initial }: Props) {
+  const editing = !!initial
   const [step, setStep] = useState<1 | 2>(1)
   const [matches, setMatches] = useState<MatchResult[]>([])
 
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
-  const [type, setType] = useState<ClientType>('Buyer')
-  const [req, setReq] = useState<ClientReq>(emptyReq())
+  const [name, setName] = useState(initial?.name ?? '')
+  const [email, setEmail] = useState(initial?.email ?? '')
+  const [phone, setPhone] = useState(initial?.phone ?? '')
+  const [type, setType] = useState<ClientType>(initial?.type ?? 'Buyer')
+  const [req, setReq] = useState<ClientReq>(initial?.req ? { ...emptyReq(), ...initial.req } : emptyReq())
 
   function setR(k: keyof ClientReq, v: string | number | boolean) {
     setReq(r => ({ ...r, [k]: v }))
@@ -42,20 +44,26 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = 80 }
   }
 
   async function handleSave() {
+    const agentId = initial?.agentId ?? CURRENT_AGENT_ID
+    const status: ClientStatus = initial?.status ?? 'Searching'
     const payload = {
       name, email, phone, type,
       budget: req.priceMax || 0,
-      agentId: CURRENT_AGENT_ID,
-      status: 'Searching',
+      agentId,
+      status,
       req,
     }
-    let savedId = ++_nextId
+    let savedId = initial?.id ?? ++_nextId
     try {
-      const res = await fetch('/api/clients', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      const res = await fetch('/api/clients', {
+        method: editing ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editing ? { id: initial!.id, ...payload } : payload),
+      })
       const data = await res.json()
       if (data.client?.id) savedId = data.client.id
     } catch {}
-    const c: Client = { id: savedId, ...payload, agentId: CURRENT_AGENT_ID, status: 'Searching' as ClientStatus }
+    const c: Client = { id: savedId, ...payload, agentId, status }
     onSaved(c)
   }
 
@@ -75,9 +83,9 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = 80 }
         <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid #EEF0F4' }}>
           <div>
             <p className="text-base font-bold" style={{ color: '#14223F' }}>
-              {step === 1 ? 'New Client' : 'Match Results'}
+              {step === 2 ? 'Match Results' : editing ? 'Edit Client' : 'New Client'}
             </p>
-            <p className="text-xs mt-0.5" style={{ color: '#9AA3B2' }}>Step {step} of 2</p>
+            {!editing && <p className="text-xs mt-0.5" style={{ color: '#9AA3B2' }}>Step {step} of 2</p>}
           </div>
           <button onClick={onClose} style={{ color: '#9AA3B2' }} className="hover:text-gray-600 text-lg leading-none">✕</button>
         </div>
@@ -179,14 +187,25 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = 80 }
               <button onClick={onClose} className="flex-1 rounded-xl py-2 text-sm font-semibold" style={{ border: '1.5px solid #EEF0F4', color: '#6A7488' }}>
                 Cancel
               </button>
-              <button
-                onClick={handleFindMatches}
-                disabled={!name}
-                className="flex-1 rounded-xl py-2 text-sm font-bold text-white disabled:opacity-50"
-                style={{ background: '#0E1F3D' }}
-              >
-                Find matches →
-              </button>
+              {editing ? (
+                <button
+                  onClick={handleSave}
+                  disabled={!name}
+                  className="flex-1 rounded-xl py-2 text-sm font-bold text-white disabled:opacity-50"
+                  style={{ background: '#0E1F3D' }}
+                >
+                  Save changes
+                </button>
+              ) : (
+                <button
+                  onClick={handleFindMatches}
+                  disabled={!name}
+                  className="flex-1 rounded-xl py-2 text-sm font-bold text-white disabled:opacity-50"
+                  style={{ background: '#0E1F3D' }}
+                >
+                  Find matches →
+                </button>
+              )}
             </div>
           </>
         ) : (

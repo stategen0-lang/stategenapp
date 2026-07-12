@@ -9,9 +9,10 @@ interface Props {
   property: Property
   agent: Agent
   onClose: () => void
+  onEdit?: (p: Property) => void
 }
 
-export default function PropertyDetailModal({ property: p, agent, onClose }: Props) {
+export default function PropertyDetailModal({ property: p, agent, onClose, onEdit }: Props) {
   const sc = statusStyle(p.status)
   const photos = p.photos ?? []
   const [activePhoto, setActivePhoto] = useState(0)
@@ -44,13 +45,24 @@ export default function PropertyDetailModal({ property: p, agent, onClose }: Pro
               >
                 {p.type} · {p.transaction}
               </span>
-              <button
-                onClick={onClose}
-                className="w-7 h-7 rounded-full flex items-center justify-center text-white text-sm leading-none"
-                style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)' }}
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-2">
+                {onEdit && (
+                  <button
+                    onClick={() => onEdit(p)}
+                    className="h-7 px-3 rounded-full flex items-center justify-center text-white text-xs font-semibold leading-none"
+                    style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)' }}
+                  >
+                    Edit
+                  </button>
+                )}
+                <button
+                  onClick={onClose}
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-white text-sm leading-none"
+                  style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)' }}
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             <div

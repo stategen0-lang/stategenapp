@@ -11,21 +11,36 @@ interface DescriptionTemplate { id: string; name: string; body: string; active: 
 interface Props {
   onClose: () => void
   onSaved: (p: Property) => void
+  initial?: Property
 }
 
 let _nextId = 100
 
-export default function NewPropertyModal({ onClose, onSaved }: Props) {
+export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
+  const editing = !!initial
   const [form, setForm] = useState({
-    title: '', type: 'Appartement' as PropertyType, transaction: 'For Sale' as Transaction,
-    price: '', rent: '', district: '', city: '', size: '', beds: '', baths: '', parkings: '',
-    buildingAge: '', needsRenovation: false,
-    garden: false, balcony: false, view: '', status: 'Available' as PropertyStatus,
-    advancedPayment: '' as AdvancedPayment | '',
-    aiDescription: '',
-    notes: '',
+    title: initial?.title ?? '',
+    type: (initial?.type ?? 'Appartement') as PropertyType,
+    transaction: (initial?.transaction ?? 'For Sale') as Transaction,
+    price: initial?.price ? String(initial.price) : '',
+    rent: initial?.rent ? String(initial.rent) : '',
+    district: initial?.district ?? '',
+    city: initial?.city ?? '',
+    size: initial?.size ? String(initial.size) : '',
+    beds: initial?.beds ? String(initial.beds) : '',
+    baths: initial?.baths ? String(initial.baths) : '',
+    parkings: initial?.parkings ? String(initial.parkings) : '',
+    buildingAge: initial?.buildingAge ? String(initial.buildingAge) : '',
+    needsRenovation: initial?.needsRenovation ?? false,
+    garden: initial?.garden ?? false,
+    balcony: initial?.balcony ?? false,
+    view: initial?.view ?? '',
+    status: (initial?.status ?? 'Available') as PropertyStatus,
+    advancedPayment: (initial?.advancedPayment ?? '') as AdvancedPayment | '',
+    aiDescription: initial?.aiDescription ?? '',
+    notes: initial?.notes ?? '',
   })
-  const [photos, setPhotos] = useState<string[]>([])
+  const [photos, setPhotos] = useState<string[]>(initial?.photos ?? [])
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState('')
   const [templates, setTemplates] = useState<DescriptionTemplate[]>([])
@@ -89,6 +104,7 @@ export default function NewPropertyModal({ onClose, onSaved }: Props) {
 
   async function handleSave() {
     if (!form.title || !form.district || !form.city) return
+    const agentId = (initial?.agentId ?? CURRENT_AGENT_ID) as AgentId
     const payload = {
       title: form.title,
       type: form.type,
@@ -107,19 +123,23 @@ export default function NewPropertyModal({ onClose, onSaved }: Props) {
       balcony: form.balcony,
       view: form.view,
       status: form.status,
-      agentId: CURRENT_AGENT_ID,
+      agentId,
       aiDescription: form.aiDescription || undefined,
       notes: form.notes || undefined,
       advancedPayment: (form.transaction === 'For Rent' && form.advancedPayment) ? form.advancedPayment : undefined,
       photos: photos.length > 0 ? photos : undefined,
     }
-    let savedId = ++_nextId
+    let savedId = initial?.id ?? ++_nextId
     try {
-      const res = await fetch('/api/properties', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      const res = await fetch('/api/properties', {
+        method: editing ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editing ? { id: initial!.id, ...payload } : payload),
+      })
       const data = await res.json()
       if (data.property?.id) savedId = data.property.id
     } catch {}
-    const p: Property = { id: savedId, ...payload, agentId: CURRENT_AGENT_ID as AgentId, advancedPayment: payload.advancedPayment as AdvancedPayment | undefined }
+    const p: Property = { id: savedId, ...payload, agentId, advancedPayment: payload.advancedPayment as AdvancedPayment | undefined }
     onSaved(p)
   }
 
@@ -136,7 +156,7 @@ export default function NewPropertyModal({ onClose, onSaved }: Props) {
     >
       <div className="w-full md:max-w-md md:rounded-2xl rounded-t-2xl overflow-hidden" style={{ background: '#fff', boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
         <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid #EEF0F4' }}>
-          <p className="text-base font-bold" style={{ color: '#14223F' }}>New Listing</p>
+          <p className="text-base font-bold" style={{ color: '#14223F' }}>{editing ? 'Edit Listing' : 'New Listing'}</p>
           <button onClick={onClose} style={{ color: '#9AA3B2' }} className="hover:text-gray-600 text-lg leading-none">✕</button>
         </div>
 
@@ -398,7 +418,7 @@ export default function NewPropertyModal({ onClose, onSaved }: Props) {
             className="flex-1 rounded-xl py-2 text-sm font-bold text-white disabled:opacity-50"
             style={{ background: '#0E1F3D' }}
           >
-            Save listing
+            {editing ? 'Save changes' : 'Save listing'}
           </button>
         </div>
       </div>
