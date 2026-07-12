@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import {
-  CURRENT_AGENT_ID, getAgent, Property,
+  PROPERTIES, CURRENT_AGENT_ID, getAgent, Property,
 } from '@/lib/data'
 import PropertyCard from '@/components/properties/MeridianPropertyCard'
 import PropertyDetailModal from '@/components/modals/PropertyDetailModal'
@@ -40,17 +40,19 @@ function dbRowToProperty(row: Record<string, unknown>, idx: number): Property {
 
 export default function PropertiesPage() {
   const [scope, setScope] = useState<'me' | 'company'>('company')
-  const [list, setList] = useState<Property[]>([])
-  const [loading, setLoading] = useState(true)
+  const [list, setList] = useState<Property[]>(PROPERTIES)
 
   useEffect(() => {
-    fetch('/api/properties')
-      .then(r => r.json())
+    const ctrl = new AbortController()
+    const t = setTimeout(() => ctrl.abort(), 4000)
+    fetch('/api/properties', { signal: ctrl.signal })
+      .then(r => { clearTimeout(t); return r.ok ? r.json() : Promise.reject(r.status) })
       .then(data => {
-        if (data.properties) setList(data.properties.map(dbRowToProperty))
+        if (data.properties && data.properties.length > 0) {
+          setList(data.properties.map(dbRowToProperty))
+        }
       })
-      .catch(() => {})
-      .finally(() => setLoading(false))
+      .catch(() => clearTimeout(t))
   }, [])
   const [detailId, setDetailId] = useState<number | null>(null)
   const [addOpen, setAddOpen] = useState(false)
@@ -100,11 +102,7 @@ export default function PropertiesPage() {
       </div>
 
       {/* Grid */}
-      {loading ? (
-        <div className="text-center py-20" style={{ color: '#9AA3B2' }}>
-          <p className="text-base font-medium">Loading...</p>
-        </div>
-      ) : filtered.length === 0 ? (
+      {filtered.length === 0 ? (
         <div className="text-center py-20" style={{ color: '#9AA3B2' }}>
           <p className="text-base font-medium">No listings found</p>
           <p className="text-sm mt-1">Add a listing or switch to Company view</p>
