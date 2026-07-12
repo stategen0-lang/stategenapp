@@ -1,20 +1,39 @@
 'use client'
 
 import { useState } from 'react'
-import { Client, Agent, Property, statusStyle, CLIENT_TYPE_STYLE, formatPrice, getAgent } from '@/lib/data'
+import { Client, Agent, Property, ClientStatus, statusStyle, CLIENT_TYPE_STYLE, formatPrice, getAgent } from '@/lib/data'
 import MatchCards from '@/components/matching/MatchCards'
 import PropertyDetailModal from './PropertyDetailModal'
+
+const CLIENT_STATUSES: ClientStatus[] = ['Searching', 'Viewing', 'Negotiation', 'Signed']
 
 interface Props {
   client: Client
   agent: Agent
   onClose: () => void
+  onStatusChange?: (id: number, status: ClientStatus) => void
 }
 
-export default function ClientDetailModal({ client: c, agent, onClose }: Props) {
-  const sc = statusStyle(c.status)
+export default function ClientDetailModal({ client: c, agent, onClose, onStatusChange }: Props) {
+  const [status, setStatus] = useState<ClientStatus>(c.status)
+  const [saving, setSaving] = useState(false)
+  const sc = statusStyle(status)
   const tc = CLIENT_TYPE_STYLE[c.type]
   const [stackedProperty, setStackedProperty] = useState<Property | null>(null)
+
+  async function handleStatusChange(newStatus: ClientStatus) {
+    setStatus(newStatus)
+    setSaving(true)
+    try {
+      await fetch('/api/clients', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: c.id, status: newStatus }),
+      })
+      onStatusChange?.(c.id, newStatus)
+    } catch {}
+    setSaving(false)
+  }
 
   return (
     <>
@@ -34,7 +53,15 @@ export default function ClientDetailModal({ client: c, agent, onClose }: Props) 
                 <p className="text-base font-bold" style={{ color: '#14223F' }}>{c.name}</p>
                 <div className="flex items-center gap-2 mt-0.5">
                   <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: tc.bg, color: tc.color }}>{c.type}</span>
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: sc.bg, color: sc.color }}>{c.status}</span>
+                  <select
+                    value={status}
+                    disabled={saving}
+                    onChange={e => handleStatusChange(e.target.value as ClientStatus)}
+                    className="text-xs font-semibold px-2 py-0.5 rounded-full border-0 outline-none cursor-pointer appearance-none"
+                    style={{ background: sc.bg, color: sc.color, opacity: saving ? 0.6 : 1 }}
+                  >
+                    {CLIENT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
                 </div>
               </div>
             </div>

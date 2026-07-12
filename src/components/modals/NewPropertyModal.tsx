@@ -19,6 +19,7 @@ export default function NewPropertyModal({ onClose, onSaved }: Props) {
   const [form, setForm] = useState({
     title: '', type: 'Appartement' as PropertyType, transaction: 'For Sale' as Transaction,
     price: '', rent: '', district: '', city: '', size: '', beds: '', baths: '', parkings: '',
+    buildingAge: '', needsRenovation: false,
     garden: false, balcony: false, view: '', status: 'Available' as PropertyStatus,
     advancedPayment: '' as AdvancedPayment | '',
     aiDescription: '',
@@ -100,6 +101,8 @@ export default function NewPropertyModal({ onClose, onSaved }: Props) {
       beds: parseInt(form.beds) || 0,
       baths: parseInt(form.baths) || 0,
       parkings: parseInt(form.parkings) || undefined,
+      buildingAge: parseInt(form.buildingAge) || undefined,
+      needsRenovation: form.needsRenovation || undefined,
       garden: form.garden,
       balcony: form.balcony,
       view: form.view,
@@ -227,14 +230,20 @@ export default function NewPropertyModal({ onClose, onSaved }: Props) {
             </div>
           </div>
 
-          {/* View */}
-          <div>
-            <label className={label} style={labelStyle}>View</label>
-            <input className={inp} style={inpStyle} value={form.view} onChange={e => set('view', e.target.value)} placeholder="Sea, Mountain, City…" />
+          {/* View + Building Age */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={label} style={labelStyle}>View</label>
+              <input className={inp} style={inpStyle} value={form.view} onChange={e => set('view', e.target.value)} placeholder="Sea, Mountain, City…" />
+            </div>
+            <div>
+              <label className={label} style={labelStyle}>Building Age (yrs)</label>
+              <input className={inp} style={inpStyle} type="number" value={form.buildingAge} onChange={e => set('buildingAge', e.target.value)} placeholder="e.g. 15" />
+            </div>
           </div>
 
           {/* Features */}
-          <div className="flex gap-4 pt-1">
+          <div className="flex gap-4 pt-1 flex-wrap">
             <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: '#14223F' }}>
               <input type="checkbox" checked={form.garden} onChange={e => set('garden', e.target.checked)} className="rounded" />
               Garden
@@ -242,6 +251,10 @@ export default function NewPropertyModal({ onClose, onSaved }: Props) {
             <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: '#14223F' }}>
               <input type="checkbox" checked={form.balcony} onChange={e => set('balcony', e.target.checked)} className="rounded" />
               Balcony
+            </label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: '#14223F' }}>
+              <input type="checkbox" checked={form.needsRenovation} onChange={e => set('needsRenovation', e.target.checked)} className="rounded" />
+              Needs Renovation
             </label>
           </div>
 

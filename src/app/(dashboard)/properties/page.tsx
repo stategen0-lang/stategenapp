@@ -32,6 +32,8 @@ function dbRowToProperty(row: Record<string, unknown>, idx: number): Property {
     notes: extras.notes as string | undefined,
     aiDescription: extras.aiDescription as string | undefined,
     parkings: extras.parkings as number | undefined,
+    buildingAge: extras.buildingAge as number | undefined,
+    needsRenovation: !!(extras.needsRenovation),
     photos: (() => { try { return JSON.parse(row.Photos as string || '[]') } catch { return [] } })(),
   }
 }

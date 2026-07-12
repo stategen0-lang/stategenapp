@@ -19,6 +19,24 @@ export async function GET() {
   }
 }
 
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json()
+    const { id, status } = body
+    if (!id || !status) return NextResponse.json({ error: 'id and status required' }, { status: 400 })
+    const supabase = await createClient()
+    const { error } = await supabase
+      .from('client_requests')
+      .update({ status })
+      .eq('id', id)
+      .eq('company_id', COMPANY_ID)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ ok: true })
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()

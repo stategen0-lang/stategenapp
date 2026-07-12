@@ -113,6 +113,9 @@ export default function PropertyDetailModal({ property: p, agent, onClose }: Pro
                 { label: 'View',      value: p.view || '—' },
                 { label: 'Garden',    value: p.garden ? 'Yes' : 'No' },
                 { label: 'Balcony',   value: p.balcony ? 'Yes' : 'No' },
+                ...(p.parkings ? [{ label: 'Parking', value: String(p.parkings) }] : []),
+                ...(p.buildingAge ? [{ label: 'Building Age', value: `${p.buildingAge} yrs` }] : []),
+                ...(p.needsRenovation ? [{ label: 'Renovation', value: 'Needed' }] : []),
                 ...(p.advancedPayment ? [{ label: 'Advanced pay', value: p.advancedPayment }] : []),
               ].map(({ label, value }) => (
                 <div key={label} className="rounded-xl p-3" style={{ background: '#F7F8FB' }}>

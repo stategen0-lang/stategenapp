@@ -40,6 +40,8 @@ export interface Property {
   balcony: boolean
   view: string
   parkings?: number
+  buildingAge?: number
+  needsRenovation?: boolean
   aiDescription?: string
   notes?: string
   status: PropertyStatus
