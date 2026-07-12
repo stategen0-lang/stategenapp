@@ -27,13 +27,19 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  // Auth bypass — re-enable when done previewing
-  // if (!user && !pathname.startsWith('/login') && !pathname.startsWith('/api')) {
-  //   return NextResponse.redirect(new URL('/login', request.url))
-  // }
-  // if (user && pathname === '/login') {
-  //   return NextResponse.redirect(new URL('/dashboard', request.url))
-  // }
+  // Require authentication for app pages. Public paths (login, signup, and API
+  // routes) are always allowed through.
+  const isPublicPath =
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/signup') ||
+    pathname.startsWith('/api')
+
+  if (!user && !isPublicPath) {
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
+  if (user && pathname === '/login') {
+    return NextResponse.redirect(new URL('/dashboard', request.url))
+  }
 
   return supabaseResponse
 }
