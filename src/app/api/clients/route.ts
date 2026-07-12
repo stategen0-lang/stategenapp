@@ -50,11 +50,16 @@ export async function POST(req: NextRequest) {
       req: body.req,
     }
 
+    // Agent_id is a uuid column; the UI's agentId is a mock code like "a1",
+    // so only store it when it's an actual uuid (otherwise it lives in notes).
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    const agentUuid = typeof body.agentId === 'string' && UUID_RE.test(body.agentId) ? body.agentId : null
+
     const { data, error } = await supabase
       .from('client_requests')
       .insert({
         company_id: COMPANY_ID,
-        Agent_id: body.agentId ?? null,
+        Agent_id: agentUuid,
         'Client Name': body.name,
         'client phone': body.phone ?? null,
         budget_min: body.req?.priceMin ?? 0,
