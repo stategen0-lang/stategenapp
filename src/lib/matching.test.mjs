@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   scoreBudget, scoreLocation, scoreBedrooms, scoreAmenities,
-  propFeatures, computeScore,
+  propFeatures, computeScore, matchProperties, matchClients, MATCH_THRESHOLD,
 } from './matching.ts'
 
 // ── fixtures ────────────────────────────────────────────────────────────────
@@ -114,4 +114,38 @@ test('computeScore: rental budget uses annualised rent (rent × 12)', () => {
     client({ budget: 30000, req: { priceMax: 30000 } }),
   )
   assert.equal(s.budgetScore, 0)
+})
+
+// ── matchProperties / matchClients ──────────────────────────────────────────
+test('matchProperties: drops sub-threshold + Sold, keeps strong matches', () => {
+  const c = client({ budget: 500000, req: { location: 'Beirut', priceMax: 500000, beds: 3, type: 'Appartement' } })
+  const props = [
+    prop({ title: 'perfect', price: 400000, district: 'Hamra', city: 'Beirut', beds: 3, type: 'Appartement' }),
+    prop({ title: 'sold', price: 400000, district: 'Hamra', city: 'Beirut', beds: 3, type: 'Appartement', status: 'Sold' }),
+    prop({ title: 'weak', price: 900000, district: 'Tripoli', city: 'Tripoli', beds: 6, type: 'Villa' }),
+  ]
+  const res = matchProperties(c, props)
+  assert.equal(res.length, 1)
+  assert.equal(res[0].property.title, 'perfect')
+  assert.ok(res[0].score.total >= MATCH_THRESHOLD)
+})
+
+test('matchProperties: ordered by descending score', () => {
+  const c = client({ budget: 500000, req: { location: 'Beirut', priceMax: 500000, beds: 3, type: 'Appartement' } })
+  const props = [
+    prop({ title: 'good', price: 400000, district: 'Hamra', city: 'Beirut', beds: 4, type: 'Appartement' }),
+    prop({ title: 'best', price: 400000, district: 'Hamra', city: 'Beirut', beds: 3, type: 'Appartement' }),
+  ]
+  assert.deepEqual(matchProperties(c, props).map(r => r.property.title), ['best', 'good'])
+})
+
+test('matchClients: sorts best-first and honours the threshold', () => {
+  const p = prop({ price: 400000, district: 'Hamra', city: 'Beirut', beds: 3, type: 'Appartement' })
+  const clients = [
+    client({ budget: 500000, req: { location: 'Beirut', priceMax: 500000, beds: 3, type: 'Appartement' } }),
+    client({ budget: 100000, req: { location: 'Tripoli', priceMax: 100000, beds: 1, type: 'Villa' } }),
+  ]
+  const res = matchClients(p, clients)
+  assert.equal(res.length, 1)
+  assert.ok(res[0].score.total >= MATCH_THRESHOLD)
 })

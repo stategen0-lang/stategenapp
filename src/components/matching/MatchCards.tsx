@@ -7,7 +7,7 @@ import {
   Property, Client,
   formatPrice, TYPE_GRADIENTS,
 } from '@/lib/data'
-import { propFeatures, computeScore, ScoreResult } from '@/lib/matching'
+import { propFeatures, matchClients, matchProperties, ScoreResult } from '@/lib/matching'
 import { dbRowToProperty, dbRowToClient } from '@/lib/db-mappers'
 
 function norm(s: string) { return (s ?? '').toLowerCase().trim() }
@@ -124,8 +124,6 @@ interface Props {
 interface MatchedClient   { client: Client;    score: ScoreResult }
 interface MatchedProperty { property: Property; score: ScoreResult }
 
-const MATCH_THRESHOLD = 50
-
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function MatchCards({ entityType, entity, onOpenProperty, onOpenClient }: Props) {
   const [matchedClients,    setMatchedClients]    = useState<MatchedClient[]>([])
@@ -147,13 +145,7 @@ export default function MatchCards({ entityType, entity, onOpenProperty, onOpenC
             if (Array.isArray(data.clients)) pool = data.clients.map(dbRowToClient)
           }
         } catch { /* keep demo fallback */ }
-        setMatchedClients(
-          pool
-            .map(c => ({ client: c, score: computeScore(prop, c) }))
-            .filter(r => r.score.total >= MATCH_THRESHOLD)
-            .sort((a, b) => b.score.total - a.score.total)
-            .slice(0, 10)
-        )
+        setMatchedClients(matchClients(prop, pool).slice(0, 10))
       } else {
         const client = entity as Client
         // Match against the agency's real listings (fall back to demo data offline).
@@ -165,14 +157,7 @@ export default function MatchCards({ entityType, entity, onOpenProperty, onOpenC
             if (Array.isArray(data.properties)) pool = data.properties.map(dbRowToProperty)
           }
         } catch { /* keep demo fallback */ }
-        setMatchedProperties(
-          pool
-            .filter(p => p.status !== 'Sold')
-            .map(p => ({ property: p, score: computeScore(p, client) }))
-            .filter(r => r.score.total >= MATCH_THRESHOLD)
-            .sort((a, b) => b.score.total - a.score.total)
-            .slice(0, 10)
-        )
+        setMatchedProperties(matchProperties(client, pool).slice(0, 10))
       }
       setDismissed(new Set())
     } finally {

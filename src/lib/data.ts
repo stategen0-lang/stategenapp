@@ -168,51 +168,7 @@ export const DEALS: Deal[] = [
   { id: 22, propTitle: 'Zalka Modern Flat',          type: 'Appartement', transaction: 'Sale', location: 'Zalka, Metn',          agentId: 'a1', value: 320000,  days: 33, date: '2023-02-09', clientName: 'Nour Geagea'      },
 ]
 
-// ─── Matching algorithm ───────────────────────────────────────────────────────
-
-export interface MatchBreakdown {
-  criterion: string
-  matched: boolean
-  weight: number
-}
-
-export interface MatchResult {
-  property: Property
-  pct: number
-  breakdown: MatchBreakdown[]
-}
-
-export function score(req: ClientReq, p: Property): { pct: number; breakdown: MatchBreakdown[] } {
-  const breakdown: MatchBreakdown[] = []
-  const add = (criterion: string, matched: boolean, weight: number) =>
-    breakdown.push({ criterion, matched, weight })
-
-  add('Transaction', !req.transaction || p.transaction === req.transaction, 25)
-  add('Property type', !req.type || p.type === req.type, 16)
-  add('Location', !req.location || p.city.toLowerCase().includes(req.location.toLowerCase()) || p.district.toLowerCase().includes(req.location.toLowerCase()), 16)
-
-  const priceValue = p.transaction === 'For Rent' ? p.rent : p.price
-  const withinBudget = (!req.priceMin || priceValue >= req.priceMin) && (!req.priceMax || priceValue <= req.priceMax)
-  add('Within budget', withinBudget, 16)
-
-  add('Bedrooms', !req.beds || p.beds >= req.beds, 12)
-  add('Size', !req.size || p.size >= req.size, 8)
-  add('Garden', !req.garden || p.garden, 8)
-  add('Balcony', !req.balcony || p.balcony, 8)
-  add('Bathrooms', !req.baths || p.baths >= req.baths, 7)
-
-  const earned = breakdown.reduce((sum, b) => sum + (b.matched ? b.weight : 0), 0)
-  const total  = breakdown.reduce((sum, b) => sum + b.weight, 0)
-  return { pct: Math.round((earned / total) * 100), breakdown }
-}
-
-export function findMatches(req: ClientReq, properties: Property[], threshold = 80): MatchResult[] {
-  return properties
-    .filter(p => p.status !== 'Sold')
-    .map(p => ({ property: p, ...score(req, p) }))
-    .filter(r => r.pct >= threshold)
-    .sort((a, b) => b.pct - a.pct)
-}
+// Matching algorithm lives in src/lib/matching.ts (shared by the UI + tests).
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

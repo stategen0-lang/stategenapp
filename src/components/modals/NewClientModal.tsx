@@ -2,9 +2,11 @@
 
 import { useState } from 'react'
 import {
-  Client, ClientType, ClientStatus, ClientReq, PropertyType, Transaction,
-  PROPERTIES, CURRENT_AGENT_ID, findMatches, MatchResult, TYPE_GRADIENTS, formatPrice
+  Client, ClientType, ClientStatus, ClientReq, PropertyType,
+  PROPERTIES, CURRENT_AGENT_ID, formatPrice
 } from '@/lib/data'
+import { matchProperties, MATCH_THRESHOLD, PropertyMatch } from '@/lib/matching'
+import { dbRowToProperty } from '@/lib/db-mappers'
 
 const PROPERTY_TYPES: PropertyType[] = ['Appartement', 'Shop', 'Office', 'Building', 'Villa', 'Land', 'Showroom', 'Restaurant']
 
@@ -22,10 +24,11 @@ const emptyReq = (): ClientReq => ({
   beds: 0, baths: 0, size: 0, garden: false, balcony: false, notes: '',
 })
 
-export default function NewClientModal({ onClose, onSaved, matchThreshold = 80, initial }: Props) {
+export default function NewClientModal({ onClose, onSaved, matchThreshold = MATCH_THRESHOLD, initial }: Props) {
   const editing = !!initial
   const [step, setStep] = useState<1 | 2>(1)
-  const [matches, setMatches] = useState<MatchResult[]>([])
+  const [matches, setMatches] = useState<PropertyMatch[]>([])
+  const [finding, setFinding] = useState(false)
 
   const [name, setName] = useState(initial?.name ?? '')
   const [email, setEmail] = useState(initial?.email ?? '')
@@ -37,9 +40,19 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = 80, 
     setReq(r => ({ ...r, [k]: v }))
   }
 
-  function handleFindMatches() {
-    const results = findMatches(req, PROPERTIES, matchThreshold)
-    setMatches(results)
+  async function handleFindMatches() {
+    setFinding(true)
+    // Match against the agency's real listings (demo data as offline fallback).
+    let pool = PROPERTIES
+    try {
+      const res = await fetch('/api/properties')
+      if (res.ok) {
+        const data = await res.json()
+        if (Array.isArray(data.properties)) pool = data.properties.map(dbRowToProperty)
+      }
+    } catch { /* keep demo fallback */ }
+    setMatches(matchProperties({ req, budget: req.priceMax || 0 }, pool, matchThreshold))
+    setFinding(false)
     setStep(2)
   }
 
@@ -199,11 +212,11 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = 80, 
               ) : (
                 <button
                   onClick={handleFindMatches}
-                  disabled={!name}
+                  disabled={!name || finding}
                   className="flex-1 rounded-xl py-2 text-sm font-bold text-white disabled:opacity-50"
                   style={{ background: '#0E1F3D' }}
                 >
-                  Find matches →
+                  {finding ? 'Finding…' : 'Find matches →'}
                 </button>
               )}
             </div>
@@ -219,11 +232,17 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = 80, 
                   </p>
                 </div>
               ) : (
-                matches.map(({ property: p, pct, breakdown }) => {
-                  const ringColor = pct >= 90 ? '#1F8A5B' : '#9A6516'
+                matches.map(({ property: p, score: s }) => {
+                  const pct = Math.round(s.total)
+                  const ringColor = pct >= 75 ? '#1F8A5B' : '#9A6516'
                   const circumference = 2 * Math.PI * 16
                   const dash = (pct / 100) * circumference
-
+                  const subs = [
+                    { label: 'Budget',   v: s.budgetScore },
+                    { label: 'Location', v: s.locationScore },
+                    { label: 'Type',     v: s.typeScore },
+                    { label: 'Beds',     v: s.bedroomScore },
+                  ]
                   return (
                     <div key={p.id} className="rounded-xl p-4" style={{ border: '1.5px solid #EEF0F4', background: '#FAFBFC' }}>
                       <div className="flex items-start gap-3 mb-3">
@@ -249,17 +268,19 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = 80, 
                           </p>
                         </div>
                       </div>
-                      {/* Breakdown chips */}
+                      {/* Sub-score chips */}
                       <div className="flex flex-wrap gap-1">
-                        {breakdown.map(b => (
+                        {subs.map(({ label, v }) => (
                           <span
-                            key={b.criterion}
+                            key={label}
                             className="text-xs px-2 py-0.5 rounded-full font-medium"
-                            style={b.matched
+                            style={v >= 75
                               ? { background: '#E3F4EA', color: '#1F7A4D' }
-                              : { background: '#FBE7E7', color: '#A23434' }}
+                              : v >= 50
+                                ? { background: '#FBEFD6', color: '#9A6516' }
+                                : { background: '#FBE7E7', color: '#A23434' }}
                           >
-                            {b.matched ? '✓' : '✗'} {b.criterion}
+                            {label} {Math.round(v)}%
                           </span>
                         ))}
                       </div>

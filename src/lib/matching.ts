@@ -80,8 +80,15 @@ export interface ScoreResult {
   amenityScore: number
 }
 
+// A record only needs its requirements + budget to be scored — this lets the
+// New Client form score against a not-yet-saved client.
+export type ClientLike = Pick<Client, 'req' | 'budget'>
+
+// Default cutoff: matches scoring below this are hidden.
+export const MATCH_THRESHOLD = 50
+
 // Weights: budget 40%, location 25%, type 15%, bedrooms 12%, amenities 8%.
-export function computeScore(prop: Property, client: Client): ScoreResult {
+export function computeScore(prop: Property, client: ClientLike): ScoreResult {
   const price    = prop.transaction === 'For Rent' ? prop.rent * 12 : prop.price
   const features = propFeatures(prop)
   const wish: string[] = [
@@ -98,4 +105,34 @@ export function computeScore(prop: Property, client: Client): ScoreResult {
     total: Math.round(total * 100) / 100,
     budgetScore: b, locationScore: l, typeScore: t, bedroomScore: br, amenityScore: a,
   }
+}
+
+// ── Match finders ─────────────────────────────────────────────────────────────
+// Both return results sorted best-first, above the threshold. Sold listings are
+// excluded when matching properties to a client.
+
+export interface PropertyMatch { property: Property; score: ScoreResult }
+export interface ClientMatch   { client: Client;    score: ScoreResult }
+
+export function matchProperties(
+  client: ClientLike,
+  properties: Property[],
+  threshold = MATCH_THRESHOLD,
+): PropertyMatch[] {
+  return properties
+    .filter(p => p.status !== 'Sold')
+    .map(p => ({ property: p, score: computeScore(p, client) }))
+    .filter(r => r.score.total >= threshold)
+    .sort((a, b) => b.score.total - a.score.total)
+}
+
+export function matchClients(
+  property: Property,
+  clients: Client[],
+  threshold = MATCH_THRESHOLD,
+): ClientMatch[] {
+  return clients
+    .map(c => ({ client: c, score: computeScore(property, c) }))
+    .filter(r => r.score.total >= threshold)
+    .sort((a, b) => b.score.total - a.score.total)
 }
