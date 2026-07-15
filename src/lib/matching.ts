@@ -36,13 +36,27 @@ export function propFeatures(p: Property): string[] {
   return out
 }
 
-// Budget: full marks if within budget, then falls off linearly to 0 once the
-// property is >15% over budget.
-export function scoreBudget(propPrice: number, clientBudget: number): number {
-  if (!clientBudget) return 100
-  if (clientBudget >= propPrice) return 100
-  const gap = (propPrice - clientBudget) / propPrice
-  return gap > 0.15 ? 0 : Math.round((1 - gap / 0.15) * 100)
+// Sentinel returned by scoreBudget when the price is too far from budget to
+// recommend at all (more than ±50% off).
+export const BUDGET_EXCLUDE = -1
+
+// Budget: symmetric band scoring around the client's budget range. A price
+// inside [min, max] is perfect; outside it, the deviation from the nearest
+// bound (above OR below) sets the band — ≤10% → 100, ≤20% → 80, ≤30% → 50,
+// ≤50% → 25. Beyond ±50% returns BUDGET_EXCLUDE ("don't recommend").
+export function scoreBudget(propPrice: number, priceMin: number, priceMax: number): number {
+  const min = priceMin || 0
+  const max = priceMax || 0
+  if (!min && !max) return 100                                       // no budget given
+  if (propPrice >= min && (max === 0 || propPrice <= max)) return 100 // within range
+  const dev = (max > 0 && propPrice > max)
+    ? (propPrice - max) / max                                        // over budget
+    : (min > 0 ? (min - propPrice) / min : 1)                        // under budget
+  if (dev <= 0.10) return 100
+  if (dev <= 0.20) return 80
+  if (dev <= 0.30) return 50
+  if (dev <= 0.50) return 25
+  return BUDGET_EXCLUDE
 }
 
 export function scoreLocation(propLoc: string, clientLoc: string): number {
@@ -78,6 +92,7 @@ export interface ScoreResult {
   typeScore: number
   bedroomScore: number
   amenityScore: number
+  eligible: boolean   // false = hard-excluded (type mismatch or budget out of range)
 }
 
 // A record only needs its requirements + budget to be scored — this lets the
@@ -95,15 +110,21 @@ export function computeScore(prop: Property, client: ClientLike): ScoreResult {
     ...(client.req.garden  ? ['garden']  : []),
     ...(client.req.balcony ? ['balcony'] : []),
   ]
-  const b  = scoreBudget(price, client.req.priceMax || client.budget)
+  const rawBudget = scoreBudget(price, client.req.priceMin, client.req.priceMax || client.budget)
+  const typeOk = !client.req.type || prop.type === client.req.type
+  const b  = rawBudget === BUDGET_EXCLUDE ? 0 : rawBudget
   const l  = scoreLocation(`${prop.district} ${prop.city}`, client.req.location)
-  const t  = !client.req.type || prop.type === client.req.type ? 100 : 0
+  const t  = typeOk ? 100 : 0
   const br = scoreBedrooms(prop.beds, client.req.beds)
   const a  = scoreAmenities(features, wish)
+  // Hard filters: a specified-but-mismatched type, or a price >±50% off budget,
+  // makes the match ineligible regardless of the other criteria.
+  const eligible = typeOk && rawBudget !== BUDGET_EXCLUDE
   const total = (b * 0.40) + (l * 0.25) + (t * 0.15) + (br * 0.12) + (a * 0.08)
   return {
     total: Math.round(total * 100) / 100,
     budgetScore: b, locationScore: l, typeScore: t, bedroomScore: br, amenityScore: a,
+    eligible,
   }
 }
 
@@ -122,7 +143,7 @@ export function matchProperties(
   return properties
     .filter(p => p.status !== 'Sold')
     .map(p => ({ property: p, score: computeScore(p, client) }))
-    .filter(r => r.score.total >= threshold)
+    .filter(r => r.score.eligible && r.score.total >= threshold)
     .sort((a, b) => b.score.total - a.score.total)
 }
 
@@ -133,6 +154,6 @@ export function matchClients(
 ): ClientMatch[] {
   return clients
     .map(c => ({ client: c, score: computeScore(property, c) }))
-    .filter(r => r.score.total >= threshold)
+    .filter(r => r.score.eligible && r.score.total >= threshold)
     .sort((a, b) => b.score.total - a.score.total)
 }
