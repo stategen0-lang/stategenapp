@@ -7,105 +7,10 @@ import {
   Property, Client,
   formatPrice, TYPE_GRADIENTS,
 } from '@/lib/data'
+import { propFeatures, computeScore, ScoreResult } from '@/lib/matching'
+import { dbRowToProperty, dbRowToClient } from '@/lib/db-mappers'
 
-// ── Scoring formula (spec-compliant) ─────────────────────────────────────────
-
-// Zones: same zone = 60. Adjacent zones (e.g. Beirut ↔ Metn) = 35. Never 0 for nearby.
-const ZONES: Record<string, string[]> = {
-  beirut:   ['hamra', 'raouche', 'raouché', 'ashrafieh', 'achrafieh', 'gemmayzeh', 'verdun',
-             'mar mikhael', 'monot', 'badaro', 'koraytem', 'mazraa', 'jnah', 'sanayeh',
-             'sodeco', 'furn el chebbak', 'sin el fil', 'bourj hammoud', 'dekwaneh'],
-  metn:     ['naccache', 'dbayeh', 'antelias', 'zalka', 'jal el dib', 'beit mery', 'broumana',
-             'mtayleb', 'baabda', 'mansourieh', 'biyada', 'bikfaya', 'ain saade', 'rabieh'],
-  keserwan: ['jounieh', 'kaslik', 'ghazir', 'zouk', 'adma', 'tabarja', 'jbeil', 'byblos'],
-  chouf:    ['aley', 'bhamdoun', 'barouk', 'deir el qamar', 'damour'],
-  north:    ['tripoli', 'zgharta', 'bcharre', 'koura', 'batroun', 'jbeil'],
-  south:    ['sidon', 'saida', 'tyre', 'sour', 'nabatieh'],
-  bekaa:    ['zahle', 'chtaura', 'baalbek', 'anjar'],
-}
-
-// Neighbouring zone pairs — score 35 instead of 0
-const NEIGHBOURS: [string, string][] = [
-  ['beirut', 'metn'],
-  ['beirut', 'chouf'],
-  ['metn',   'keserwan'],
-  ['metn',   'chouf'],
-]
-
-function norm(s: string) { return s.toLowerCase().trim() }
-
-function propFeatures(p: Property): string[] {
-  const out: string[] = []
-  if (p.garden)  out.push('garden')
-  if (p.balcony) out.push('balcony')
-  if (p.view && p.view !== 'Street') out.push(`${p.view.toLowerCase()} view`)
-  return out
-}
-
-function scoreBudget(propPrice: number, clientBudget: number): number {
-  if (!clientBudget) return 100
-  if (clientBudget >= propPrice) return 100
-  const gap = (propPrice - clientBudget) / propPrice
-  return gap > 0.15 ? 0 : Math.round((1 - gap / 0.15) * 100)
-}
-
-function scoreLocation(propLoc: string, clientLoc: string): number {
-  if (!clientLoc) return 100
-  const p = norm(propLoc); const c = norm(clientLoc)
-  if (p.includes(c) || c.includes(p)) return 100
-
-  // Find which zone each location belongs to
-  const pZone = Object.entries(ZONES).find(([, areas]) => areas.some(a => p.includes(a)))?.[0]
-  const cZone = Object.entries(ZONES).find(([, areas]) => areas.some(a => c.includes(a)))?.[0]
-
-  // Same zone but different district → 60
-  if (pZone && cZone && pZone === cZone) return 60
-
-  // Neighbouring zones → 35
-  if (pZone && cZone && NEIGHBOURS.some(([a, b]) => (a === pZone && b === cZone) || (b === pZone && a === cZone))) return 35
-
-  // Different zones but both identified → still 15 (not 0) — they're at least in Lebanon
-  if (pZone && cZone) return 15
-
-  return 0
-}
-
-function scoreBedrooms(propBeds: number, clientBeds: number): number {
-  if (!clientBeds) return 100
-  const d = Math.abs(propBeds - clientBeds)
-  return d === 0 ? 100 : d === 1 ? 80 : d === 2 ? 40 : 0
-}
-
-function scoreAmenities(features: string[], wishlist: string[]): number {
-  if (!wishlist.length) return 100
-  const matched = wishlist.filter(w => features.some(a => norm(a).includes(norm(w)) || norm(w).includes(norm(a))))
-  return Math.round((matched.length / wishlist.length) * 100)
-}
-
-interface ScoreResult {
-  total: number
-  budgetScore: number
-  locationScore: number
-  typeScore: number
-  bedroomScore: number
-  amenityScore: number
-}
-
-function computeScore(prop: Property, client: Client): ScoreResult {
-  const price    = prop.transaction === 'For Rent' ? prop.rent * 12 : prop.price
-  const features = propFeatures(prop)
-  const wish: string[] = [
-    ...(client.req.garden  ? ['garden']  : []),
-    ...(client.req.balcony ? ['balcony'] : []),
-  ]
-  const b  = scoreBudget(price, client.req.priceMax || client.budget)
-  const l  = scoreLocation(`${prop.district} ${prop.city}`, client.req.location)
-  const t  = !client.req.type || prop.type === client.req.type ? 100 : 0
-  const br = scoreBedrooms(prop.beds, client.req.beds)
-  const a  = scoreAmenities(features, wish)
-  const total = (b * 0.40) + (l * 0.25) + (t * 0.15) + (br * 0.12) + (a * 0.08)
-  return { total: Math.round(total * 100) / 100, budgetScore: b, locationScore: l, typeScore: t, bedroomScore: br, amenityScore: a }
-}
+function norm(s: string) { return (s ?? '').toLowerCase().trim() }
 
 // ── Score ring SVG ────────────────────────────────────────────────────────────
 const CIRC = 113
@@ -211,7 +116,7 @@ export type MatchEntity = 'property' | 'client'
 
 interface Props {
   entityType: MatchEntity
-  entityId: number
+  entity: Property | Client
   onOpenProperty?: (p: Property) => void
   onOpenClient?: (c: Client) => void
 }
@@ -219,41 +124,61 @@ interface Props {
 interface MatchedClient   { client: Client;    score: ScoreResult }
 interface MatchedProperty { property: Property; score: ScoreResult }
 
+const MATCH_THRESHOLD = 50
+
 // ── Main component ─────────────────────────────────────────────────────────────
-export default function MatchCards({ entityType, entityId, onOpenProperty, onOpenClient }: Props) {
+export default function MatchCards({ entityType, entity, onOpenProperty, onOpenClient }: Props) {
   const [matchedClients,    setMatchedClients]    = useState<MatchedClient[]>([])
   const [matchedProperties, setMatchedProperties] = useState<MatchedProperty[]>([])
   const [dismissed, setDismissed] = useState<Set<number>>(new Set())
   const [loading,   setLoading]   = useState(true)
 
-  const runMatching = useCallback(() => {
+  const runMatching = useCallback(async () => {
     setLoading(true)
-    setTimeout(() => {
+    try {
       if (entityType === 'property') {
-        const prop = PROPERTIES.find(p => p.id === entityId)
-        if (!prop) { setLoading(false); return }
-        const results: MatchedClient[] = CLIENTS
-          .map(c => ({ client: c, score: computeScore(prop, c) }))
-          .filter(r => r.score.total >= 50)
-          .sort((a, b) => b.score.total - a.score.total)
-          .slice(0, 10)
-        setMatchedClients(results)
-        setDismissed(new Set())
+        const prop = entity as Property
+        // Match against the agency's real clients (fall back to demo data offline).
+        let pool: Client[] = CLIENTS
+        try {
+          const res = await fetch('/api/clients')
+          if (res.ok) {
+            const data = await res.json()
+            if (Array.isArray(data.clients)) pool = data.clients.map(dbRowToClient)
+          }
+        } catch { /* keep demo fallback */ }
+        setMatchedClients(
+          pool
+            .map(c => ({ client: c, score: computeScore(prop, c) }))
+            .filter(r => r.score.total >= MATCH_THRESHOLD)
+            .sort((a, b) => b.score.total - a.score.total)
+            .slice(0, 10)
+        )
       } else {
-        const client = CLIENTS.find(c => c.id === entityId)
-        if (!client) { setLoading(false); return }
-        const results: MatchedProperty[] = PROPERTIES
-          .filter(p => p.status !== 'Sold')
-          .map(p => ({ property: p, score: computeScore(p, client) }))
-          .filter(r => r.score.total >= 50)
-          .sort((a, b) => b.score.total - a.score.total)
-          .slice(0, 10)
-        setMatchedProperties(results)
-        setDismissed(new Set())
+        const client = entity as Client
+        // Match against the agency's real listings (fall back to demo data offline).
+        let pool: Property[] = PROPERTIES
+        try {
+          const res = await fetch('/api/properties')
+          if (res.ok) {
+            const data = await res.json()
+            if (Array.isArray(data.properties)) pool = data.properties.map(dbRowToProperty)
+          }
+        } catch { /* keep demo fallback */ }
+        setMatchedProperties(
+          pool
+            .filter(p => p.status !== 'Sold')
+            .map(p => ({ property: p, score: computeScore(p, client) }))
+            .filter(r => r.score.total >= MATCH_THRESHOLD)
+            .sort((a, b) => b.score.total - a.score.total)
+            .slice(0, 10)
+        )
       }
+      setDismissed(new Set())
+    } finally {
       setLoading(false)
-    }, 300)
-  }, [entityType, entityId])
+    }
+  }, [entityType, entity])
 
   useEffect(() => { runMatching() }, [runMatching])
 
@@ -300,7 +225,7 @@ export default function MatchCards({ entityType, entityId, onOpenProperty, onOpe
       {!loading && entityType === 'property' && visibleClientMatches.map(({ client: c, score: s }) => {
         const agent    = getAgent(c.agentId)
         const initials = c.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
-        const prop     = PROPERTIES.find(p => p.id === entityId)!
+        const prop     = entity as Property
         const features = propFeatures(prop)
         const wishlist = [...(c.req.garden ? ['garden'] : []), ...(c.req.balcony ? ['balcony'] : [])]
         const waMsg    = encodeURIComponent(`Hi, I have a property match for your client ${c.name} — score ${Math.round(s.total)}%. Interested?`)
@@ -333,14 +258,15 @@ export default function MatchCards({ entityType, entityId, onOpenProperty, onOpe
       {/* ── Client → Property cards ── */}
       {!loading && entityType === 'client' && visiblePropMatches.map(({ property: p, score: s }) => {
         const photos   = p.photos ?? []
-        const client   = CLIENTS.find(c => c.id === entityId)!
+        const client   = entity as Client
         const features = propFeatures(p)
         const wishlist = [...(client.req.garden ? ['garden'] : []), ...(client.req.balcony ? ['balcony'] : [])]
         const waMsg    = encodeURIComponent(`Hi, I found a property match — ${p.title} in ${p.district}, ${p.city}. Score: ${Math.round(s.total)}%. Interested?`)
         return (
           <MatchCard key={p.id} score={s.total} onDismiss={() => setDismissed(prev => new Set([...prev, p.id]))}>
             {photos[0]
-              ? <img src={photos[0]} alt={p.title} className="w-14 h-10 rounded-lg object-cover shrink-0" />
+              ? // eslint-disable-next-line @next/next/no-img-element
+                <img src={photos[0]} alt={p.title} className="w-14 h-10 rounded-lg object-cover shrink-0" />
               : <div className="w-14 h-10 rounded-lg shrink-0" style={{ background: TYPE_GRADIENTS[p.type] }} />
             }
             <div className="flex-1 min-w-0">

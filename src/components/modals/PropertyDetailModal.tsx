@@ -154,7 +154,7 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
             <div style={{ borderTop: '1px solid #EEF0F4', paddingTop: 16 }}>
               <MatchCards
                 entityType="property"
-                entityId={p.id}
+                entity={p}
                 onOpenClient={c => setStackedClient(c)}
               />
             </div>
