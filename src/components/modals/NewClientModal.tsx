@@ -51,7 +51,7 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
         if (Array.isArray(data.properties)) pool = data.properties.map(dbRowToProperty)
       }
     } catch { /* keep demo fallback */ }
-    setMatches(matchProperties({ req, budget: req.priceMax || 0 }, pool, matchThreshold))
+    setMatches(matchProperties({ req, budget: req.priceMax || 0, type }, pool, matchThreshold))
     setFinding(false)
     setStep(2)
   }

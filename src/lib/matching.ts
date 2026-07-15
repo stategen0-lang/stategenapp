@@ -95,9 +95,9 @@ export interface ScoreResult {
   eligible: boolean   // false = hard-excluded (type mismatch or budget out of range)
 }
 
-// A record only needs its requirements + budget to be scored — this lets the
-// New Client form score against a not-yet-saved client.
-export type ClientLike = Pick<Client, 'req' | 'budget'>
+// A record only needs its requirements + budget + type to be scored — this lets
+// the New Client form score against a not-yet-saved client.
+export type ClientLike = Pick<Client, 'req' | 'budget' | 'type'>
 
 // Default cutoff: matches scoring below this are hidden.
 export const MATCH_THRESHOLD = 50
@@ -112,14 +112,18 @@ export function computeScore(prop: Property, client: ClientLike): ScoreResult {
   ]
   const rawBudget = scoreBudget(price, client.req.priceMin, client.req.priceMax || client.budget)
   const typeOk = !client.req.type || prop.type === client.req.type
+  // Desired transaction: the explicit requirement, else derived from Buyer/Renter.
+  const wantTxn = client.req.transaction
+    || (client.type === 'Renter' ? 'For Rent' : client.type === 'Buyer' ? 'For Sale' : '')
+  const txnOk = !wantTxn || prop.transaction === wantTxn
   const b  = rawBudget === BUDGET_EXCLUDE ? 0 : rawBudget
   const l  = scoreLocation(`${prop.district} ${prop.city}`, client.req.location)
   const t  = typeOk ? 100 : 0
   const br = scoreBedrooms(prop.beds, client.req.beds)
   const a  = scoreAmenities(features, wish)
-  // Hard filters: a specified-but-mismatched type, or a price >±50% off budget,
-  // makes the match ineligible regardless of the other criteria.
-  const eligible = typeOk && rawBudget !== BUDGET_EXCLUDE
+  // Hard filters: a mismatched (specified) type, a buy/rent transaction mismatch,
+  // or a price >±50% off budget makes the match ineligible regardless of the rest.
+  const eligible = typeOk && txnOk && rawBudget !== BUDGET_EXCLUDE
   const total = (b * 0.40) + (l * 0.25) + (t * 0.15) + (br * 0.12) + (a * 0.08)
   return {
     total: Math.round(total * 100) / 100,

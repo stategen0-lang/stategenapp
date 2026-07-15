@@ -18,6 +18,7 @@ const prop = (o = {}) => ({
 })
 
 const client = (o = {}) => ({
+  type: o.type,               // 'Buyer' | 'Renter' | undefined
   budget: o.budget ?? 0,
   req: {
     transaction: '', type: '', location: '', priceMin: 0, priceMax: 0,
@@ -159,6 +160,37 @@ test('matchProperties: ordered by descending score', () => {
     prop({ title: 'best', price: 400000, district: 'Hamra', city: 'Beirut', beds: 3, type: 'Appartement' }),
   ]
   assert.deepEqual(matchProperties(c, props).map(r => r.property.title), ['best', 'good'])
+})
+
+// ── transaction (buy vs rent) hard filter ────────────────────────────────────
+test('computeScore: a Buyer is excluded from a rental listing', () => {
+  const s = computeScore(
+    prop({ transaction: 'For Rent', rent: 1500, price: 0, type: 'Appartement', district: 'Hamra', city: 'Beirut' }),
+    client({ type: 'Buyer', budget: 500000, req: { location: 'Beirut', priceMax: 500000, beds: 2 } }),
+  )
+  assert.equal(s.eligible, false)
+})
+test('computeScore: a Renter is excluded from a sale listing', () => {
+  const s = computeScore(
+    prop({ transaction: 'For Sale', price: 400000, type: 'Appartement', district: 'Hamra', city: 'Beirut' }),
+    client({ type: 'Renter', budget: 30000, req: { location: 'Beirut', priceMax: 30000, beds: 2 } }),
+  )
+  assert.equal(s.eligible, false)
+})
+test('computeScore: explicit req.transaction drives the filter', () => {
+  const s = computeScore(
+    prop({ transaction: 'For Sale', price: 400000, type: 'Appartement', district: 'Hamra', city: 'Beirut' }),
+    client({ budget: 500000, req: { transaction: 'For Rent', location: 'Beirut', priceMax: 500000, beds: 2 } }),
+  )
+  assert.equal(s.eligible, false)
+})
+test('matchProperties: a Buyer only sees sale listings', () => {
+  const c = client({ type: 'Buyer', budget: 600000, req: { type: 'Appartement', location: 'Beirut', priceMin: 300000, priceMax: 600000, beds: 2 } })
+  const props = [
+    prop({ title: 'sale', transaction: 'For Sale', price: 500000, type: 'Appartement', district: 'Hamra', city: 'Beirut', beds: 2 }),
+    prop({ title: 'rent', transaction: 'For Rent', rent: 1500, price: 0, type: 'Appartement', district: 'Hamra', city: 'Beirut', beds: 2 }),
+  ]
+  assert.deepEqual(matchProperties(c, props).map(r => r.property.title), ['sale'])
 })
 
 test('matchProperties: excludes wrong-type and >±50%-off-budget listings', () => {
