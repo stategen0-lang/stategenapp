@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   scoreBudget, scoreLocation, scoreBedrooms, scoreAmenities,
-  propFeatures, computeScore, matchProperties, matchClients, MATCH_THRESHOLD, BUDGET_EXCLUDE,
+  propFeatures, computeScore, matchProperties, matchClients, MATCH_THRESHOLD, BUDGET_EXCLUDE, LOCATION_EXCLUDE,
 } from './matching.ts'
 
 // ── fixtures ────────────────────────────────────────────────────────────────
@@ -57,21 +57,22 @@ test('scoreBudget: beyond ±50% → BUDGET_EXCLUDE', () => {
 test('scoreLocation: no client location → 100', () => {
   assert.equal(scoreLocation('Hamra Beirut', ''), 100)
 })
-test('scoreLocation: substring / same district → 100', () => {
+test('scoreLocation: same specific area (substring) → 100', () => {
   assert.equal(scoreLocation('Hamra Beirut', 'Beirut'), 100)
   assert.equal(scoreLocation('Hamra Beirut', 'Hamra'), 100)
 })
-test('scoreLocation: same zone, different district → 60', () => {
-  assert.equal(scoreLocation('Hamra Beirut', 'Verdun'), 60)
+test('scoreLocation: same zone, different district → 100 (same area)', () => {
+  assert.equal(scoreLocation('Hamra Beirut', 'Verdun'), 100)
 })
-test('scoreLocation: neighbouring zones (Beirut ↔ Metn) → 35', () => {
-  assert.equal(scoreLocation('Dbayeh Metn', 'Hamra'), 35)
+test('scoreLocation: surrounding area (neighbouring zone) → 75', () => {
+  assert.equal(scoreLocation('Dbayeh Metn', 'Hamra'), 75)
+  assert.equal(scoreLocation('Hamra Beirut', 'Metn'), 75) // region name recognised
 })
-test('scoreLocation: both known but far apart → 15', () => {
-  assert.equal(scoreLocation('Tripoli', 'Zahle'), 15)
+test('scoreLocation: far apart → LOCATION_EXCLUDE', () => {
+  assert.equal(scoreLocation('Tripoli', 'Zahle'), LOCATION_EXCLUDE)
 })
-test('scoreLocation: unknown locations → 0', () => {
-  assert.equal(scoreLocation('Nowhereville', 'Atlantis'), 0)
+test('scoreLocation: unknown locations → LOCATION_EXCLUDE', () => {
+  assert.equal(scoreLocation('Nowhereville', 'Atlantis'), LOCATION_EXCLUDE)
 })
 
 // ── scoreBedrooms ───────────────────────────────────────────────────────────
@@ -189,6 +190,15 @@ test('matchProperties: a Buyer only sees sale listings', () => {
     prop({ title: 'rent', transaction: 'For Rent', rent: 1500, price: 0, type: 'Appartement', district: 'Hamra', city: 'Beirut', beds: 2 }),
   ]
   assert.deepEqual(matchProperties(c, props).map(r => r.property.title), ['sale'])
+})
+
+test('matchProperties: excludes far-away listings (location hard filter)', () => {
+  const c = client({ budget: 500000, req: { location: 'Beirut', beds: 3, type: 'Appartement' } })
+  const props = [
+    prop({ title: 'near', price: 500000, district: 'Hamra', city: 'Beirut', beds: 3, type: 'Appartement' }),
+    prop({ title: 'far',  price: 500000, district: 'Tyre',  city: 'South',  beds: 3, type: 'Appartement' }),
+  ]
+  assert.deepEqual(matchProperties(c, props).map(r => r.property.title), ['near'])
 })
 
 test('matchProperties: excludes wrong-type and >±50%-off-budget listings', () => {

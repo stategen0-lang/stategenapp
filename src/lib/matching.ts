@@ -53,18 +53,22 @@ export function scoreBudget(propPrice: number, budget: number): number {
   return BUDGET_EXCLUDE
 }
 
+// Sentinel: location too far from the client's preferred area to recommend.
+export const LOCATION_EXCLUDE = -1
+
+// Location: same area (exact match or same zone) → 100, surrounding area
+// (a neighbouring zone) → 75, anywhere further → LOCATION_EXCLUDE.
 export function scoreLocation(propLoc: string, clientLoc: string): number {
-  if (!clientLoc) return 100
+  if (!clientLoc) return 100                       // no preference → no constraint
   const p = norm(propLoc); const c = norm(clientLoc)
-  if (p.includes(c) || c.includes(p)) return 100
+  if (p.includes(c) || c.includes(p)) return 100   // same specific area
 
-  const pZone = Object.entries(ZONES).find(([, areas]) => areas.some(a => p.includes(a)))?.[0]
-  const cZone = Object.entries(ZONES).find(([, areas]) => areas.some(a => c.includes(a)))?.[0]
+  const pZone = Object.entries(ZONES).find(([zone, areas]) => p.includes(zone) || areas.some(a => p.includes(a)))?.[0]
+  const cZone = Object.entries(ZONES).find(([zone, areas]) => c.includes(zone) || areas.some(a => c.includes(a)))?.[0]
 
-  if (pZone && cZone && pZone === cZone) return 60
-  if (pZone && cZone && NEIGHBOURS.some(([a, b]) => (a === pZone && b === cZone) || (b === pZone && a === cZone))) return 35
-  if (pZone && cZone) return 15
-  return 0
+  if (pZone && cZone && pZone === cZone) return 100 // same zone = same area
+  if (pZone && cZone && NEIGHBOURS.some(([a, b]) => (a === pZone && b === cZone) || (b === pZone && a === cZone))) return 75 // surrounding
+  return LOCATION_EXCLUDE
 }
 
 export function scoreBedrooms(propBeds: number, clientBeds: number): number {
@@ -112,14 +116,16 @@ export function computeScore(prop: Property, client: ClientLike): ScoreResult {
   const wantTxn = client.req.transaction
     || (client.type === 'Renter' ? 'For Rent' : client.type === 'Buyer' ? 'For Sale' : '')
   const txnOk = !wantTxn || prop.transaction === wantTxn
+  const rawLoc = scoreLocation(`${prop.district} ${prop.city}`, client.req.location)
   const b  = rawBudget === BUDGET_EXCLUDE ? 0 : rawBudget
-  const l  = scoreLocation(`${prop.district} ${prop.city}`, client.req.location)
+  const l  = rawLoc === LOCATION_EXCLUDE ? 0 : rawLoc
   const t  = typeOk ? 100 : 0
   const br = scoreBedrooms(prop.beds, client.req.beds)
   const a  = scoreAmenities(features, wish)
-  // Hard filters: a mismatched (specified) type, a buy/rent transaction mismatch,
-  // or a price >±50% off budget makes the match ineligible regardless of the rest.
-  const eligible = typeOk && txnOk && rawBudget !== BUDGET_EXCLUDE
+  // Hard filters (any one makes the match ineligible regardless of the rest):
+  // mismatched specified type, buy/rent transaction mismatch, price >±50% off
+  // budget, or a location outside the surrounding area.
+  const eligible = typeOk && txnOk && rawBudget !== BUDGET_EXCLUDE && rawLoc !== LOCATION_EXCLUDE
   const total = (b * 0.40) + (l * 0.25) + (t * 0.15) + (br * 0.12) + (a * 0.08)
   return {
     total: Math.round(total * 100) / 100,
