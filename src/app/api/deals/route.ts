@@ -1,0 +1,97 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+import { isStage } from '@/lib/pipeline'
+
+const COMPANY_ID = Number(process.env.DEMO_COMPANY_ID ?? 1)
+
+// Embed the client name and the property in play so the board renders in one trip.
+const SELECT =
+  '*,client_requests(id,"Client Name"),Properties(id,Title,Location,Neighborhood,Amenities)'
+
+type Row = Record<string, unknown>
+
+function propertyLabel(p: Row | null): string | null {
+  if (!p) return null
+  let type = ''
+  try { type = (JSON.parse((p.Amenities as string) || '{}').type as string) || '' } catch {}
+  const where = [p.Neighborhood, p.Location].filter(Boolean).join(', ')
+  return [type || (p.Title as string), where].filter(Boolean).join(' · ') || null
+}
+
+function toDeal(row: Row) {
+  const client = row.client_requests as Row | null
+  const prop = row.Properties as Row | null
+  return {
+    id: row.id,
+    company_id: row.company_id,
+    client_id: row.client_id,
+    agent_id: row.agent_id,
+    property_id: row.property_id,
+    stage: row.stage,
+    outcome: row.outcome,
+    value: Number(row.value) || 0,
+    stage_changed_at: row.stage_changed_at,
+    created_at: row.created_at,
+    clientName: (client?.['Client Name'] as string) ?? 'Unknown client',
+    propertyLabel: propertyLabel(prop),
+  }
+}
+
+export async function GET() {
+  try {
+    const supabase = await createClient()
+    const { data, error } = await supabase
+      .from('deals')
+      .select(SELECT)
+      .eq('company_id', COMPANY_ID)
+      .order('value', { ascending: false })
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ deals: (data ?? []).map(r => toDeal(r as Row)) })
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
+}
+
+// Move a deal to a new stage (and set the won/lost outcome when closing).
+// stage_changed_at + stage_history are handled by a DB trigger.
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json()
+    const { id, stage, outcome } = body
+    if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+    if (stage !== undefined && !isStage(stage)) {
+      return NextResponse.json({ error: `invalid stage: ${stage}` }, { status: 400 })
+    }
+
+    const update: Row = {}
+    if (stage !== undefined) {
+      update.stage = stage
+      // Outcome only applies to a closed deal — clear it when moving back out.
+      if (stage !== 'closed') update.outcome = null
+    }
+    if (outcome !== undefined) {
+      if (outcome !== null && outcome !== 'won' && outcome !== 'lost') {
+        return NextResponse.json({ error: `invalid outcome: ${outcome}` }, { status: 400 })
+      }
+      update.outcome = outcome
+    }
+    if (Object.keys(update).length === 0) {
+      return NextResponse.json({ error: 'nothing to update' }, { status: 400 })
+    }
+
+    const supabase = await createClient()
+    const { data, error } = await supabase
+      .from('deals')
+      .update(update)
+      .eq('id', id)
+      .eq('company_id', COMPANY_ID)
+      .select(SELECT)
+      .single()
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ deal: toDeal(data as Row) })
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
+}

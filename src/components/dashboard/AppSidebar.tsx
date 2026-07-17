@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Building2,
   Users,
+  KanbanSquare,
   BarChart3,
   User,
   LogOut,
@@ -17,6 +18,7 @@ const navItems = [
   { href: '/dashboard',   label: 'Dashboard',  icon: LayoutDashboard },
   { href: '/properties',  label: 'Properties', icon: Building2 },
   { href: '/clients',     label: 'Clients',    icon: Users },
+  { href: '/pipeline',    label: 'Pipeline',   icon: KanbanSquare },
   { href: '/analytics',   label: 'Reports',    icon: BarChart3 },
   { href: '/settings',    label: 'Profile',    icon: User },
 ]
