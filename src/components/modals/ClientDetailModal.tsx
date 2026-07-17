@@ -109,7 +109,7 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
                   { label: 'Transaction', value: c.req.transaction || '—' },
                   { label: 'Type',        value: c.req.type || '—' },
                   { label: 'Location',    value: c.req.location || '—' },
-                  { label: 'Budget',      value: c.req.priceMax ? `${formatPrice(c.req.priceMin)} – ${formatPrice(c.req.priceMax)}` : '—' },
+                  { label: 'Budget',      value: c.budget ? formatPrice(c.budget) : '—' },
                   { label: 'Bedrooms',    value: c.req.beds ? String(c.req.beds) : '—' },
                   { label: 'Bathrooms',   value: c.req.baths ? String(c.req.baths) : '—' },
                   { label: 'Min Size',    value: c.req.size ? `${c.req.size} m²` : '—' },

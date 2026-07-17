@@ -27,32 +27,30 @@ const client = (o = {}) => ({
   },
 })
 
-// ── scoreBudget (symmetric bands: ±10→100, ±20→80, ±30→50, ±50→25, else exclude)
+// ── scoreBudget (single budget, symmetric: ±10→100, ±20→80, ±30→50, ±50→25, else exclude)
 test('scoreBudget: no budget given → 100', () => {
-  assert.equal(scoreBudget(500000, 0, 0), 100)
+  assert.equal(scoreBudget(500000, 0), 100)
 })
-test('scoreBudget: price inside [min, max] → 100 (incl. bounds)', () => {
-  assert.equal(scoreBudget(500000, 400000, 600000), 100)
-  assert.equal(scoreBudget(400000, 400000, 600000), 100)
-  assert.equal(scoreBudget(600000, 400000, 600000), 100)
+test('scoreBudget: within ±10% → 100 (either direction)', () => {
+  assert.equal(scoreBudget(500000, 500000), 100)
+  assert.equal(scoreBudget(550000, 500000), 100) // +10%
+  assert.equal(scoreBudget(450000, 500000), 100) // -10%
 })
-test('scoreBudget: bands above the max', () => {
-  assert.equal(scoreBudget(660000, 400000, 600000), 100) // +10%
-  assert.equal(scoreBudget(720000, 400000, 600000), 80)  // +20%
-  assert.equal(scoreBudget(780000, 400000, 600000), 50)  // +30%
-  assert.equal(scoreBudget(870000, 400000, 600000), 25)  // +45%
+test('scoreBudget: ±20% → 80', () => {
+  assert.equal(scoreBudget(600000, 500000), 80) // +20%
+  assert.equal(scoreBudget(400000, 500000), 80) // -20%
 })
-test('scoreBudget: symmetric below the min', () => {
-  assert.equal(scoreBudget(360000, 400000, 600000), 100) // -10%
-  assert.equal(scoreBudget(300000, 400000, 600000), 50)  // -25%
+test('scoreBudget: ±30% → 50', () => {
+  assert.equal(scoreBudget(650000, 500000), 50) // +30%
+  assert.equal(scoreBudget(350000, 500000), 50) // -30%
+})
+test('scoreBudget: ±50% → 25', () => {
+  assert.equal(scoreBudget(725000, 500000), 25) // +45%
+  assert.equal(scoreBudget(275000, 500000), 25) // -45%
 })
 test('scoreBudget: beyond ±50% → BUDGET_EXCLUDE', () => {
-  assert.equal(scoreBudget(960000, 400000, 600000), BUDGET_EXCLUDE) // +60%
-  assert.equal(scoreBudget(150000, 400000, 600000), BUDGET_EXCLUDE) // -62.5%
-})
-test('scoreBudget: only a max set is one-sided', () => {
-  assert.equal(scoreBudget(500000, 0, 600000), 100) // under max → in range
-  assert.equal(scoreBudget(700000, 0, 600000), 80)  // +16.7% over max
+  assert.equal(scoreBudget(800000, 500000), BUDGET_EXCLUDE) // +60%
+  assert.equal(scoreBudget(200000, 500000), BUDGET_EXCLUDE) // -60%
 })
 
 // ── scoreLocation ───────────────────────────────────────────────────────────
@@ -106,8 +104,8 @@ test('propFeatures: garden + balcony + view, excludes Street view', () => {
 // ── computeScore (integration) ──────────────────────────────────────────────
 test('computeScore: perfect match → 100', () => {
   const s = computeScore(
-    prop({ price: 400000, garden: true }),
-    client({ budget: 500000, req: { type: 'Appartement', location: 'Beirut', priceMax: 500000, beds: 3, garden: true } }),
+    prop({ price: 500000, garden: true }),
+    client({ budget: 500000, req: { type: 'Appartement', location: 'Beirut', beds: 3, garden: true } }),
   )
   assert.equal(s.total, 100)
   assert.equal(s.budgetScore, 100)
@@ -128,15 +126,15 @@ test('computeScore: no client type preference does not filter (eligible)', () =>
   )
   assert.equal(s.eligible, true)
 })
-test('computeScore: rental budget uses annualised rent (rent × 12)', () => {
-  // 5000/mo → 60,000/yr, which is >50% over a 30,000 budget → excluded.
-  // (If it wrongly used the monthly figure, 5,000 would be within budget.)
+test('computeScore: rental compares MONTHLY rent to the budget (not annualised)', () => {
+  // Renter budget 2000 vs a 2000/mo rental → perfect. If it wrongly used
+  // rent×12 (24,000) this would instead be excluded.
   const s = computeScore(
-    prop({ transaction: 'For Rent', rent: 5000, price: 0 }),
-    client({ budget: 30000, req: { priceMax: 30000 } }),
+    prop({ transaction: 'For Rent', rent: 2000, price: 0, type: 'Appartement', district: 'Hamra', city: 'Beirut' }),
+    client({ type: 'Renter', budget: 2000, req: { location: 'Beirut', beds: 0 } }),
   )
-  assert.equal(s.budgetScore, 0)
-  assert.equal(s.eligible, false)
+  assert.equal(s.budgetScore, 100)
+  assert.equal(s.eligible, true)
 })
 
 // ── matchProperties / matchClients ──────────────────────────────────────────

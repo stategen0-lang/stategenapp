@@ -34,6 +34,7 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
   const [email, setEmail] = useState(initial?.email ?? '')
   const [phone, setPhone] = useState(initial?.phone ?? '')
   const [type, setType] = useState<ClientType>(initial?.type ?? 'Buyer')
+  const [budget, setBudget] = useState<string>(initial?.budget ? String(initial.budget) : '')
   const [req, setReq] = useState<ClientReq>(initial?.req ? { ...emptyReq(), ...initial.req } : emptyReq())
 
   function setR(k: keyof ClientReq, v: string | number | boolean) {
@@ -51,7 +52,7 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
         if (Array.isArray(data.properties)) pool = data.properties.map(dbRowToProperty)
       }
     } catch { /* keep demo fallback */ }
-    setMatches(matchProperties({ req, budget: req.priceMax || 0, type }, pool, matchThreshold))
+    setMatches(matchProperties({ req, budget: parseInt(budget) || 0, type }, pool, matchThreshold))
     setFinding(false)
     setStep(2)
   }
@@ -59,12 +60,13 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
   async function handleSave() {
     const agentId = initial?.agentId ?? CURRENT_AGENT_ID
     const status: ClientStatus = initial?.status ?? 'Searching'
+    const budgetNum = parseInt(budget) || 0
     const payload = {
       name, email, phone, type,
-      budget: req.priceMax || 0,
+      budget: budgetNum,
       agentId,
       status,
-      req,
+      req: { ...req, priceMin: budgetNum, priceMax: budgetNum },
     }
     let savedId = initial?.id ?? ++_nextId
     try {
@@ -144,13 +146,11 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
                   <label className={label} style={labelStyle}>Location</label>
                   <input className={inp} style={inpStyle} value={req.location} onChange={e => setR('location', e.target.value)} placeholder="Beirut, Metn…" />
                 </div>
-                <div>
-                  <label className={label} style={labelStyle}>Min price</label>
-                  <input className={inp} style={inpStyle} type="number" value={req.priceMin || ''} onChange={e => setR('priceMin', parseInt(e.target.value) || 0)} placeholder="400000" />
-                </div>
-                <div>
-                  <label className={label} style={labelStyle}>Max price</label>
-                  <input className={inp} style={inpStyle} type="number" value={req.priceMax || ''} onChange={e => setR('priceMax', parseInt(e.target.value) || 0)} placeholder="700000" />
+                <div className="col-span-2">
+                  <label className={label} style={labelStyle}>
+                    Budget (USD){type === 'Renter' ? ' — monthly rent' : ''}
+                  </label>
+                  <input className={inp} style={inpStyle} type="number" value={budget} onChange={e => setBudget(e.target.value)} placeholder={type === 'Renter' ? '2000' : '500000'} />
                 </div>
                 <div>
                   <label className={label} style={labelStyle}>Beds</label>

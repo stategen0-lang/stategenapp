@@ -40,18 +40,12 @@ export function propFeatures(p: Property): string[] {
 // recommend at all (more than ±50% off).
 export const BUDGET_EXCLUDE = -1
 
-// Budget: symmetric band scoring around the client's budget range. A price
-// inside [min, max] is perfect; outside it, the deviation from the nearest
-// bound (above OR below) sets the band — ≤10% → 100, ≤20% → 80, ≤30% → 50,
-// ≤50% → 25. Beyond ±50% returns BUDGET_EXCLUDE ("don't recommend").
-export function scoreBudget(propPrice: number, priceMin: number, priceMax: number): number {
-  const min = priceMin || 0
-  const max = priceMax || 0
-  if (!min && !max) return 100                                       // no budget given
-  if (propPrice >= min && (max === 0 || propPrice <= max)) return 100 // within range
-  const dev = (max > 0 && propPrice > max)
-    ? (propPrice - max) / max                                        // over budget
-    : (min > 0 ? (min - propPrice) / min : 1)                        // under budget
+// Budget: symmetric band scoring around the client's single budget figure.
+// Deviation = |price − budget| / budget (same whether over OR under):
+// ≤10% → 100, ≤20% → 80, ≤30% → 50, ≤50% → 25, beyond ±50% → BUDGET_EXCLUDE.
+export function scoreBudget(propPrice: number, budget: number): number {
+  if (!budget) return 100                     // no budget given → no constraint
+  const dev = Math.abs(propPrice - budget) / budget
   if (dev <= 0.10) return 100
   if (dev <= 0.20) return 80
   if (dev <= 0.30) return 50
@@ -104,13 +98,15 @@ export const MATCH_THRESHOLD = 50
 
 // Weights: budget 40%, location 25%, type 15%, bedrooms 12%, amenities 8%.
 export function computeScore(prop: Property, client: ClientLike): ScoreResult {
-  const price    = prop.transaction === 'For Rent' ? prop.rent * 12 : prop.price
+  // Sale listings compare against the price; rentals against the monthly rent,
+  // so the client's single budget is read in the same terms as the listing.
+  const price    = prop.transaction === 'For Rent' ? prop.rent : prop.price
   const features = propFeatures(prop)
   const wish: string[] = [
     ...(client.req.garden  ? ['garden']  : []),
     ...(client.req.balcony ? ['balcony'] : []),
   ]
-  const rawBudget = scoreBudget(price, client.req.priceMin, client.req.priceMax || client.budget)
+  const rawBudget = scoreBudget(price, client.budget)
   const typeOk = !client.req.type || prop.type === client.req.type
   // Desired transaction: the explicit requirement, else derived from Buyer/Renter.
   const wantTxn = client.req.transaction

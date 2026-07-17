@@ -136,15 +136,10 @@ const clients = Array.from({ length: 50 }, () => {
   const wantType = (() => { const r = Math.random(); return r < 0.25 ? '' : r < 0.6 ? 'Appartement' : r < 0.75 ? 'Villa' : r < 0.87 ? 'Office' : 'Shop' })()
   const beds = (wantType === 'Office' || wantType === 'Shop') ? rand(0, 2) : rand(1, 5)
 
-  let budgetMin, budgetMax
-  if (isRenter) {                       // annualised so it compares to rent×12
-    const monthly = rand(700, 4000)
-    budgetMin = round(monthly * 12 * 0.85, 1000)
-    budgetMax = round(monthly * 12 * 1.2, 1000)
-  } else {
-    budgetMin = round(rand(150, 900) * 1000, 25000)
-    budgetMax = budgetMin + round(rand(100, 600) * 1000, 25000)
-  }
+  // Single budget: monthly rent figure for renters, sale price for buyers.
+  const budget = isRenter
+    ? round(rand(700, 4000), 50)
+    : round(rand(200, 1500) * 1000, 25000)
 
   const agentId = pick(AGENTS)
   const first = name.split(' ')[0].toLowerCase()
@@ -159,8 +154,8 @@ const clients = Array.from({ length: 50 }, () => {
     Agent_id: null,
     'Client Name': name,
     'client phone': `+961 ${pick(['3', '70', '71', '76', '78', '81'])} ${rand(100, 999)} ${rand(100, 999)}`,
-    budget_min: budgetMin,
-    budget_max: budgetMax,
+    budget_min: budget,
+    budget_max: budget,
     'prefered-location': prefLoc,
     bedrooms: beds,
     payment_terms: isRenter ? 'For Rent' : 'For Sale',
