@@ -56,18 +56,20 @@ export function scoreBudget(propPrice: number, budget: number): number {
 // Sentinel: location too far from the client's preferred area to recommend.
 export const LOCATION_EXCLUDE = -1
 
-// Location: same area (exact match or same zone) → 100, surrounding area
-// (a neighbouring zone) → 75, anywhere further → LOCATION_EXCLUDE.
+// Location: the exact area requested → 100. A different district in the same
+// region, OR a neighbouring region → 75 (surrounding). Anywhere further →
+// LOCATION_EXCLUDE. e.g. client wants Hamra: Hamra → 100, Achrafieh → 75.
 export function scoreLocation(propLoc: string, clientLoc: string): number {
   if (!clientLoc) return 100                       // no preference → no constraint
   const p = norm(propLoc); const c = norm(clientLoc)
-  if (p.includes(c) || c.includes(p)) return 100   // same specific area
+  if (p.includes(c) || c.includes(p)) return 100   // exact area requested
 
   const pZone = Object.entries(ZONES).find(([zone, areas]) => p.includes(zone) || areas.some(a => p.includes(a)))?.[0]
   const cZone = Object.entries(ZONES).find(([zone, areas]) => c.includes(zone) || areas.some(a => c.includes(a)))?.[0]
 
-  if (pZone && cZone && pZone === cZone) return 100 // same zone = same area
-  if (pZone && cZone && NEIGHBOURS.some(([a, b]) => (a === pZone && b === cZone) || (b === pZone && a === cZone))) return 75 // surrounding
+  // Same region (different district) or a neighbouring region → surrounding.
+  if (pZone && cZone && (pZone === cZone
+      || NEIGHBOURS.some(([a, b]) => (a === pZone && b === cZone) || (b === pZone && a === cZone)))) return 75
   return LOCATION_EXCLUDE
 }
 

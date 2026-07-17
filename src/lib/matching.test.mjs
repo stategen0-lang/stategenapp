@@ -57,14 +57,16 @@ test('scoreBudget: beyond ±50% → BUDGET_EXCLUDE', () => {
 test('scoreLocation: no client location → 100', () => {
   assert.equal(scoreLocation('Hamra Beirut', ''), 100)
 })
-test('scoreLocation: same specific area (substring) → 100', () => {
+test('scoreLocation: exact area requested → 100', () => {
   assert.equal(scoreLocation('Hamra Beirut', 'Beirut'), 100)
   assert.equal(scoreLocation('Hamra Beirut', 'Hamra'), 100)
 })
-test('scoreLocation: same zone, different district → 100 (same area)', () => {
-  assert.equal(scoreLocation('Hamra Beirut', 'Verdun'), 100)
+test('scoreLocation: different district in the same region → 75 (surrounding)', () => {
+  // wants Hamra, property in Achrafieh (both Beirut) → 75, not 100
+  assert.equal(scoreLocation('Achrafieh Beirut', 'Hamra'), 75)
+  assert.equal(scoreLocation('Hamra Beirut', 'Verdun'), 75)
 })
-test('scoreLocation: surrounding area (neighbouring zone) → 75', () => {
+test('scoreLocation: neighbouring region → 75 (surrounding)', () => {
   assert.equal(scoreLocation('Dbayeh Metn', 'Hamra'), 75)
   assert.equal(scoreLocation('Hamra Beirut', 'Metn'), 75) // region name recognised
 })
