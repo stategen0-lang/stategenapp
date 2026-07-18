@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { recalculateScores } from '@/lib/score-engine'
 
 const COMPANY_ID = Number(process.env.DEMO_COMPANY_ID ?? 1)
+
+// A client change is a scoring signal — refresh that client's lead score.
+// Non-fatal: a scoring hiccup must never fail the client write itself.
+async function refreshScore(clientId: number) {
+  try { await recalculateScores({ clientId, companyId: COMPANY_ID }) } catch { /* ignore */ }
+}
 
 export async function GET() {
   try {
@@ -31,6 +38,13 @@ export async function PATCH(req: NextRequest) {
     // the client details too.
     const update: Record<string, unknown> = {}
     if (body.status !== undefined) update.status = body.status
+    if (body.agent_rating !== undefined) {
+      const stars = Number(body.agent_rating)
+      if (!Number.isInteger(stars) || stars < 1 || stars > 5) {
+        return NextResponse.json({ error: 'agent_rating must be 1-5' }, { status: 400 })
+      }
+      update.agent_rating = stars
+    }
     if (body.name !== undefined) update['Client Name'] = body.name
     if (body.phone !== undefined) update['client phone'] = body.phone
     if (body.req?.location !== undefined) update['prefered-location'] = body.req.location
@@ -56,7 +70,10 @@ export async function PATCH(req: NextRequest) {
       .select()
       .single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ ok: true, client: data })
+    await refreshScore(Number(id))
+    const { data: fresh } = await supabase
+      .from('client_requests').select('*').eq('id', id).single()
+    return NextResponse.json({ ok: true, client: fresh ?? data })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
@@ -99,6 +116,7 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (data?.id) await refreshScore(Number(data.id))
     return NextResponse.json({ client: data })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })

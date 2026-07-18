@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { Star } from 'lucide-react'
 import { Client, Agent, Property, ClientStatus, statusStyle, CLIENT_TYPE_STYLE, formatPrice, getAgent } from '@/lib/data'
+import { scoreBand, BAND_STYLE } from '@/lib/scoring'
 import MatchCards from '@/components/matching/MatchCards'
 import PropertyDetailModal from './PropertyDetailModal'
 
@@ -18,9 +20,34 @@ interface Props {
 export default function ClientDetailModal({ client: c, agent, onClose, onStatusChange, onEdit }: Props) {
   const [status, setStatus] = useState<ClientStatus>(c.status)
   const [saving, setSaving] = useState(false)
+  const [rating, setRating] = useState<number>(c.agentRating ?? 3)
+  const [leadScore, setLeadScore] = useState<number>(c.leadScore ?? 0)
+  const [ratingSaving, setRatingSaving] = useState(false)
   const sc = statusStyle(status)
   const tc = CLIENT_TYPE_STYLE[c.type]
+  const band = BAND_STYLE[scoreBand(leadScore)]
   const [stackedProperty, setStackedProperty] = useState<Property | null>(null)
+
+  // The agent's 1-5 star gut-feel rating — 20% of the lead score. Saving it
+  // recalculates the score server-side; the fresh value comes back in the reply.
+  async function handleRating(stars: number) {
+    const prev = rating
+    setRating(stars)
+    setRatingSaving(true)
+    try {
+      const res = await fetch('/api/clients', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: c.id, agent_rating: stars }),
+      })
+      if (!res.ok) throw new Error()
+      const data = await res.json()
+      if (data.client?.lead_score !== undefined) setLeadScore(Number(data.client.lead_score))
+    } catch {
+      setRating(prev)
+    }
+    setRatingSaving(false)
+  }
 
   async function handleStatusChange(newStatus: ClientStatus) {
     setStatus(newStatus)
@@ -53,6 +80,13 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
               <div>
                 <p className="text-base font-bold" style={{ color: '#14223F' }}>{c.name}</p>
                 <div className="flex items-center gap-2 mt-0.5">
+                  <span
+                    className="text-xs font-bold px-2 py-0.5 rounded-full"
+                    style={{ background: band.bg, color: band.color }}
+                    title={`Lead score ${leadScore}/100`}
+                  >
+                    {leadScore}
+                  </span>
                   <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: tc.bg, color: tc.color }}>{c.type}</span>
                   <select
                     value={status}
@@ -98,6 +132,30 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
               <div>
                 <p className="text-xs" style={{ color: '#9AA3B2' }}>Agent</p>
                 <p className="text-sm font-medium mt-0.5" style={{ color: '#14223F' }}>{agent.name}</p>
+              </div>
+            </div>
+
+            {/* Agent rating — 1-5 stars, feeds 20% of the lead score */}
+            <div className="flex items-center justify-between rounded-xl px-4 py-3" style={{ background: '#F7F8FB' }}>
+              <div>
+                <p className="text-xs font-bold" style={{ color: '#14223F' }}>AGENT RATING</p>
+                <p className="text-xs mt-0.5" style={{ color: '#9AA3B2' }}>Your gut feel — feeds the lead score</p>
+              </div>
+              <div className="flex items-center gap-1" style={{ opacity: ratingSaving ? 0.5 : 1 }}>
+                {[1, 2, 3, 4, 5].map(s => (
+                  <button
+                    key={s}
+                    onClick={() => !ratingSaving && handleRating(s)}
+                    className="p-0.5 transition-transform hover:scale-110"
+                    aria-label={`${s} star${s > 1 ? 's' : ''}`}
+                  >
+                    <Star
+                      className="h-5 w-5"
+                      style={{ color: s <= rating ? '#E8A93C' : '#D7DCE5' }}
+                      fill={s <= rating ? '#E8A93C' : 'none'}
+                    />
+                  </button>
+                ))}
               </div>
             </div>
 

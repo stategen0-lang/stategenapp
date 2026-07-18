@@ -32,6 +32,8 @@ export interface Deal {
   created_at: string
   clientName: string
   propertyLabel: string | null   // "Appartement · Hamra, Beirut"
+  leadScore: number              // 0-100 (Phase 2 lead scoring)
+  agentRating: number            // 1-5 stars
 }
 
 // ── Days in current stage ────────────────────────────────────────────────────
@@ -66,8 +68,10 @@ export function totalValue(deals: Deal[]): number {
   return deals.reduce((sum, d) => sum + (Number(d.value) || 0), 0)
 }
 
-// Sort hottest-first. Phase 2 will sort by lead score; until that lands we rank
-// by deal value so the biggest deals surface at the top of each column.
+// Sort hottest-first: lead score descending (per spec), deal value as the
+// tie-breaker so equal-score deals rank by size.
 export function sortForBoard(deals: Deal[]): Deal[] {
-  return [...deals].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
+  return [...deals].sort((a, b) =>
+    (Number(b.leadScore) || 0) - (Number(a.leadScore) || 0)
+    || (Number(b.value) || 0) - (Number(a.value) || 0))
 }

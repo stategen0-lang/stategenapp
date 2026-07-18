@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { isStage } from '@/lib/pipeline'
+import { recalculateScores } from '@/lib/score-engine'
 
 const COMPANY_ID = Number(process.env.DEMO_COMPANY_ID ?? 1)
 
-// Embed the client name and the property in play so the board renders in one trip.
+// Embed the client (name + lead score) and the property in play so the board
+// renders in one trip.
 const SELECT =
-  '*,client_requests(id,"Client Name"),Properties(id,Title,Location,Neighborhood,Amenities)'
+  '*,client_requests(id,"Client Name",lead_score,agent_rating),Properties(id,Title,Location,Neighborhood,Amenities)'
 
 type Row = Record<string, unknown>
 
@@ -34,6 +36,8 @@ function toDeal(row: Row) {
     created_at: row.created_at,
     clientName: (client?.['Client Name'] as string) ?? 'Unknown client',
     propertyLabel: propertyLabel(prop),
+    leadScore: Number(client?.lead_score ?? 0),
+    agentRating: Number(client?.agent_rating ?? 3),
   }
 }
 
@@ -90,6 +94,13 @@ export async function PATCH(req: NextRequest) {
       .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    // A stage move is a fresh activity signal — refresh that client's score.
+    // Non-fatal: scoring must never fail the stage change itself.
+    if (stage !== undefined && data?.client_id) {
+      try { await recalculateScores({ clientId: Number(data.client_id), companyId: COMPANY_ID }) } catch { /* ignore */ }
+    }
+
     return NextResponse.json({ deal: toDeal(data as Row) })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })

@@ -7,6 +7,7 @@ import {
   Deal, Stage, STAGES, dealsInStage, totalValue, sortForBoard,
   daysInStage, staleFlag, STALE_STYLE, isStage,
 } from '@/lib/pipeline'
+import { scoreBand, BAND_STYLE } from '@/lib/scoring'
 
 const H = '#14223F'
 const SUB = '#6A7488'
@@ -29,6 +30,7 @@ function DealCard({
   const days = daysInStage(deal.stage_changed_at)
   const flag = staleFlag(days)
   const st = STALE_STYLE[flag]
+  const band = BAND_STYLE[scoreBand(deal.leadScore)]
   const isDragging = dragging === deal.id
 
   return (
@@ -45,12 +47,22 @@ function DealCard({
     >
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-semibold leading-tight" style={{ color: H }}>{deal.clientName}</p>
-        <div
-          className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
-          style={{ background: agent.color }}
-          title={agent.name}
-        >
-          {agent.initials}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Lead score badge — color by band (hot/warm/cold), number always shown */}
+          <span
+            className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+            style={{ background: band.bg, color: band.color }}
+            title={`Lead score ${deal.leadScore}/100`}
+          >
+            {deal.leadScore}
+          </span>
+          <div
+            className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white"
+            style={{ background: agent.color }}
+            title={agent.name}
+          >
+            {agent.initials}
+          </div>
         </div>
       </div>
 
@@ -113,6 +125,15 @@ export default function PipelinePage() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // Nightly-decay substitute: ask the server to refresh scores if they are
+  // older than 12h; the realtime subscription re-syncs the board afterwards.
+  useEffect(() => {
+    fetch('/api/scores?staleOnly=1', { method: 'POST' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d && d.updated > 0) load() })
+      .catch(() => {})
+  }, [load])
 
   // Live updates across agents (spec Part 1 — realtime subscription).
   useEffect(() => {

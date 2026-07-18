@@ -12,6 +12,7 @@ const deal = (o = {}) => ({
   id: o.id ?? 'd1', company_id: 1, client_id: 1, agent_id: 'a1', property_id: null,
   stage: 'lead', outcome: null, value: 0, stage_changed_at: null,
   created_at: '2026-07-01T00:00:00Z', clientName: 'Test', propertyLabel: null,
+  leadScore: 0, agentRating: 3,
   ...o,
 })
 
@@ -62,9 +63,13 @@ test('totalValue: sums deal values, tolerating junk', () => {
   assert.equal(totalValue([]), 0)
   assert.equal(totalValue([deal({ value: null }), deal({ value: 50 })]), 50)
 })
-test('sortForBoard: highest value first, without mutating the input', () => {
-  const ds = [deal({ id: 'low', value: 10 }), deal({ id: 'high', value: 900 }), deal({ id: 'mid', value: 300 })]
+test('sortForBoard: lead score first, value breaks ties, input not mutated', () => {
+  const ds = [
+    deal({ id: 'cold-big',  leadScore: 20, value: 900 }),
+    deal({ id: 'hot-small', leadScore: 85, value: 10 }),
+    deal({ id: 'hot-big',   leadScore: 85, value: 500 }),
+  ]
   const sorted = sortForBoard(ds)
-  assert.deepEqual(sorted.map(d => d.id), ['high', 'mid', 'low'])
-  assert.deepEqual(ds.map(d => d.id), ['low', 'high', 'mid']) // original untouched
+  assert.deepEqual(sorted.map(d => d.id), ['hot-big', 'hot-small', 'cold-big'])
+  assert.deepEqual(ds.map(d => d.id), ['cold-big', 'hot-small', 'hot-big']) // original untouched
 })

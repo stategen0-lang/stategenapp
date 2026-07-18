@@ -60,5 +60,7 @@ export function dbRowToClient(row: Record<string, unknown>, idx: number): Client
     agentId: (extras.agentId as Client['agentId']) ?? 'a1',
     status: (row['status'] as Client['status']) ?? 'Searching',
     req,
+    leadScore: Number(row['lead_score'] ?? 0),
+    agentRating: Number(row['agent_rating'] ?? 3),
   }
 }

@@ -101,6 +101,8 @@ export interface Client {
   agentId: AgentId
   status: ClientStatus
   req: ClientReq
+  leadScore?: number     // 0-100 lead score (Phase 2)
+  agentRating?: number   // agent's 1-5 star gut-feel rating
 }
 
 export const CLIENTS: Client[] = [
