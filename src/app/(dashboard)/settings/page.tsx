@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { TrendingUp, DollarSign, Home, BadgeDollarSign, X, ChevronRight, Plus, Trash2, Check } from 'lucide-react'
-import { DEALS, getAgent, formatPrice, Deal, typeStyle } from '@/lib/data'
+import { DEALS, AGENTS, formatPrice, Deal, typeStyle } from '@/lib/data'
+import { useSession } from '@/hooks/use-session'
+import { isManager } from '@/lib/permissions'
 
 interface DescriptionTemplate {
   id: string
@@ -18,9 +20,12 @@ const DEFAULT_TEMPLATES: DescriptionTemplate[] = [
 ]
 
 const COMMISSION_RATE = 2.5
-const MY_AGENT_ID = 'a1'
 const H   = '#1A2B4A'
 const SUB = '#7A8499'
+
+function initialsOf(name: string) {
+  return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
+}
 
 type KpiKey = 'sold' | 'rented' | 'volume' | 'commission'
 
@@ -29,8 +34,18 @@ const YEARS = [2026, 2025, 2024, 2023]
 function yearOf(d: Deal) { return new Date(d.date).getFullYear() }
 
 export default function ProfilePage() {
-  const agent   = getAgent(MY_AGENT_ID)
-  const myDeals = DEALS.filter(d => d.agentId === MY_AGENT_ID)
+  // The real signed-in identity — this page used to hardcode agent 'a1'
+  // (Lara Khoury) no matter who was logged in.
+  const { session } = useSession()
+  const manager = isManager(session?.role)
+  const myAgentId = session?.agentCode ?? null
+
+  const displayName = session?.fullName ?? 'Loading…'
+  const roleLabel = manager ? 'Manager · StateGen' : 'Agent · StateGen'
+  const agentColor = AGENTS.find(a => a.id === myAgentId)?.color ?? '#2E5288'
+
+  // A manager's figures cover the whole agency; an agent sees only their own.
+  const myDeals = manager ? DEALS : DEALS.filter(d => d.agentId === myAgentId)
   const mySold  = myDeals.filter(d => d.transaction === 'Sale')
   const myRented = myDeals.filter(d => d.transaction === 'Rent')
 
@@ -130,12 +145,12 @@ export default function ProfilePage() {
 
       {/* Header */}
       <div className="flex items-center gap-4">
-        <div className="w-14 h-14 rounded-full flex items-center justify-center text-lg font-bold text-white" style={{ background: agent.color }}>
-          {agent.initials}
+        <div className="w-14 h-14 rounded-full flex items-center justify-center text-lg font-bold text-white" style={{ background: agentColor }}>
+          {initialsOf(displayName)}
         </div>
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: H, letterSpacing: '-0.3px' }}>{agent.name}</h1>
-          <p className="text-sm mt-0.5" style={{ color: SUB }}>Senior Agent · StateGen</p>
+          <h1 className="text-2xl font-bold" style={{ color: H, letterSpacing: '-0.3px' }}>{displayName}</h1>
+          <p className="text-sm mt-0.5" style={{ color: SUB }}>{roleLabel}</p>
         </div>
       </div>
 

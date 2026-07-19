@@ -7,6 +7,7 @@ import {
 } from '@/lib/data'
 import { matchProperties, MATCH_THRESHOLD, PropertyMatch } from '@/lib/matching'
 import { dbRowToProperty } from '@/lib/db-mappers'
+import { useSession } from '@/hooks/use-session'
 
 const PROPERTY_TYPES: PropertyType[] = ['Appartement', 'Shop', 'Office', 'Building', 'Villa', 'Land', 'Showroom', 'Restaurant']
 
@@ -26,6 +27,7 @@ const emptyReq = (): ClientReq => ({
 
 export default function NewClientModal({ onClose, onSaved, matchThreshold = MATCH_THRESHOLD, initial }: Props) {
   const editing = !!initial
+  const { session } = useSession()
   const [step, setStep] = useState<1 | 2>(1)
   const [matches, setMatches] = useState<PropertyMatch[]>([])
   const [finding, setFinding] = useState(false)
@@ -58,7 +60,8 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
   }
 
   async function handleSave() {
-    const agentId = initial?.agentId ?? CURRENT_AGENT_ID
+    // Own code when signed in; the server re-stamps this for agents anyway.
+    const agentId = initial?.agentId ?? (session?.agentCode as typeof CURRENT_AGENT_ID) ?? CURRENT_AGENT_ID
     const status: ClientStatus = initial?.status ?? 'Searching'
     const budgetNum = parseInt(budget) || 0
     const payload = {

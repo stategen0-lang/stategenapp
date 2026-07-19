@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { CLIENTS, CURRENT_AGENT_ID, getAgent, statusStyle, CLIENT_TYPE_STYLE, formatPrice, Client } from '@/lib/data'
+import { CLIENTS, getAgent, statusStyle, CLIENT_TYPE_STYLE, formatPrice, Client } from '@/lib/data'
+import { useSession } from '@/hooks/use-session'
 import ClientDetailModal from '@/components/modals/ClientDetailModal'
 import NewClientModal from '@/components/modals/NewClientModal'
 import { dbRowToClient } from '@/lib/db-mappers'
@@ -9,6 +10,7 @@ import { dbRowToClient } from '@/lib/db-mappers'
 export default function ClientsPage() {
   const [scope, setScope] = useState<'me' | 'company'>('company')
   const [list, setList] = useState<Client[]>(CLIENTS)
+  const { session } = useSession()
 
   useEffect(() => {
     const ctrl = new AbortController()
@@ -31,8 +33,9 @@ export default function ClientsPage() {
     setList(prev => prev.some(x => x.id === c.id) ? prev.map(x => x.id === c.id ? c : x) : [c, ...prev])
   }
 
+  // "Mine" means the signed-in agent's own clients (was hardcoded to 'a1').
   const filtered = scope === 'me'
-    ? list.filter(c => c.agentId === CURRENT_AGENT_ID)
+    ? list.filter(c => session?.agentCode != null && c.agentId === session.agentCode)
     : list
 
   const detailClient = detailId != null ? list.find(c => c.id === detailId) ?? null : null
@@ -160,7 +163,7 @@ export default function ClientsPage() {
           client={detailClient}
           agent={detailAgent}
           onClose={() => setDetailId(null)}
-          onEdit={c => { setDetailId(null); setEditClient(c) }}
+          onEdit={detailClient.masked ? undefined : c => { setDetailId(null); setEditClient(c) }}
           onStatusChange={(id, status) => setList(prev => prev.map(x => x.id === id ? { ...x, status } : x))}
         />
       )}

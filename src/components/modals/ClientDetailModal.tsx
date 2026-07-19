@@ -88,15 +88,20 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
                     {leadScore}
                   </span>
                   <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: tc.bg, color: tc.color }}>{c.type}</span>
-                  <select
-                    value={status}
-                    disabled={saving}
-                    onChange={e => handleStatusChange(e.target.value as ClientStatus)}
-                    className="text-xs font-semibold px-2 py-0.5 rounded-full border-0 outline-none cursor-pointer appearance-none"
-                    style={{ background: sc.bg, color: sc.color, opacity: saving ? 0.6 : 1 }}
-                  >
-                    {CLIENT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
+                  {/* Another agent's client is read-only — show the status, don't offer to change it */}
+                  {c.masked ? (
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: sc.bg, color: sc.color }}>{status}</span>
+                  ) : (
+                    <select
+                      value={status}
+                      disabled={saving}
+                      onChange={e => handleStatusChange(e.target.value as ClientStatus)}
+                      className="text-xs font-semibold px-2 py-0.5 rounded-full border-0 outline-none cursor-pointer appearance-none"
+                      style={{ background: sc.bg, color: sc.color, opacity: saving ? 0.6 : 1 }}
+                    >
+                      {CLIENT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  )}
                 </div>
               </div>
             </div>
@@ -135,29 +140,39 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
               </div>
             </div>
 
-            {/* Agent rating — 1-5 stars, feeds 20% of the lead score */}
-            <div className="flex items-center justify-between rounded-xl px-4 py-3" style={{ background: '#F7F8FB' }}>
-              <div>
-                <p className="text-xs font-bold" style={{ color: '#14223F' }}>AGENT RATING</p>
-                <p className="text-xs mt-0.5" style={{ color: '#9AA3B2' }}>Your gut feel — feeds the lead score</p>
+            {/* Agent rating — 1-5 stars, feeds 20% of the lead score.
+                Only the owning agent (or a manager) may set it. */}
+            {c.masked ? (
+              <div className="rounded-xl px-4 py-3" style={{ background: '#F7F8FB' }}>
+                <p className="text-xs font-bold" style={{ color: '#14223F' }}>ANOTHER AGENT&apos;S CLIENT</p>
+                <p className="text-xs mt-0.5" style={{ color: '#9AA3B2' }}>
+                  Contact details are hidden and this record is read-only.
+                </p>
               </div>
-              <div className="flex items-center gap-1" style={{ opacity: ratingSaving ? 0.5 : 1 }}>
-                {[1, 2, 3, 4, 5].map(s => (
-                  <button
-                    key={s}
-                    onClick={() => !ratingSaving && handleRating(s)}
-                    className="p-0.5 transition-transform hover:scale-110"
-                    aria-label={`${s} star${s > 1 ? 's' : ''}`}
-                  >
-                    <Star
-                      className="h-5 w-5"
-                      style={{ color: s <= rating ? '#E8A93C' : '#D7DCE5' }}
-                      fill={s <= rating ? '#E8A93C' : 'none'}
-                    />
-                  </button>
-                ))}
+            ) : (
+              <div className="flex items-center justify-between rounded-xl px-4 py-3" style={{ background: '#F7F8FB' }}>
+                <div>
+                  <p className="text-xs font-bold" style={{ color: '#14223F' }}>AGENT RATING</p>
+                  <p className="text-xs mt-0.5" style={{ color: '#9AA3B2' }}>Your gut feel — feeds the lead score</p>
+                </div>
+                <div className="flex items-center gap-1" style={{ opacity: ratingSaving ? 0.5 : 1 }}>
+                  {[1, 2, 3, 4, 5].map(s => (
+                    <button
+                      key={s}
+                      onClick={() => !ratingSaving && handleRating(s)}
+                      className="p-0.5 transition-transform hover:scale-110"
+                      aria-label={`${s} star${s > 1 ? 's' : ''}`}
+                    >
+                      <Star
+                        className="h-5 w-5"
+                        style={{ color: s <= rating ? '#E8A93C' : '#D7DCE5' }}
+                        fill={s <= rating ? '#E8A93C' : 'none'}
+                      />
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Requirements */}
             <div className="rounded-xl p-4" style={{ background: '#F7F8FB' }}>

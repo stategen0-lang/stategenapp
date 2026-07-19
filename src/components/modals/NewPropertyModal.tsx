@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Sparkles, Loader2, ImagePlus, ChevronDown } from 'lucide-react'
 import { Property, PropertyType, Transaction, PropertyStatus, AdvancedPayment, AgentId, CURRENT_AGENT_ID } from '@/lib/data'
+import { useSession } from '@/hooks/use-session'
 
 const PROPERTY_TYPES: PropertyType[] = ['Appartement', 'Shop', 'Office', 'Building', 'Villa', 'Land', 'Showroom', 'Restaurant']
 
@@ -18,6 +19,7 @@ let _nextId = 100
 
 export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
   const editing = !!initial
+  const { session } = useSession()
   const [form, setForm] = useState({
     title: initial?.title ?? '',
     type: (initial?.type ?? 'Appartement') as PropertyType,
@@ -104,7 +106,8 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
 
   async function handleSave() {
     if (!form.title || !form.district || !form.city) return
-    const agentId = (initial?.agentId ?? CURRENT_AGENT_ID) as AgentId
+    // Own code when signed in; the server re-stamps this for agents anyway.
+    const agentId = (initial?.agentId ?? session?.agentCode ?? CURRENT_AGENT_ID) as AgentId
     const payload = {
       title: form.title,
       type: form.type,

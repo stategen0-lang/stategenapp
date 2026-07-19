@@ -2,16 +2,18 @@
 
 import { useState, useEffect } from 'react'
 import {
-  PROPERTIES, CURRENT_AGENT_ID, getAgent, Property,
+  PROPERTIES, getAgent, Property,
 } from '@/lib/data'
 import PropertyCard from '@/components/properties/MeridianPropertyCard'
 import PropertyDetailModal from '@/components/modals/PropertyDetailModal'
 import NewPropertyModal from '@/components/modals/NewPropertyModal'
 import { dbRowToProperty } from '@/lib/db-mappers'
+import { useSession } from '@/hooks/use-session'
 
 export default function PropertiesPage() {
   const [scope, setScope] = useState<'me' | 'company'>('company')
   const [list, setList] = useState<Property[]>(PROPERTIES)
+  const { session } = useSession()
 
   useEffect(() => {
     const ctrl = new AbortController()
@@ -34,8 +36,9 @@ export default function PropertiesPage() {
     setList(prev => prev.some(x => x.id === p.id) ? prev.map(x => x.id === p.id ? p : x) : [p, ...prev])
   }
 
+  // "Mine" means the signed-in agent's own listings (was hardcoded to 'a1').
   const filtered = scope === 'me'
-    ? list.filter(p => p.agentId === CURRENT_AGENT_ID)
+    ? list.filter(p => session?.agentCode != null && p.agentId === session.agentCode)
     : list
 
   const detailProp = detailId != null ? list.find(p => p.id === detailId) ?? null : null

@@ -103,6 +103,7 @@ export interface Client {
   req: ClientReq
   leadScore?: number     // 0-100 lead score (Phase 2)
   agentRating?: number   // agent's 1-5 star gut-feel rating
+  masked?: boolean       // another agent's client: name/phone hidden, read-only
 }
 
 export const CLIENTS: Client[] = [

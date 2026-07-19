@@ -62,5 +62,6 @@ export function dbRowToClient(row: Record<string, unknown>, idx: number): Client
     req,
     leadScore: Number(row['lead_score'] ?? 0),
     agentRating: Number(row['agent_rating'] ?? 3),
+    masked: row['masked'] === true,
   }
 }
