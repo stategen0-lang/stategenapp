@@ -4,7 +4,6 @@
 // the UI.
 
 import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase/admin'
 import type { Role, Session } from '@/lib/permissions'
 
 const COMPANY_ID = Number(process.env.DEMO_COMPANY_ID ?? 1)
@@ -14,10 +13,11 @@ export async function getSession(): Promise<Session | null> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
-  // Read the profile with the admin client so a restrictive RLS policy on
-  // Profiles can never make a signed-in user look role-less.
-  const admin = createAdminClient()
-  const { data: profile } = await admin
+  // Read the profile with the user's own (authenticated) client. Deliberately
+  // NOT the admin client: this runs on every page, and depending on the
+  // service-role key here took the whole app down when that key wasn't set in
+  // the deployment environment.
+  const { data: profile } = await supabase
     .from('Profiles')
     .select('company_id, role, agent_code, Full_name')
     .eq('id', user.id)

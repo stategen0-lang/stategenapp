@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { createClient } from '@/lib/supabase/server'
 import { recalculateScores } from '@/lib/score-engine'
+import { getSession } from '@/lib/session'
 
 const COMPANY_ID = Number(process.env.DEMO_COMPANY_ID ?? 1)
 const STALE_MS = 12 * 60 * 60 * 1000 // recompute at most twice a day when staleOnly
@@ -13,6 +14,10 @@ const STALE_MS = 12 * 60 * 60 * 1000 // recompute at most twice a day when stale
 // POST body { clientId }      → recalculate a single client
 export async function POST(req: NextRequest) {
   try {
+    // Recalculating is expensive — only for signed-in users.
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const staleOnly = req.nextUrl.searchParams.get('staleOnly') === '1'
     let clientId: number | undefined
     try {
@@ -21,8 +26,8 @@ export async function POST(req: NextRequest) {
     } catch { /* no body is fine */ }
 
     if (staleOnly) {
-      const admin = createAdminClient()
-      const { data } = await admin
+      const supabase = await createClient()
+      const { data } = await supabase
         .from('client_requests')
         .select('score_updated_at')
         .eq('company_id', COMPANY_ID)

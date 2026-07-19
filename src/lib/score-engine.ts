@@ -6,7 +6,7 @@
 // profile fit (budget clarity + status timeline + best live match), agent
 // rating — combined 50/30/20 and written to client_requests.lead_score.
 
-import { createAdminClient } from '@/lib/supabase/admin'
+import { createClient } from '@/lib/supabase/server'
 import { dbRowToClient, dbRowToProperty } from '@/lib/db-mappers'
 import { matchProperties } from '@/lib/matching'
 import { behaviorScore, profileFitScore, ratingScore, leadScore } from '@/lib/scoring'
@@ -23,7 +23,9 @@ export interface RecalcResult {
 // Recalculate every client's score (optionally just one client).
 export async function recalculateScores(opts: { clientId?: number; companyId?: number } = {}): Promise<RecalcResult> {
   const companyId = opts.companyId ?? Number(process.env.DEMO_COMPANY_ID ?? 1)
-  const admin = createAdminClient()
+  // Runs inside a request that already has a signed-in session, so the
+  // authenticated client is enough — no service-role key needed.
+  const admin = await createClient()
 
   // 1. Load everything in bulk (53 clients / 57 properties — cheap).
   let clientQuery = admin.from('client_requests').select('*').eq('company_id', companyId)
