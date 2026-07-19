@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { isStage } from '@/lib/pipeline'
 import { recalculateScores } from '@/lib/score-engine'
+import { getSession } from '@/lib/session'
+import { isManager, canSeeDeal, canSeeClientPII, maskClientName } from '@/lib/permissions'
 
 const COMPANY_ID = Number(process.env.DEMO_COMPANY_ID ?? 1)
 
@@ -41,17 +43,39 @@ function toDeal(row: Row) {
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const supabase = await createClient()
     const { data, error } = await supabase
       .from('deals')
       .select(SELECT)
-      .eq('company_id', COMPANY_ID)
+      .eq('company_id', session.companyId)
       .order('value', { ascending: false })
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ deals: (data ?? []).map(r => toDeal(r as Row)) })
+
+    // Managers see the whole board and may filter to one agent; agents only
+    // ever get their own deals, whatever the query string says.
+    const agentFilter = isManager(session.role)
+      ? req.nextUrl.searchParams.get('agent')
+      : null
+
+    const deals = (data ?? [])
+      .filter(r => canSeeDeal(session, (r as Row).agent_id as string, agentFilter))
+      .map(r => {
+        const deal = toDeal(r as Row)
+        // Client name on a card is PII — mask it on other agents' deals.
+        // (Managers see everything, so this only ever bites an agent.)
+        if (!canSeeClientPII(session, (r as Row).agent_id as string)) {
+          return { ...deal, clientName: maskClientName(deal.client_id as number), masked: true }
+        }
+        return deal
+      })
+
+    return NextResponse.json({ deals })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
@@ -61,6 +85,9 @@ export async function GET() {
 // stage_changed_at + stage_history are handled by a DB trigger.
 export async function PATCH(req: NextRequest) {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const body = await req.json()
     const { id, stage, outcome } = body
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
@@ -85,11 +112,20 @@ export async function PATCH(req: NextRequest) {
     }
 
     const supabase = await createClient()
+
+    // Agents may only move their own deals.
+    const { data: existing } = await supabase
+      .from('deals').select('id,agent_id').eq('id', id).eq('company_id', session.companyId).maybeSingle()
+    if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (!isManager(session.role) && (existing as Row).agent_id !== session.agentCode) {
+      return NextResponse.json({ error: 'Forbidden — this deal belongs to another agent' }, { status: 403 })
+    }
+
     const { data, error } = await supabase
       .from('deals')
       .update(update)
       .eq('id', id)
-      .eq('company_id', COMPANY_ID)
+      .eq('company_id', session.companyId)
       .select(SELECT)
       .single()
 

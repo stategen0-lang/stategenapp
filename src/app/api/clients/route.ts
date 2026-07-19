@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { recalculateScores } from '@/lib/score-engine'
+import { getSession } from '@/lib/session'
+import { canSeeClientPII, canEditClient, isManager, maskClientName } from '@/lib/permissions'
 
 const COMPANY_ID = Number(process.env.DEMO_COMPANY_ID ?? 1)
+
+// The owning agent code lives in the client's notes JSON.
+function clientAgent(row: Record<string, unknown>): string | null {
+  try { return (JSON.parse((row.notes as string) || '{}').agentId as string) ?? null } catch { return null }
+}
 
 // A client change is a scoring signal — refresh that client's lead score.
 // Non-fatal: a scoring hiccup must never fail the client write itself.
@@ -10,17 +17,47 @@ async function refreshScore(clientId: number) {
   try { await recalculateScores({ clientId, companyId: COMPANY_ID }) } catch { /* ignore */ }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const supabase = await createClient()
     const { data, error } = await supabase
       .from('client_requests')
       .select('*')
-      .eq('company_id', COMPANY_ID)
+      .eq('company_id', session.companyId)
       .order('created_at', { ascending: false })
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ clients: data ?? [] })
+
+    // Managers may narrow to a single agent; agents are always their own scope.
+    const agentFilter = isManager(session.role)
+      ? req.nextUrl.searchParams.get('agent')
+      : null
+
+    const rows = (data ?? [])
+      .filter(r => !agentFilter || clientAgent(r) === agentFilter)
+      .map(r => {
+        if (canSeeClientPII(session, clientAgent(r))) return r
+        // Another agent's client: keep the requirements (so matching still
+        // shows demand) but strip the identifying fields.
+        let notes = r.notes
+        try {
+          const parsed = JSON.parse((r.notes as string) || '{}')
+          delete parsed.email
+          notes = JSON.stringify(parsed)
+        } catch { /* leave as-is */ }
+        return {
+          ...r,
+          'Client Name': maskClientName(Number(r.id)),
+          'client phone': null,
+          notes,
+          masked: true,
+        }
+      })
+
+    return NextResponse.json({ clients: rows })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
@@ -28,10 +65,21 @@ export async function GET() {
 
 export async function PATCH(req: NextRequest) {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const body = await req.json()
     const { id } = body
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
     const supabase = await createClient()
+
+    // Only the owning agent (or a manager) may change a client.
+    const { data: existing } = await supabase
+      .from('client_requests').select('id,notes').eq('id', id).eq('company_id', session.companyId).maybeSingle()
+    if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (!canEditClient(session, clientAgent(existing))) {
+      return NextResponse.json({ error: 'Forbidden — this client belongs to another agent' }, { status: 403 })
+    }
 
     // Build a partial update from whatever fields were sent. A status-only
     // payload ({ id, status }) updates just the status; a full edit updates
@@ -66,7 +114,7 @@ export async function PATCH(req: NextRequest) {
       .from('client_requests')
       .update(update)
       .eq('id', id)
-      .eq('company_id', COMPANY_ID)
+      .eq('company_id', session.companyId)
       .select()
       .single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -81,14 +129,23 @@ export async function PATCH(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const body = await req.json()
     const supabase = await createClient()
+
+    // An agent always creates clients under their own code — they cannot file
+    // a client under someone else. Managers may assign explicitly.
+    const ownerAgent = isManager(session.role)
+      ? (body.agentId ?? null)
+      : (session.agentCode ?? body.agentId ?? null)
 
     // Pack extra UI fields into notes JSON
     const extras = {
       email: body.email,
       type: body.type,
-      agentId: body.agentId,
+      agentId: ownerAgent,
       req: body.req,
     }
 
@@ -100,7 +157,7 @@ export async function POST(req: NextRequest) {
     const { data, error } = await supabase
       .from('client_requests')
       .insert({
-        company_id: COMPANY_ID,
+        company_id: session.companyId,
         Agent_id: agentUuid,
         'Client Name': body.name,
         'client phone': body.phone ?? null,

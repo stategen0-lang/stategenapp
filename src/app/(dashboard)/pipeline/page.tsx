@@ -8,6 +8,8 @@ import {
   daysInStage, staleFlag, STALE_STYLE, isStage,
 } from '@/lib/pipeline'
 import { scoreBand, BAND_STYLE } from '@/lib/scoring'
+import { useSession } from '@/hooks/use-session'
+import { isManager } from '@/lib/permissions'
 
 const H = '#14223F'
 const SUB = '#6A7488'
@@ -112,17 +114,21 @@ export default function PipelinePage() {
   const [toast, setToast] = useState('')
   const [dragOver, setDragOver] = useState<Stage | null>(null)
   const [dragging, setDragging] = useState<string | null>(null)
+  const { session } = useSession()
+  const manager = isManager(session?.role)
+  const [agentFilter, setAgentFilter] = useState<string>('')
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch('/api/deals')
+      const url = agentFilter ? `/api/deals?agent=${encodeURIComponent(agentFilter)}` : '/api/deals'
+      const res = await fetch(url)
       if (res.ok) {
         const data = await res.json()
         if (Array.isArray(data.deals)) setDeals(data.deals)
       }
     } catch { /* leave the board as-is */ }
     setLoading(false)
-  }, [])
+  }, [agentFilter])
 
   useEffect(() => { load() }, [load])
 
@@ -184,11 +190,31 @@ export default function PipelinePage() {
 
   return (
     <div className="p-4 md:p-6" style={{ fontFamily: 'var(--font-public-sans), -apple-system, BlinkMacSystemFont, sans-serif' }}>
-      <div className="mb-4">
-        <h1 className="text-xl md:text-2xl font-bold" style={{ color: H, letterSpacing: '-0.3px' }}>Pipeline</h1>
-        <p className="text-xs md:text-sm mt-0.5" style={{ color: SUB }}>
-          {loading ? 'Loading deals…' : `${deals.length} deals · drag a card to move it between stages`}
-        </p>
+      <div className="mb-4 flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-xl md:text-2xl font-bold" style={{ color: H, letterSpacing: '-0.3px' }}>Pipeline</h1>
+          <p className="text-xs md:text-sm mt-0.5" style={{ color: SUB }}>
+            {loading
+              ? 'Loading deals…'
+              : manager
+                ? `${deals.length} deals${agentFilter ? ` · ${agentOf(agentFilter).name}` : ' · whole agency'}`
+                : `${deals.length} of your deals · drag a card to move it between stages`}
+          </p>
+        </div>
+
+        {/* Managers can narrow the whole board to one agent */}
+        {manager && (
+          <select
+            value={agentFilter}
+            onChange={e => setAgentFilter(e.target.value)}
+            className="rounded-xl px-3 py-2 text-sm font-semibold outline-none"
+            style={{ border: '1.5px solid #EEF0F4', background: '#F7F8FB', color: H }}
+            aria-label="Filter pipeline by agent"
+          >
+            <option value="">All agents</option>
+            {AGENTS.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        )}
       </div>
 
       {/* Columns — horizontal scroll on mobile, 5-up on desktop */}

@@ -26,7 +26,7 @@ const navItems = [
 interface AppSidebarProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   profile: any
-  user: SupabaseUser
+  user: SupabaseUser | null
 }
 
 export default function AppSidebar({ profile, user }: AppSidebarProps) {
@@ -40,8 +40,9 @@ export default function AppSidebar({ profile, user }: AppSidebarProps) {
     router.refresh()
   }
 
-  const displayName = profile?.Full_name ?? user.email ?? 'Agent'
-  const companyName = profile?.Companies?.Name ?? 'StateGen'
+  const displayName = profile?.Full_name ?? user?.email ?? 'Agent'
+  const isMgr = profile?.role === 'owner' || profile?.role === 'manager'
+  const companyName = isMgr ? 'Manager · StateGen' : (profile?.Companies?.Name ?? 'StateGen')
   const initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
 
   function isActive(href: string) {
