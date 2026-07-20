@@ -13,6 +13,7 @@ import {
   LogOut,
 } from 'lucide-react'
 import { type User as SupabaseUser } from '@supabase/supabase-js'
+import Logo from '@/components/brand/Logo'
 
 const navItems = [
   { href: '/dashboard',   label: 'Dashboard',  icon: LayoutDashboard },
@@ -54,11 +55,8 @@ export default function AppSidebar({ profile, user }: AppSidebarProps) {
       {/* ── Desktop sidebar ── */}
       <aside className="hidden md:flex w-60 flex-col shrink-0" style={{ background: '#0E1F3D' }}>
         {/* Logo */}
-        <div className="px-5 py-5 flex items-center gap-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#5E8FD6' }}>
-            <Building2 className="h-4 w-4 text-white" />
-          </div>
-          <span className="font-bold text-white text-base tracking-tight">StateGen</span>
+        <div className="px-5 py-5 flex items-center" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          <Logo variant="white" size={30} withWordmark priority />
         </div>
 
         {/* Nav */}
@@ -102,12 +100,7 @@ export default function AppSidebar({ profile, user }: AppSidebarProps) {
 
       {/* ── Mobile top bar ── */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 py-3" style={{ background: '#0E1F3D', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: '#5E8FD6' }}>
-            <Building2 className="h-3.5 w-3.5 text-white" />
-          </div>
-          <span className="font-bold text-white text-sm tracking-tight">StateGen</span>
-        </div>
+        <Logo variant="white" size={26} withWordmark priority />
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: '#2E5288', color: '#fff' }}>
             {initials}

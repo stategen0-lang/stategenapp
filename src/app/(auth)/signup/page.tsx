@@ -1,19 +1,15 @@
 'use client'
 
 import Link from 'next/link'
-import { Building2, Shield, Users } from 'lucide-react'
+import { Shield, Users } from 'lucide-react'
+import Logo from '@/components/brand/Logo'
 
 export default function SignupLandingPage() {
   return (
     <div className="min-h-screen flex" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
       {/* Left panel */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12" style={{ background: '#0E1F3D' }}>
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: '#5E8FD6' }}>
-            <Building2 className="h-5 w-5 text-white" />
-          </div>
-          <span className="font-bold text-white text-lg tracking-tight">StateGen</span>
-        </div>
+        <Logo variant="white" size={34} withWordmark priority />
         <div>
           <h1 className="text-4xl font-bold text-white leading-tight mb-4" style={{ letterSpacing: '-0.3px' }}>
             Set up your agency<br />on StateGen.

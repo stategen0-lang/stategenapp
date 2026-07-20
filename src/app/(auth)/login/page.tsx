@@ -4,7 +4,8 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Building2, CheckCircle2, Mail, Lock } from 'lucide-react'
+import { CheckCircle2, Mail, Lock } from 'lucide-react'
+import Logo from '@/components/brand/Logo'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -38,12 +39,7 @@ export default function LoginPage() {
         className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12"
         style={{ background: '#0E1F3D' }}
       >
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: '#5E8FD6' }}>
-            <Building2 className="h-5 w-5 text-white" />
-          </div>
-          <span className="font-bold text-white text-lg tracking-tight">StateGen</span>
-        </div>
+        <Logo variant="white" size={34} withWordmark priority />
 
         <div>
           <h1 className="text-4xl font-extrabold text-white leading-tight mb-4" style={{ letterSpacing: '-0.5px' }}>
