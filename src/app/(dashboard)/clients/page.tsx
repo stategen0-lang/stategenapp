@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { CLIENTS, getAgent, statusStyle, CLIENT_TYPE_STYLE, formatPrice, Client } from '@/lib/data'
 import { useSession } from '@/hooks/use-session'
+import { sortOwnFirst } from '@/lib/client-order'
 import ClientDetailModal from '@/components/modals/ClientDetailModal'
 import NewClientModal from '@/components/modals/NewClientModal'
 import { dbRowToClient } from '@/lib/db-mappers'
@@ -34,9 +35,11 @@ export default function ClientsPage() {
   }
 
   // "Mine" means the signed-in agent's own clients (was hardcoded to 'a1').
+  // Under "All", an agent's own clients are floated to the top of the list,
+  // with the rest of the company's below them.
   const filtered = scope === 'me'
     ? list.filter(c => session?.agentCode != null && c.agentId === session.agentCode)
-    : list
+    : sortOwnFirst(list, session?.agentCode)
 
   const detailClient = detailId != null ? list.find(c => c.id === detailId) ?? null : null
   const detailAgent = detailClient ? getAgent(detailClient.agentId) : null
