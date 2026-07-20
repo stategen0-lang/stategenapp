@@ -5,6 +5,10 @@ import { normalizePhone } from '@/lib/whatsapp/phone'
 import { parseConfirmation } from '@/lib/whatsapp/replies'
 import { classifyIntent, Intent } from '@/lib/whatsapp/intent'
 import { handleQueryClient, handleQueryProperty, HELP_TEXT } from '@/lib/whatsapp/handlers'
+import {
+  stageClientUpdate, stagePropertyUpdate, stageCreateProperty, stageFeedback,
+  applyPendingAction,
+} from '@/lib/whatsapp/write-handlers'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 // Twilio posts form-encoded data and expects TwiML back.
@@ -103,7 +107,7 @@ export async function POST(req: NextRequest) {
     // "yes", that meaning takes priority over anything a model might infer.
     const { data: pending } = await admin
       .from('pending_actions')
-      .select('id, action_type, summary, expires_at')
+      .select('id, action_type, summary, payload, expires_at')
       .eq('profile_id', profile.id)
       .gt('expires_at', new Date().toISOString())
       .order('created_at', { ascending: false })
@@ -113,12 +117,18 @@ export async function POST(req: NextRequest) {
     const confirmation = parseConfirmation(body)
     if (pending && confirmation !== 'unknown') {
       intent = 'confirm_pending'
-      // Phase 3 performs the write; for now the pending action is cleared so a
-      // stale one can't linger and be applied later by mistake.
+      // Consume the action first, whichever way it goes: a pending write must
+      // never be applicable twice.
       await admin.from('pending_actions').delete().eq('id', pending.id)
       answer = confirmation === 'confirm'
-        ? 'Confirmed — saving is not switched on yet, so nothing was written. (Coming in the next update.)'
+        ? await applyPendingAction(admin, profile, pending.action_type, pending.payload)
         : 'Cancelled — nothing was saved.'
+    } else if (confirmation !== 'unknown') {
+      // A yes/no with nothing staged. Answering this locally matters: sending it
+      // to the model returns "I didn't understand", which reads as though the
+      // change might still be pending when in fact nothing is.
+      intent = confirmation
+      answer = 'There is nothing waiting for confirmation — it may have expired (confirmations last 10 minutes). Send the change again.'
     } else {
       const result = await classifyIntent(body)
       intent = result.intent
@@ -133,17 +143,26 @@ export async function POST(req: NextRequest) {
         case 'help':
           answer = HELP_TEXT
           break
+        case 'update_client':
+          answer = await stageClientUpdate(admin, profile, result)
+          break
+        case 'update_property':
+          answer = await stagePropertyUpdate(admin, profile, result)
+          break
+        case 'create_property':
+          answer = await stageCreateProperty(admin, profile, result)
+          break
+        case 'feedback':
+          answer = await stageFeedback(admin, profile, result, body)
+          break
+        // Only reached for phrasings the local matcher missed ("go on then").
         case 'confirm':
         case 'cancel':
-          answer = 'There is nothing waiting for confirmation.'
+          answer = 'There is nothing waiting for confirmation — it may have expired (confirmations last 10 minutes). Send the change again.'
           break
-        // Write flows land in Phase 3; say so plainly rather than pretending.
-        case 'update_client':
-        case 'update_property':
-        case 'create_property':
-        case 'feedback':
+        // Reminder replies arrive in Phase 4 alongside the scheduled job.
         case 'reminder_response':
-          answer = `I understood that as "${result.intent.replace(/_/g, ' ')}", but that flow isn't switched on yet.\n\nFor now I can answer questions — try "info on <client name>" or "what matches 500k in Beirut".`
+          answer = `I understood that as a reminder reply, but reminders aren't switched on yet.\n\nFor now try "info on <client name>", "what matches 500k in Beirut", or "set <client> budget to 400k".`
           break
         default:
           answer = `Sorry, I didn't understand that.\n\n${HELP_TEXT}`

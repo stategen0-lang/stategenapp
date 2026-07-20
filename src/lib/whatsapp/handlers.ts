@@ -16,7 +16,13 @@ export const HELP_TEXT = [
   'I can help with:',
   '• "info on Ahmed" — client details',
   '• "what matches 500k in Beirut" — property search',
+  '• "set Ahmed\'s budget to 400k" — update a client',
+  '• "mark property #23 as sold" — update a listing',
+  '• "add listing: 3 bed in Hamra, Beirut, 450k" — new listing',
+  '• "spoke to Ahmed, viewing Saturday" — log a call',
   '• "help" — this message',
+  '',
+  'Changes always ask you to reply YES before anything is saved.',
 ].join('\n')
 
 interface Profile {

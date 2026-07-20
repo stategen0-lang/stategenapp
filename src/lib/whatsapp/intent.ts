@@ -102,7 +102,21 @@ JSON shape (omit keys you cannot fill):
 Rules:
 - budget is a plain number in USD: "400k" -> 400000, "1.2m" -> 1200000
 - propertyId is the number in "#23"
-- Never invent a client name that is not in the message.`
+- Never invent a client name that is not in the message.
+
+For update_client, update_property and create_property, put the changes in "fields"
+using ONLY these key names (anything else is discarded):
+- client: budget, status, location, beds, phone, rating
+  status must be one of: Searching, Viewing, Negotiating, Closed, Inactive
+- property: status, price, rent, size, beds, baths, title, location, neighborhood, notes
+  status must be one of: Available, Reserved, Sold, Rented
+  "location" is the city, "neighborhood" is the area within it
+
+Examples:
+"set Ahmed's budget to 400k" -> {"intent":"update_client","clientName":"Ahmed","fields":{"budget":400000}}
+"mark property #23 as sold" -> {"intent":"update_property","propertyId":23,"fields":{"status":"Sold"}}
+"add listing: 3 bed apartment in Hamra, Beirut, 450k, 180 sqm" -> {"intent":"create_property","fields":{"title":"3 bed apartment","beds":3,"neighborhood":"Hamra","location":"Beirut","price":450000,"size":180}}
+"called Ahmed, he wants a viewing Saturday" -> {"intent":"feedback","clientName":"Ahmed","notes":"wants a viewing Saturday"}`
 
 /**
  * Ask Grok to classify. Returns { intent: 'unknown' } rather than throwing, so
