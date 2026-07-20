@@ -72,6 +72,12 @@ export default function LoginPage() {
       {/* Right panel */}
       <div className="flex-1 flex items-center justify-center px-8 py-12 bg-white">
         <div className="w-full max-w-sm">
+          {/* The navy panel carrying the logo is desktop-only, so brand the
+              form itself on phones — otherwise sign-in has no logo at all. */}
+          <div className="lg:hidden mb-8">
+            <Logo variant="navy" size={44} withWordmark priority />
+          </div>
+
           <p className="text-xs font-bold tracking-widest mb-2" style={{ color: '#6A7488', letterSpacing: '0.5px' }}>
             AGENT SIGN IN
           </p>
