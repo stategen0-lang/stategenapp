@@ -2,12 +2,12 @@ import { NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { verifySignature, twimlMessage } from '@/lib/whatsapp/twilio'
 import { normalizePhone } from '@/lib/whatsapp/phone'
-import { parseConfirmation } from '@/lib/whatsapp/replies'
+import { parseConfirmation, parseReminderReply } from '@/lib/whatsapp/replies'
 import { classifyIntent, Intent } from '@/lib/whatsapp/intent'
 import { handleQueryClient, handleQueryProperty, HELP_TEXT } from '@/lib/whatsapp/handlers'
 import {
   stageClientUpdate, stagePropertyUpdate, stageCreateProperty, stageFeedback,
-  applyPendingAction,
+  applyPendingAction, handleReminderReply,
 } from '@/lib/whatsapp/write-handlers'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -115,6 +115,15 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
 
     const confirmation = parseConfirmation(body)
+
+    // "done" / "snooze 3d" / "not interested" only mean what they appear to
+    // while a reminder is outstanding. handleReminderReply returns null when
+    // none is, and the message falls through to normal classification.
+    const reminderReply = parseReminderReply(body)
+    const reminderAnswer = reminderReply.action === 'unknown'
+      ? null
+      : await handleReminderReply(admin, profile, reminderReply.action, reminderReply.snoozeDays)
+
     if (pending && confirmation !== 'unknown') {
       intent = 'confirm_pending'
       // Consume the action first, whichever way it goes: a pending write must
@@ -123,6 +132,9 @@ export async function POST(req: NextRequest) {
       answer = confirmation === 'confirm'
         ? await applyPendingAction(admin, profile, pending.action_type, pending.payload)
         : 'Cancelled — nothing was saved.'
+    } else if (reminderAnswer !== null) {
+      intent = 'reminder_response'
+      answer = reminderAnswer
     } else if (confirmation !== 'unknown') {
       // A yes/no with nothing staged. Answering this locally matters: sending it
       // to the model returns "I didn't understand", which reads as though the
@@ -160,9 +172,10 @@ export async function POST(req: NextRequest) {
         case 'cancel':
           answer = 'There is nothing waiting for confirmation — it may have expired (confirmations last 10 minutes). Send the change again.'
           break
-        // Reminder replies arrive in Phase 4 alongside the scheduled job.
+        // Grok read it as a reminder reply, but nothing is outstanding —
+        // otherwise the local matcher above would have handled it.
         case 'reminder_response':
-          answer = `I understood that as a reminder reply, but reminders aren't switched on yet.\n\nFor now try "info on <client name>", "what matches 500k in Beirut", or "set <client> budget to 400k".`
+          answer = `You have no follow-up reminders waiting.\n\n${HELP_TEXT}`
           break
         default:
           answer = `Sorry, I didn't understand that.\n\n${HELP_TEXT}`

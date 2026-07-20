@@ -17,6 +17,8 @@ import {
   buildUpdate, buildNewProperty, confirmationText, hasChanges,
   mergeExtras, appendLog, CLIENT_FIELDS, PROPERTY_FIELDS,
 } from '@/lib/whatsapp/writes'
+import { reminderOutcome } from '@/lib/whatsapp/reminders'
+import type { ReminderAction } from '@/lib/whatsapp/replies'
 
 export interface Profile {
   id: string
@@ -252,6 +254,74 @@ export async function stageFeedback(
     logEntry: note,
     label: row['Client Name'] as string,
   })
+}
+
+// ── Reminder replies (Phase 4) ──────────────────────────────────────────────
+
+/** How long after sending a reminder a bare "done" still refers to it. */
+const REMINDER_REPLY_WINDOW_DAYS = 3
+
+/**
+ * Apply "done" / "snooze 3d" / "not interested" to the most recent reminder.
+ * Returns null when there is no outstanding reminder, so the caller falls back
+ * to normal intent classification rather than guessing what "done" meant.
+ */
+export async function handleReminderReply(
+  admin: SupabaseClient,
+  profile: Profile,
+  action: ReminderAction,
+  snoozeDays: number | undefined,
+): Promise<string | null> {
+  const cutoff = new Date(Date.now() - REMINDER_REPLY_WINDOW_DAYS * 86_400_000).toISOString()
+
+  const { data: reminder } = await admin
+    .from('reminder_schedule')
+    .select('id, client_id, sent_at')
+    .eq('profile_id', profile.id)
+    .eq('status', 'sent')
+    .gte('sent_at', cutoff)
+    .order('sent_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (!reminder) return null
+
+  const { data: row } = await admin
+    .from('client_requests')
+    .select('*')
+    .eq('id', reminder.client_id)
+    .maybeSingle()
+
+  if (!row) return null
+
+  const outcome = reminderOutcome(action, row['Client Name'] as string, snoozeDays)
+  if (!outcome) return null
+
+  // Permission is still checked: a reminder is not a licence to edit a record
+  // the agent has since lost access to.
+  if (!canEditClient(toSession(profile), agentOf(row, 'notes'))) return null
+
+  const update: Record<string, unknown> = {
+    notes: appendLog(row.notes, outcome.logEntry),
+  }
+  if (outcome.clientStatus) update.status = outcome.clientStatus
+
+  const { error: clientErr } = await admin.from('client_requests').update(update).eq('id', row.id)
+  if (clientErr) {
+    console.error('[whatsapp] reminder client update failed', clientErr)
+    return 'I could not update that record. Please try again.'
+  }
+
+  const reminderUpdate: Record<string, unknown> = { status: outcome.status }
+  if (outcome.dueDate) {
+    // A snooze becomes the next pending reminder rather than staying 'sent',
+    // otherwise it would never fire again.
+    reminderUpdate.status = 'pending'
+    reminderUpdate.due_date = outcome.dueDate
+  }
+  await admin.from('reminder_schedule').update(reminderUpdate).eq('id', reminder.id)
+
+  return outcome.reply
 }
 
 // ── Applying, after "YES" ───────────────────────────────────────────────────

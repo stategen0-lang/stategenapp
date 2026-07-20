@@ -118,7 +118,11 @@
       "Bash(sed -i \"s|/YES/i.test\\(staged\\)|/Reply YES to save/i.test\\(staged\\)|;s|/YES/i.test\\(fb\\)|/Reply YES to save/i.test\\(fb\\)|;s|/YES/i.test\\(propStage\\)|/Reply YES to save/i.test\\(propStage\\)|;s|/YES/i.test\\(upd\\)|/Reply YES to save/i.test\\(upd\\)|\" wa-writes-test.mjs)",
       "Bash(node \"C:/Users/User/AppData/Local/Temp/claude/C--Users-User-Desktop-stategen/3bf3eadf-48d0-4068-86d4-79e92f2f8263/scratchpad/wa-perm-test.mjs\")",
       "Bash(python -c ' *)",
-      "Bash(git commit -m 'feat\\(whatsapp\\): Phase 3 — write flows behind confirm-before-write *)"
+      "Bash(git commit -m 'feat\\(whatsapp\\): Phase 3 — write flows behind confirm-before-write *)",
+      "Bash(node \"C:/Users/User/AppData/Local/Temp/claude/C--Users-User-Desktop-stategen/3bf3eadf-48d0-4068-86d4-79e92f2f8263/scratchpad/wait-deploy.mjs\")",
+      "Bash(node \"C:/Users/User/AppData/Local/Temp/claude/C--Users-User-Desktop-stategen/3bf3eadf-48d0-4068-86d4-79e92f2f8263/scratchpad/wa-reminder-test.mjs\")",
+      "Bash(node \"C:/Users/User/AppData/Local/Temp/claude/C--Users-User-Desktop-stategen/3bf3eadf-48d0-4068-86d4-79e92f2f8263/scratchpad/wa-reminder-select.mjs\")",
+      "Bash(git commit -m 'feat\\(whatsapp\\): Phase 4 — daily follow-up reminders and reply handling *)"
     ]
   }
 }
