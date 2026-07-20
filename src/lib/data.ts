@@ -231,6 +231,10 @@ export const CLIENT_TYPE_STYLE: Record<ClientType, { bg: string; color: string }
 }
 
 export function buildDesc(p: Property): string {
+  // A description written/generated for this listing always wins — this used
+  // to be ignored, so AI/template descriptions were saved but never shown.
+  if (p.aiDescription && p.aiDescription.trim()) return p.aiDescription.trim()
+
   const agent = getAgent(p.agentId)
   const price = p.transaction === 'For Rent'
     ? `${formatPrice(p.rent)}/mo`

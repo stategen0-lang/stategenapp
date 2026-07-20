@@ -115,7 +115,9 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
               </span>
             </div>
 
-            <p className="text-sm leading-relaxed" style={{ color: '#6A7488' }}>{buildDesc(p)}</p>
+            {/* pre-wrap: template descriptions are multi-line with headings and
+                bullet lists, which would otherwise collapse into one paragraph */}
+            <p className="text-sm leading-relaxed" style={{ color: '#6A7488', whiteSpace: 'pre-wrap' }}>{buildDesc(p)}</p>
 
             <div className="grid grid-cols-3 gap-3">
               {[

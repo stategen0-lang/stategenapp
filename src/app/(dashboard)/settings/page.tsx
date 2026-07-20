@@ -5,19 +5,7 @@ import { TrendingUp, DollarSign, Home, BadgeDollarSign, X, ChevronRight, Plus, T
 import { DEALS, AGENTS, formatPrice, Deal, typeStyle } from '@/lib/data'
 import { useSession } from '@/hooks/use-session'
 import { isManager } from '@/lib/permissions'
-
-interface DescriptionTemplate {
-  id: string
-  name: string
-  body: string
-  active: boolean
-}
-
-const DEFAULT_TEMPLATES: DescriptionTemplate[] = [
-  { id: 't1', name: 'Luxury', body: 'Emphasize exclusivity, premium finishes, and lifestyle. Use elegant language. Mention prestige of location.', active: false },
-  { id: 't2', name: 'Commercial', body: 'Focus on business potential, visibility, foot traffic, and ROI. Keep tone professional and concise.', active: false },
-  { id: 't3', name: 'Standard', body: 'Balanced, friendly tone. Highlight value for money, practical features, and neighborhood character.', active: false },
-]
+import { DescriptionTemplate, DEFAULT_TEMPLATES, STORAGE_KEY, loadTemplates } from '@/lib/templates'
 
 const COMMISSION_RATE = 2.5
 const H   = '#1A2B4A'
@@ -61,16 +49,11 @@ export default function ProfilePage() {
   const [newName, setNewName] = useState('')
   const [newBody, setNewBody] = useState('')
 
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('descriptionTemplates')
-      if (saved) setTemplates(JSON.parse(saved))
-    } catch { /* ignore */ }
-  }, [])
+  useEffect(() => { setTemplates(loadTemplates()) }, [])
 
   function saveTemplates(next: DescriptionTemplate[]) {
     setTemplates(next)
-    try { localStorage.setItem('descriptionTemplates', JSON.stringify(next)) } catch { /* ignore */ }
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)) } catch { /* ignore */ }
   }
 
   function toggleActive(id: string) {
@@ -385,13 +368,15 @@ export default function ProfilePage() {
                     onChange={e => setNewName(e.target.value)}
                     placeholder="Template name"
                   />
+                  {/* Roomy + resizable: a structured template runs ~20 lines,
+                      which was unusable in the old 3-row fixed box. */}
                   <textarea
-                    className="w-full rounded-xl px-3 py-2 text-sm outline-none"
-                    style={{ border: '1.5px solid #5E8FD6', background: '#F7F8FB', color: '#14223F', resize: 'none' }}
-                    rows={3}
+                    className="w-full rounded-xl px-3 py-2 text-sm outline-none font-mono"
+                    style={{ border: '1.5px solid #5E8FD6', background: '#F7F8FB', color: '#14223F', resize: 'vertical' }}
+                    rows={10}
                     value={newBody}
                     onChange={e => setNewBody(e.target.value)}
-                    placeholder="Describe the style guide for the AI (tone, focus, language…)"
+                    placeholder={'Either a style note ("elegant, emphasise exclusivity")\nor a full layout with [placeholders] — e.g.\n\nThis [Adjective] [Property Type] in [Location]!\n[Property Type] Features:\n[X] Bathroom(s)\nPrice: $ [AMOUNT]'}
                   />
                   <div className="flex gap-2 justify-end">
                     <button onClick={() => setEditingId(null)} className="px-3 py-1.5 rounded-lg text-xs font-semibold" style={{ border: '1.5px solid #EEF0F4', color: '#6A7488' }}>Cancel</button>
@@ -419,7 +404,14 @@ export default function ProfilePage() {
                         <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: '#E3F4EA', color: '#1F7A4D' }}>Active</span>
                       )}
                     </div>
-                    <p className="text-xs mt-1 leading-relaxed" style={{ color: SUB }}>{t.body || <span className="italic" style={{ color: '#C4CAD6' }}>No style guide yet</span>}</p>
+                    {/* pre-wrap + clamp so a long structured template previews
+                        with its line breaks without swamping the list */}
+                    <p
+                      className="text-xs mt-1 leading-relaxed line-clamp-4"
+                      style={{ color: SUB, whiteSpace: 'pre-wrap' }}
+                    >
+                      {t.body || <span className="italic" style={{ color: '#C4CAD6' }}>No template yet</span>}
+                    </p>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <button onClick={() => startEdit(t)} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors" title="Edit">

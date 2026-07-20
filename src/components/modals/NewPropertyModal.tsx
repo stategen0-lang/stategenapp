@@ -4,10 +4,10 @@ import { useState, useRef, useEffect } from 'react'
 import { Sparkles, Loader2, ImagePlus, ChevronDown } from 'lucide-react'
 import { Property, PropertyType, Transaction, PropertyStatus, AdvancedPayment, AgentId, CURRENT_AGENT_ID } from '@/lib/data'
 import { useSession } from '@/hooks/use-session'
+import { DescriptionTemplate, loadTemplates } from '@/lib/templates'
 
 const PROPERTY_TYPES: PropertyType[] = ['Appartement', 'Shop', 'Office', 'Building', 'Villa', 'Land', 'Showroom', 'Restaurant']
 
-interface DescriptionTemplate { id: string; name: string; body: string; active: boolean }
 
 interface Props {
   onClose: () => void
@@ -45,21 +45,16 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
   const [photos, setPhotos] = useState<string[]>(initial?.photos ?? [])
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState('')
-  const [templates, setTemplates] = useState<DescriptionTemplate[]>([])
+  const [templates, setTemplates] = useState<DescriptionTemplate[]>(loadTemplates())
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('none')
   const [templateOpen, setTemplateOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('descriptionTemplates')
-      if (saved) {
-        const parsed: DescriptionTemplate[] = JSON.parse(saved)
-        setTemplates(parsed)
-        const active = parsed.find(t => t.active)
-        if (active) setSelectedTemplateId(active.id)
-      }
-    } catch { /* ignore */ }
+    const loaded = loadTemplates()
+    setTemplates(loaded)
+    const active = loaded.find(t => t.active)
+    if (active) setSelectedTemplateId(active.id)
   }, [])
 
   function set(k: string, v: string | boolean) {
