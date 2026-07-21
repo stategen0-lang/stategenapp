@@ -1,8 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { AGENTS, formatPrice } from '@/lib/data'
+import { formatPrice } from '@/lib/data'
+import { findAgent, unknownAgent, type RosterAgent } from '@/lib/agent-roster'
 import {
   Deal, Stage, STAGES, dealsInStage, totalValue, sortForBoard,
   daysInStage, staleFlag, STALE_STYLE, isStage,
@@ -14,21 +15,24 @@ import { isManager } from '@/lib/permissions'
 const H = '#14223F'
 const SUB = '#6A7488'
 
-function agentOf(id: string | null) {
-  return AGENTS.find(a => a.id === id) ?? AGENTS[0]
+// Resolve against the live roster. Never falls back to "the first agent" —
+// that silently displayed one agent's deals under another's name and colour.
+function agentOf(roster: RosterAgent[], id: string | null) {
+  return findAgent(roster, id) ?? unknownAgent(id)
 }
 
 // ── Deal card ────────────────────────────────────────────────────────────────
 function DealCard({
-  deal, onMove, onOutcome, dragging, setDragging,
+  deal, roster, onMove, onOutcome, dragging, setDragging,
 }: {
   deal: Deal
+  roster: RosterAgent[]
   onMove: (id: string, stage: Stage) => void
   onOutcome: (id: string, outcome: 'won' | 'lost') => void
   dragging: string | null
   setDragging: (id: string | null) => void
 }) {
-  const agent = agentOf(deal.agent_id)
+  const agent = agentOf(roster, deal.agent_id)
   const days = daysInStage(deal.stage_changed_at)
   const flag = staleFlag(days)
   const st = STALE_STYLE[flag]
@@ -116,18 +120,45 @@ export default function PipelinePage() {
   const [dragging, setDragging] = useState<string | null>(null)
   const { session } = useSession()
   const manager = isManager(session?.role)
+  const [roster, setRoster] = useState<RosterAgent[]>([])
+
+  // Kept in the URL so a filtered board survives a refresh and can be shared —
+  // "look at Rami's pipeline" is a link, not a set of instructions.
   const [agentFilter, setAgentFilter] = useState<string>('')
+  useEffect(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get('agent') ?? ''
+    if (fromUrl) setAgentFilter(fromUrl)
+  }, [])
+
+  function selectAgent(id: string) {
+    setAgentFilter(id)
+    const url = new URL(window.location.href)
+    if (id) url.searchParams.set('agent', id)
+    else url.searchParams.delete('agent')
+    window.history.replaceState(null, '', url)
+  }
+
+  // Guards against a slower earlier request landing after a newer one. Reading
+  // ?agent= from the URL starts an unfiltered fetch and a filtered one in the
+  // same tick; the unfiltered response is larger, so it arrived last and
+  // repainted the board with every agent's deals under one agent's heading.
+  const requestId = useRef(0)
 
   const load = useCallback(async () => {
+    const id = ++requestId.current
     try {
       const url = agentFilter ? `/api/deals?agent=${encodeURIComponent(agentFilter)}` : '/api/deals'
       const res = await fetch(url)
       if (res.ok) {
         const data = await res.json()
+        if (id !== requestId.current) return   // superseded — discard
         if (Array.isArray(data.deals)) setDeals(data.deals)
+        // Sent unfiltered by the server, so narrowing to one agent never
+        // shrinks the roster and strands you on that agent.
+        if (Array.isArray(data.agents)) setRoster(data.agents)
       }
     } catch { /* leave the board as-is */ }
-    setLoading(false)
+    if (id === requestId.current) setLoading(false)
   }, [agentFilter])
 
   useEffect(() => { load() }, [load])
@@ -197,7 +228,7 @@ export default function PipelinePage() {
             {loading
               ? 'Loading deals…'
               : manager
-                ? `${deals.length} deals${agentFilter ? ` · ${agentOf(agentFilter).name}` : ' · whole agency'}`
+                ? `${deals.length} deals${agentFilter ? ` · ${agentOf(roster, agentFilter).name}` : ' · whole agency'}`
                 : `${deals.length} of your deals · drag a card to move it between stages`}
           </p>
         </div>
@@ -206,16 +237,60 @@ export default function PipelinePage() {
         {manager && (
           <select
             value={agentFilter}
-            onChange={e => setAgentFilter(e.target.value)}
+            onChange={e => selectAgent(e.target.value)}
             className="rounded-xl px-3 py-2 text-sm font-semibold outline-none"
             style={{ border: '1.5px solid #EEF0F4', background: '#F7F8FB', color: H }}
             aria-label="Filter pipeline by agent"
           >
             <option value="">All agents</option>
-            {AGENTS.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            {roster.map(a => (
+              <option key={a.id} value={a.id}>{a.orphan ? `${a.name} — no profile` : a.name}</option>
+            ))}
           </select>
         )}
       </div>
+
+      {/* One agent's headline numbers. The reason to isolate an agent is to see
+          how they're doing, which the board alone doesn't answer. */}
+      {manager && agentFilter && !loading && (() => {
+        const agent = agentOf(roster, agentFilter)
+        const closed = deals.filter(d => d.stage === 'closed')
+        const won = closed.filter(d => d.outcome === 'won')
+        const lost = closed.filter(d => d.outcome === 'lost')
+        const open = deals.filter(d => d.stage !== 'closed')
+        const stale = deals.filter(d => staleFlag(daysInStage(d.stage_changed_at)) === 'late')
+        const decided = won.length + lost.length
+
+        const stat = (label: string, value: string, color = H) => (
+          <div key={label} className="px-3 py-2">
+            <p className="text-[11px] font-medium" style={{ color: SUB }}>{label}</p>
+            <p className="text-sm font-bold mt-0.5" style={{ color }}>{value}</p>
+          </div>
+        )
+
+        return (
+          <div
+            className="mb-4 rounded-xl flex flex-wrap items-center gap-1 divide-x"
+            style={{ border: '1.5px solid #EEF0F4', background: '#FBFCFE' }}
+          >
+            <div className="px-3 py-2 flex items-center gap-2">
+              <div
+                className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white"
+                style={{ background: agent.color }}
+              >
+                {agent.initials}
+              </div>
+              <p className="text-sm font-bold" style={{ color: H }}>{agent.name}</p>
+            </div>
+            {stat('Open deals', String(open.length))}
+            {stat('Open value', formatPrice(totalValue(open)))}
+            {stat('Won', String(won.length), '#1F7A4D')}
+            {stat('Lost', String(lost.length), '#A23434')}
+            {stat('Win rate', decided ? `${Math.round((won.length / decided) * 100)}%` : '—')}
+            {stat('Stalled >14d', String(stale.length), stale.length ? '#A23434' : H)}
+          </div>
+        )
+      })()}
 
       {/* Columns — horizontal scroll on mobile, 5-up on desktop */}
       <div className="flex gap-3 overflow-x-auto pb-4 -mx-4 px-4 md:mx-0 md:px-0">
@@ -258,7 +333,7 @@ export default function PipelinePage() {
               </div>
 
               {stage.id !== 'closed' && inStage.map(d => (
-                <DealCard key={d.id} deal={d} onMove={move} onOutcome={setOutcome} dragging={dragging} setDragging={setDragging} />
+                <DealCard key={d.id} deal={d} roster={roster} onMove={move} onOutcome={setOutcome} dragging={dragging} setDragging={setDragging} />
               ))}
 
               {/* Closed splits into Won / Lost */}
@@ -268,7 +343,7 @@ export default function PipelinePage() {
                     <>
                       <p className="text-[10px] font-bold mt-1 mb-1 px-1" style={{ color: '#9A6516' }}>OUTCOME?</p>
                       {undecided.map(d => (
-                        <DealCard key={d.id} deal={d} onMove={move} onOutcome={setOutcome} dragging={dragging} setDragging={setDragging} />
+                        <DealCard key={d.id} deal={d} roster={roster} onMove={move} onOutcome={setOutcome} dragging={dragging} setDragging={setDragging} />
                       ))}
                     </>
                   )}
@@ -276,7 +351,7 @@ export default function PipelinePage() {
                     <>
                       <p className="text-[10px] font-bold mt-1 mb-1 px-1" style={{ color: '#1F7A4D' }}>WON · {formatPrice(totalValue(won))}</p>
                       {won.map(d => (
-                        <DealCard key={d.id} deal={d} onMove={move} onOutcome={setOutcome} dragging={dragging} setDragging={setDragging} />
+                        <DealCard key={d.id} deal={d} roster={roster} onMove={move} onOutcome={setOutcome} dragging={dragging} setDragging={setDragging} />
                       ))}
                     </>
                   )}
@@ -284,7 +359,7 @@ export default function PipelinePage() {
                     <>
                       <p className="text-[10px] font-bold mt-1 mb-1 px-1" style={{ color: '#A23434' }}>LOST · {formatPrice(totalValue(lost))}</p>
                       {lost.map(d => (
-                        <DealCard key={d.id} deal={d} onMove={move} onOutcome={setOutcome} dragging={dragging} setDragging={setDragging} />
+                        <DealCard key={d.id} deal={d} roster={roster} onMove={move} onOutcome={setOutcome} dragging={dragging} setDragging={setDragging} />
                       ))}
                     </>
                   )}
