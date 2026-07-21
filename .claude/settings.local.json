@@ -130,7 +130,11 @@
       "Bash(npx next *)",
       "Bash(node \"C:/Users/User/AppData/Local/Temp/claude/C--Users-User-Desktop-stategen/3bf3eadf-48d0-4068-86d4-79e92f2f8263/scratchpad/wa-phase5-test.mjs\")",
       "Bash(node \"C:/Users/User/AppData/Local/Temp/claude/C--Users-User-Desktop-stategen/3bf3eadf-48d0-4068-86d4-79e92f2f8263/scratchpad/wa-manager-test.mjs\")",
-      "Bash(git commit -m 'feat\\(whatsapp\\): Phase 5 — multi-step listing flow, manager reports, cleanup *)"
+      "Bash(git commit -m 'feat\\(whatsapp\\): Phase 5 — multi-step listing flow, manager reports, cleanup *)",
+      "Bash(node \"C:/Users/User/AppData/Local/Temp/claude/C--Users-User-Desktop-stategen/3bf3eadf-48d0-4068-86d4-79e92f2f8263/scratchpad/run-all.mjs\")",
+      "Bash(node \"C:/Users/User/AppData/Local/Temp/claude/C--Users-User-Desktop-stategen/3bf3eadf-48d0-4068-86d4-79e92f2f8263/scratchpad/wa-prod-check.mjs\")",
+      "Bash(node --experimental-strip-types --test src/lib/whatsapp/quick-intent.test.mjs)",
+      "Bash(node --experimental-strip-types -e ' *)"
     ]
   }
 }

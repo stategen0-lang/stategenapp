@@ -33,8 +33,11 @@ function clientAgent(row: Record<string, unknown>): string | null {
 export async function POST(req: NextRequest) {
   if (!authorized(req)) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // ?dry=1 reports who would be messaged without sending anything. Used to
-  // verify the selection before letting it loose on real phones.
+  // ?dry=1 reports who would be messaged WITHOUT SENDING ANYTHING. It suppresses
+  // outbound messages only — housekeeping below still runs, because that is
+  // idempotent and there is no reason to withhold it. Keeping cleanup behind
+  // !dry meant the only way to test it was a live run, which sent real messages
+  // and burned the Twilio account's daily quota.
   const dry = req.nextUrl.searchParams.get('dry') === '1'
   const now = new Date()
   const today = now.toISOString().slice(0, 10)
@@ -46,16 +49,14 @@ export async function POST(req: NextRequest) {
   // forever otherwise. Abandoned half-finished flows are cleared after a day so
   // they can't resume under an unrelated message weeks later.
   const cleanup = { pendingActions: 0, staleFlows: 0 }
-  if (!dry) {
-    const { data: expired } = await admin
-      .from('pending_actions').delete().lt('expires_at', now.toISOString()).select('id')
-    cleanup.pendingActions = expired?.length ?? 0
+  const { data: expired } = await admin
+    .from('pending_actions').delete().lt('expires_at', now.toISOString()).select('id')
+  cleanup.pendingActions = expired?.length ?? 0
 
-    const dayAgo = new Date(now.getTime() - 24 * 3600_000).toISOString()
-    const { data: stale } = await admin
-      .from('conversation_state').delete().lt('updated_at', dayAgo).select('id')
-    cleanup.staleFlows = stale?.length ?? 0
-  }
+  const dayAgo = new Date(now.getTime() - 24 * 3600_000).toISOString()
+  const { data: stale } = await admin
+    .from('conversation_state').delete().lt('updated_at', dayAgo).select('id')
+  cleanup.staleFlows = stale?.length ?? 0
 
   // ── Agents who can actually receive a message ─────────────────────────────
   const { data: profiles } = await admin

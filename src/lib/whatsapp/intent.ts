@@ -9,6 +9,8 @@
 // that strips types but does not resolve the "@/" path alias, so a top-level
 // runtime import here would make this whole module unloadable in tests.
 
+import { quickIntent } from './quick-intent.ts'
+
 export type Intent =
   | 'reminder_response'
   | 'feedback'
@@ -123,25 +125,63 @@ Examples:
 "called Ahmed, he wants a viewing Saturday" -> {"intent":"feedback","clientName":"Ahmed","notes":"wants a viewing Saturday"}`
 
 /**
+ * How long the model gets before we give up on it.
+ *
+ * Twilio abandons a webhook at 15 seconds (error 11200). Measured non-model
+ * overhead — signature check, profile lookup, pending/flow/reminder queries,
+ * the handler's own reads and the reply — is about 1s, and Grok itself
+ * typically takes 5-8s. 10s leaves Grok room to finish normally while keeping
+ * the worst case near 11s, comfortably inside Twilio's limit.
+ *
+ * Sized deliberately: too tight and legitimate classifications are thrown away
+ * (7s cut off a valid feedback message during testing); too loose and the reply
+ * is lost entirely, which is strictly worse than answering "I didn't understand".
+ */
+const GROK_DEADLINE_MS = 10_000
+
+/** Reject if `promise` hasn't settled within `ms`. */
+function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('classification timed out')), Math.max(ms, 1))),
+  ])
+}
+
+/**
  * Ask Grok to classify. Returns { intent: 'unknown' } rather than throwing, so
  * the webhook always has something to reply with.
  */
 export async function classifyIntent(message: string): Promise<IntentResult> {
   if (!message || !message.trim()) return { intent: 'unknown' }
 
+  // Formulaic messages are matched locally and never reach the model. This is a
+  // latency requirement, not an optimisation: Twilio abandons the webhook at 15
+  // seconds, and a slow classification costs the agent their reply entirely.
+  const quick = quickIntent(message)
+  if (quick) return quick
+
   const messages = [
     { role: 'system' as const, content: SYSTEM },
     { role: 'user' as const, content: message },
   ]
 
+  const started = Date.now()
   try {
     const { chat } = await import('@/lib/xai')
-    // Generous budget: Grok is a reasoning model and spends a large, variable
-    // number of tokens thinking before it writes. A small cap here returns an
-    // empty string (the bug that silently broke AI descriptions).
-    let raw = await chat(messages, { temperature: 0.1, max_tokens: 2000 })
-    if (!raw || !raw.trim()) {
-      raw = await chat(messages, { temperature: 0.1, max_tokens: 2000 })
+    // Generous token budget: Grok is a reasoning model and spends a large,
+    // variable number of tokens thinking before it writes. A small cap returns
+    // an empty string (the bug that silently broke AI descriptions).
+    //
+    // The wall-clock deadline is separate and non-negotiable — better to answer
+    // "I didn't understand" quickly than to be cut off with no reply at all.
+    let raw = await withDeadline(chat(messages, { temperature: 0.1, max_tokens: 2000 }), GROK_DEADLINE_MS)
+
+    // Retry an empty completion only when the first call failed fast enough
+    // that a second one can still finish inside the budget. Retrying late is
+    // how a request ends up past Twilio's limit with nothing to show for it.
+    const elapsed = Date.now() - started
+    if ((!raw || !raw.trim()) && elapsed < 2500) {
+      raw = await withDeadline(chat(messages, { temperature: 0.1, max_tokens: 2000 }), GROK_DEADLINE_MS - elapsed)
     }
     return parseIntentJson(raw)
   } catch {
