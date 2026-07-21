@@ -54,7 +54,7 @@ function clientLabel(profile: Profile, row: Record<string, unknown>): string {
 }
 
 /** What a pending_actions row carries between the confirmation and the write. */
-interface Payload {
+export interface Payload {
   table: 'client_requests' | 'Properties'
   /** Row to update; absent for an insert. */
   id?: number
@@ -67,7 +67,7 @@ interface Payload {
   label: string
 }
 
-async function stage(
+export async function stage(
   admin: SupabaseClient,
   profile: Profile,
   actionType: string,

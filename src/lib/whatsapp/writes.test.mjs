@@ -84,6 +84,18 @@ test('buildUpdate: key matching is case-insensitive and trimmed', () => {
   const u = buildUpdate({ ' Budget ': '400k' }, CLIENT_FIELDS)
   assert.equal(u.columns['budget_max'], 400_000)
 })
+test('buildUpdate: camelCase whitelist entries still match', () => {
+  // Regression: lowercasing only the incoming key meant "ownerName" could never
+  // be found in the whitelist, so owner details were silently dropped.
+  const u = buildUpdate({ ownerName: 'Mr Khoury', ownerContact: '03111222' }, PROPERTY_FIELDS)
+  assert.equal(u.extras.ownerName, 'Mr Khoury')
+  assert.equal(u.extras.ownerContact, '03111222')
+  assert.deepEqual(u.rejected, [])
+})
+test('buildUpdate: camelCase matches regardless of the caller\'s casing', () => {
+  assert.equal(buildUpdate({ OWNERNAME: 'X' }, PROPERTY_FIELDS).extras.ownerName, 'X')
+  assert.equal(buildUpdate({ ownername: 'X' }, PROPERTY_FIELDS).extras.ownerName, 'X')
+})
 test('buildUpdate: no fields at all is empty, not an error', () => {
   const u = buildUpdate(undefined, CLIENT_FIELDS)
   assert.equal(hasChanges(u), false)

@@ -6,6 +6,10 @@
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
+    // Lets a module under unit test import a sibling with an explicit .ts
+    // extension. The test runner strips types without resolving the "@/" alias,
+    // so runtime cross-imports in tested modules must be relative and extended.
+    "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",

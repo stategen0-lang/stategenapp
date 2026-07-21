@@ -22,6 +22,8 @@ export const HELP_TEXT = [
   '• "spoke to Ahmed, viewing Saturday" — log a call',
   '• "help" — this message',
   '',
+  'Managers can also ask "how is the team doing" or "what follow-ups are overdue".',
+  '',
   'Changes always ask you to reply YES before anything is saved.',
 ].join('\n')
 

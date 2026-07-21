@@ -69,6 +69,8 @@ export function toEnum(allowed: string[]) {
 
 const CLIENT_STATUSES = ['Searching', 'Viewing', 'Negotiating', 'Closed', 'Inactive']
 const PROPERTY_STATUSES = ['Available', 'Reserved', 'Sold', 'Rented']
+export const PROPERTY_TYPES = ['Appartement', 'Villa', 'Office', 'Shop', 'Land', 'Chalet', 'Building']
+export const TRANSACTIONS = ['For Sale', 'For Rent']
 
 // ── What a WhatsApp message is allowed to change ────────────────────────────
 
@@ -97,9 +99,13 @@ export const PROPERTY_FIELDS: Record<string, FieldSpec> = {
   city:         { column: 'Location',     label: 'City',         coerce: toText },
   neighborhood: { column: 'Neighborhood', label: 'Neighbourhood', coerce: toText },
   district:     { column: 'Neighborhood', label: 'Neighbourhood', coerce: toText },
-  // Lives in the Amenities JSON blob, not a column.
+  // These live in the Amenities JSON blob, not in columns of their own.
   rent:         { column: 'extras.rent',  label: 'Rent (/mo)',   coerce: toMoney },
   notes:        { column: 'extras.notes', label: 'Notes',        coerce: toText },
+  type:         { column: 'extras.type',        label: 'Type',        coerce: toEnum(PROPERTY_TYPES), oneOf: PROPERTY_TYPES },
+  transaction:  { column: 'extras.transaction', label: 'Listing',     coerce: toEnum(TRANSACTIONS), oneOf: TRANSACTIONS },
+  ownerName:    { column: 'extras.ownerName',    label: 'Owner',      coerce: toText },
+  ownerContact: { column: 'extras.ownerContact', label: 'Owner phone', coerce: toText },
 }
 
 // ── Building an update ──────────────────────────────────────────────────────
@@ -122,8 +128,13 @@ export function buildUpdate(
   const out: BuiltUpdate = { columns: {}, extras: {}, changes: [], rejected: [] }
   if (!fields) return out
 
+  // Index by lowercased name so lookup is case-insensitive in BOTH directions.
+  // Lowercasing only the incoming key silently dropped every camelCase entry in
+  // the whitelist — "ownerName" never matched, so owner details vanished.
+  const index = new Map(Object.entries(allowed).map(([k, v]) => [k.toLowerCase(), v]))
+
   for (const [rawKey, rawValue] of Object.entries(fields)) {
-    const spec = allowed[rawKey.trim().toLowerCase()]
+    const spec = index.get(rawKey.trim().toLowerCase())
     if (!spec) { out.rejected.push(rawKey); continue }
 
     const value = spec.coerce(rawValue)

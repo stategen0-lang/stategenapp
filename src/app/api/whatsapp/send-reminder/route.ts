@@ -41,13 +41,29 @@ export async function POST(req: NextRequest) {
 
   const admin = createAdminClient()
 
+  // ── Housekeeping (spec Phase 5) ───────────────────────────────────────────
+  // Expired confirmations are already ignored at read time, but they accumulate
+  // forever otherwise. Abandoned half-finished flows are cleared after a day so
+  // they can't resume under an unrelated message weeks later.
+  const cleanup = { pendingActions: 0, staleFlows: 0 }
+  if (!dry) {
+    const { data: expired } = await admin
+      .from('pending_actions').delete().lt('expires_at', now.toISOString()).select('id')
+    cleanup.pendingActions = expired?.length ?? 0
+
+    const dayAgo = new Date(now.getTime() - 24 * 3600_000).toISOString()
+    const { data: stale } = await admin
+      .from('conversation_state').delete().lt('updated_at', dayAgo).select('id')
+    cleanup.staleFlows = stale?.length ?? 0
+  }
+
   // ── Agents who can actually receive a message ─────────────────────────────
   const { data: profiles } = await admin
     .from('Profiles')
     .select('id, company_id, role, agent_code, Full_name, whatsapp_number')
     .not('whatsapp_number', 'is', null)
 
-  if (!profiles?.length) return Response.json({ sent: 0, note: 'No agents have a WhatsApp number registered.' })
+  if (!profiles?.length) return Response.json({ sent: 0, cleanup, note: 'No agents have a WhatsApp number registered.' })
 
   const results: { agent: string; client: string; status: string }[] = []
 
@@ -142,7 +158,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return Response.json({ dry, staleAfterDays: STALE_AFTER_DAYS, count: results.length, results })
+  return Response.json({ dry, staleAfterDays: STALE_AFTER_DAYS, cleanup, count: results.length, results })
 }
 
 // Vercel Cron issues GET; accept both so the schedule and manual runs agree.

@@ -17,6 +17,8 @@ export type Intent =
   | 'create_property'
   | 'query_client'
   | 'query_property'
+  | 'query_agents'
+  | 'query_overdue'
   | 'confirm'
   | 'cancel'
   | 'help'
@@ -40,8 +42,8 @@ export interface IntentResult {
 
 const VALID: Intent[] = [
   'reminder_response', 'feedback', 'update_client', 'update_property',
-  'create_property', 'query_client', 'query_property', 'confirm', 'cancel',
-  'help', 'unknown',
+  'create_property', 'query_client', 'query_property', 'query_agents',
+  'query_overdue', 'confirm', 'cancel', 'help', 'unknown',
 ]
 
 /**
@@ -88,6 +90,8 @@ Reply with a single JSON object and nothing else.
 Intents:
 - query_client: asking for information about a client ("send me info on Ahmed")
 - query_property: asking about listings or matches ("what matches a 500k budget in Beirut")
+- query_agents: asking how the team or a set of agents is performing ("how is the team doing", "agent activity")
+- query_overdue: asking which follow-ups or reminders are late ("what follow-ups are overdue")
 - update_client: wants to change a client record ("update Ahmed's budget to 400k")
 - update_property: wants to change a listing ("mark property #23 as sold")
 - create_property: wants to add a new listing (describes a property to add)
