@@ -271,6 +271,7 @@ export async function handleReminderReply(
   profile: Profile,
   action: ReminderAction,
   snoozeDays: number | undefined,
+  rawMessage = '',
 ): Promise<string | null> {
   const cutoff = new Date(Date.now() - REMINDER_REPLY_WINDOW_DAYS * 86_400_000).toISOString()
 
@@ -294,7 +295,7 @@ export async function handleReminderReply(
 
   if (!row) return null
 
-  const outcome = reminderOutcome(action, row['Client Name'] as string, snoozeDays)
+  const outcome = reminderOutcome(action, row['Client Name'] as string, snoozeDays, new Date(), rawMessage)
   if (!outcome) return null
 
   // Permission is still checked: a reminder is not a licence to edit a record

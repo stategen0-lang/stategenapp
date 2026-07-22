@@ -6,7 +6,65 @@ import assert from 'node:assert/strict'
 import {
   CREATE_PROPERTY_STEPS, nextStep, isComplete, applyAnswer,
   seedContext, progress, derivedTitle, isStartListing,
+  coerceType, extrasOf, answersOf, EXTRA_KEY,
 } from './flows.ts'
+
+// ── Property type, as people actually write it ──────────────────────────────
+// From a real session: the agent answered "Apartment" and was told the type
+// wasn't recognised, because the app stores the French "Appartement".
+test('coerceType: accepts the English spelling', () => {
+  assert.equal(coerceType('Apartment'), 'Appartement')
+  assert.equal(coerceType('apartment'), 'Appartement')
+  assert.equal(coerceType('appartment'), 'Appartement')
+  assert.equal(coerceType('flat'), 'Appartement')
+  assert.equal(coerceType('apt'), 'Appartement')
+})
+test('coerceType: still accepts the canonical spellings', () => {
+  for (const t of ['Appartement', 'Villa', 'Office', 'Shop', 'Land', 'Chalet', 'Building']) {
+    assert.equal(coerceType(t), t)
+    assert.equal(coerceType(t.toLowerCase()), t)
+  }
+})
+test('coerceType: other common words', () => {
+  assert.equal(coerceType('house'), 'Villa')
+  assert.equal(coerceType('store'), 'Shop')
+  assert.equal(coerceType('plot'), 'Land')
+})
+test('coerceType: finds the type inside a longer answer', () => {
+  assert.equal(coerceType('a 3 bed apartment'), 'Appartement')
+  assert.equal(coerceType('its a villa'), 'Villa')
+})
+test('coerceType: rejects what genuinely is not a type', () => {
+  assert.equal(coerceType('spaceship'), null)
+  assert.equal(coerceType(''), null)
+  assert.equal(coerceType(null), null)
+})
+
+// ── Details volunteered but never asked about ───────────────────────────────
+test('seedContext: keeps fields the flow does not ask about', () => {
+  // Real case: "3 bed 3 bath 2 parking 140sqm" saved only the bedrooms.
+  const ctx = seedContext({ beds: 3, baths: 3, size: 140, parkings: 2 })
+  assert.equal(ctx.beds, 3)
+  assert.deepEqual(extrasOf(ctx), { baths: 3, size: 140 })
+})
+test('extras do not count as answered questions', () => {
+  const ctx = seedContext({ beds: 3, baths: 2 })
+  assert.equal(nextStep(ctx).key, 'type')          // still asks the unanswered ones
+  assert.equal(EXTRA_KEY in answersOf(ctx), false)
+})
+test('extras do not inflate the progress counter', () => {
+  const ctx = seedContext({ beds: 3, baths: 2, size: 140 })
+  assert.equal(progress(ctx), `(1/${CREATE_PROPERTY_STEPS.length})`)
+})
+test('seedContext: no extras means no extras key', () => {
+  assert.equal(EXTRA_KEY in seedContext({ beds: 3 }), false)
+  assert.deepEqual(extrasOf(seedContext({ beds: 3 })), {})
+})
+test('answersOf / extrasOf tolerate a missing or malformed bag', () => {
+  assert.deepEqual(extrasOf({}), {})
+  assert.deepEqual(extrasOf({ [EXTRA_KEY]: 'oops' }), {})
+  assert.deepEqual(answersOf({ beds: 3 }), { beds: 3 })
+})
 
 // ── Starting the flow without a model round-trip ────────────────────────────
 test('isStartListing: recognises the obvious phrasings', () => {

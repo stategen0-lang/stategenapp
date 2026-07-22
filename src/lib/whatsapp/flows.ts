@@ -12,7 +12,38 @@
 // Relative, not "@/": these are runtime values, and the unit-test runner strips
 // types without resolving the path alias — an aliased value import here would
 // make this module unloadable in tests (the same trap as intent.ts).
-import { toMoney, toCount, toText, toEnum, PROPERTY_TYPES, TRANSACTIONS } from './writes.ts'
+import { toMoney, toCount, toText, toEnum, PROPERTY_FIELDS, PROPERTY_TYPES, TRANSACTIONS } from './writes.ts'
+
+/**
+ * Property type, tolerant of how people actually write it.
+ *
+ * The app stores the French spelling "Appartement" throughout. An agent who
+ * typed the obvious English "Apartment" was told "I didn't recognise that type"
+ * and had to guess the app's internal spelling — which happened on the first
+ * real listing anyone tried to add over WhatsApp.
+ */
+const TYPE_SYNONYMS: Record<string, string> = {
+  apartment: 'Appartement', appartment: 'Appartement', apt: 'Appartement',
+  flat: 'Appartement', condo: 'Appartement', studio: 'Appartement',
+  house: 'Villa', home: 'Villa', duplex: 'Villa',
+  store: 'Shop', retail: 'Shop', showroom: 'Shop',
+  plot: 'Land', terrain: 'Land',
+  offices: 'Office', chalets: 'Chalet', buildings: 'Building',
+}
+
+export function coerceType(v: unknown): string | null {
+  const s = String(v ?? '').trim().toLowerCase()
+  if (!s) return null
+  const exact = toEnum(PROPERTY_TYPES)(s)
+  if (exact) return exact
+  if (TYPE_SYNONYMS[s]) return TYPE_SYNONYMS[s]
+  // "3 bed apartment" — find a type word anywhere in the answer.
+  for (const [word, canonical] of Object.entries(TYPE_SYNONYMS)) {
+    if (new RegExp(`\\b${word}\\b`, 'i').test(s)) return canonical
+  }
+  const named = PROPERTY_TYPES.find(t => new RegExp(`\\b${t}\\b`, 'i').test(s))
+  return named ?? null
+}
 
 export interface FlowStep {
   key: string
@@ -32,7 +63,7 @@ export const CREATE_PROPERTY_STEPS: FlowStep[] = [
   {
     key: 'type',
     question: `What type of property? (${PROPERTY_TYPES.join(', ')})`,
-    coerce: toEnum(PROPERTY_TYPES),
+    coerce: coerceType,
     retry: `I didn't recognise that type. Choose one: ${PROPERTY_TYPES.join(', ')}.`,
   },
   {
@@ -130,6 +161,11 @@ export function seedContext(fields: Record<string, unknown> | undefined, steps: 
   const out: FlowContext = {}
   if (!fields) return out
 
+  // Details the agent volunteered that the flow never asks about — bathrooms,
+  // size, parking. Dropping them meant "3 bed 3 bath 2 parking 140sqm" saved
+  // only the bedrooms, and the agent had no way to tell.
+  const extra: Record<string, unknown> = {}
+
   // Aliases the model tends to emit for our step keys.
   const alias: Record<string, string> = {
     bedrooms: 'beds', district: 'neighborhood', city: 'location',
@@ -140,11 +176,35 @@ export function seedContext(fields: Record<string, unknown> | undefined, steps: 
   for (const [rawKey, rawValue] of Object.entries(fields)) {
     const key = alias[rawKey] ?? rawKey
     const step = steps.find(s => s.key === key)
-    if (!step) continue
-    const value = step.coerce(rawValue)
-    if (value !== null) out[key] = value
+    if (step) {
+      const value = step.coerce(rawValue)
+      if (value !== null) out[key] = value
+      continue
+    }
+    // Not a question we ask, but still a field the listing supports.
+    const spec = Object.entries(PROPERTY_FIELDS).find(([k]) => k.toLowerCase() === key.toLowerCase())?.[1]
+    if (spec) {
+      const value = spec.coerce(rawValue)
+      if (value !== null) extra[key] = value
+    }
   }
+
+  if (Object.keys(extra).length) out[EXTRA_KEY] = extra
   return out
+}
+
+/** Fields collected but never asked about; merged in when the listing is saved. */
+export const EXTRA_KEY = '__extra'
+
+export function extrasOf(context: FlowContext): Record<string, unknown> {
+  const e = context[EXTRA_KEY]
+  return e && typeof e === 'object' && !Array.isArray(e) ? (e as Record<string, unknown>) : {}
+}
+
+/** The answered questions, without the extras bag. */
+export function answersOf(context: FlowContext): FlowContext {
+  const { [EXTRA_KEY]: _ignored, ...rest } = context
+  return rest
 }
 
 /** Progress line, so the agent can see how much is left. */

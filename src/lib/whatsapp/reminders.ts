@@ -101,6 +101,23 @@ export interface ReminderOutcome {
   reply: string
 }
 
+/**
+ * The substance of a reminder reply beyond its keyword. "done" yields nothing;
+ * "called Ahmed, wants a viewing Saturday" yields the useful remainder.
+ */
+export function extraDetail(raw: string | null | undefined): string {
+  const text = (raw ?? '').trim()
+  if (!text) return ''
+  const stripped = text
+    // Leading action word and any client name that follows it.
+    .replace(/^(done|called|did it|spoke( to)?|contacted|finished|complete[d]?|snoozed?|not interested)\b/i, '')
+    .replace(/^\s*(to|with)\b/i, '')
+    .replace(/^[\s,:;-]+/, '')
+    .trim()
+  // A bare keyword leaves nothing; a couple of stray characters aren't a note.
+  return stripped.length > 3 ? stripped.slice(0, 300) : ''
+}
+
 /** Date `days` from `from` as YYYY-MM-DD. */
 function addDays(from: Date, days: number): string {
   const d = new Date(from.getTime())
@@ -121,13 +138,22 @@ export function reminderOutcome(
   clientName: string,
   snoozeDays = 3,
   now: Date = new Date(),
+  /** The agent's full message, so detail beyond the keyword isn't discarded. */
+  rawMessage = '',
 ): ReminderOutcome | null {
+  // "called Ahmed, wants a viewing Saturday" is both a reminder reply and a
+  // piece of feedback. Recording only "Called" threw away the part the agent
+  // actually bothered to type.
+  const detail = extraDetail(rawMessage)
+
   switch (action) {
     case 'done':
       return {
         status: 'done',
-        logEntry: 'Called (via WhatsApp reminder)',
-        reply: `Noted — ${clientName} marked as contacted.`,
+        logEntry: detail ? `Called — ${detail}` : 'Called (via WhatsApp reminder)',
+        reply: detail
+          ? `Noted — ${clientName} marked as contacted, and I saved your note.`
+          : `Noted — ${clientName} marked as contacted.`,
       }
     case 'snooze': {
       const dueDate = addDays(now, snoozeDays)

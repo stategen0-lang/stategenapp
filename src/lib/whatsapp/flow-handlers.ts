@@ -7,7 +7,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   CREATE_PROPERTY_STEPS, nextStep, applyAnswer, seedContext,
-  progress, derivedTitle, type FlowContext,
+  progress, derivedTitle, answersOf, extrasOf, type FlowContext,
 } from '@/lib/whatsapp/flows'
 import { buildUpdate, confirmationText, PROPERTY_FIELDS } from '@/lib/whatsapp/writes'
 import { stage, type Profile } from '@/lib/whatsapp/write-handlers'
@@ -35,7 +35,9 @@ async function saveFlow(admin: SupabaseClient, profile: Profile, context: FlowCo
 async function finish(admin: SupabaseClient, profile: Profile, context: FlowContext): Promise<string> {
   await clearFlow(admin, profile.id)
 
-  const built = buildUpdate(context as Record<string, unknown>, PROPERTY_FIELDS)
+  // Answered questions plus anything the agent volunteered up front that the
+  // flow never asked about (bathrooms, size, parking).
+  const built = buildUpdate({ ...answersOf(context), ...extrasOf(context) }, PROPERTY_FIELDS)
   const columns: Record<string, unknown> = { ...built.columns, company_id: profile.company_id }
   if (!columns.Title) columns.Title = derivedTitle(context)
 
@@ -73,7 +75,8 @@ export async function startCreatePropertyFlow(
   if (!step) return finish(admin, profile, context)
 
   await saveFlow(admin, profile, context, step.key)
-  const known = Object.keys(context).length
+  // Count real details, not the extras bag (which is one key holding several).
+  const known = Object.keys(answersOf(context)).length + Object.keys(extrasOf(context)).length
   const opener = known
     ? `Adding a listing — got ${known} detail${known > 1 ? 's' : ''} so far.`
     : "Adding a listing. I'll ask a few questions — reply \"cancel\" to stop."

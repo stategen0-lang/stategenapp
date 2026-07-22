@@ -5,7 +5,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  daysSince, lastContactAt, isDue, reminderText, reminderOutcome,
+  daysSince, lastContactAt, isDue, reminderText, reminderOutcome, extraDetail,
   STALE_AFTER_DAYS,
 } from './reminders.ts'
 
@@ -118,4 +118,30 @@ test('reminderOutcome: not interested deactivates the client', () => {
 })
 test('reminderOutcome: an unrecognised reply produces nothing to apply', () => {
   assert.equal(reminderOutcome('unknown', 'Ahmed', 3, NOW), null)
+})
+
+// ── Detail carried on a reminder reply ──────────────────────────────────────
+// "called Ahmed, wants a viewing Saturday" is a reminder reply AND feedback.
+// Recording only "Called" discarded the part the agent bothered to type.
+test('extraDetail: pulls the note out of a reply', () => {
+  assert.equal(extraDetail('called Ahmed, wants a viewing on Saturday'), 'Ahmed, wants a viewing on Saturday')
+  assert.equal(extraDetail('spoke to him — asking for a lower price'), 'him — asking for a lower price')
+})
+test('extraDetail: a bare keyword carries no note', () => {
+  for (const s of ['done', 'Done', 'called', 'not interested', 'snooze', '']) {
+    assert.equal(extraDetail(s), '', s)
+  }
+})
+test('extraDetail: is capped so a long message cannot bloat the row', () => {
+  assert.ok(extraDetail('called ' + 'x'.repeat(900)).length <= 300)
+})
+test('reminderOutcome: keeps the note when there is one', () => {
+  const o = reminderOutcome('done', 'Ahmed', 3, NOW, 'called Ahmed, wants a viewing Saturday')
+  assert.match(o.logEntry, /wants a viewing Saturday/)
+  assert.match(o.reply, /saved your note/i)
+})
+test('reminderOutcome: bare "done" keeps the plain log entry', () => {
+  const o = reminderOutcome('done', 'Ahmed', 3, NOW, 'done')
+  assert.equal(o.logEntry, 'Called (via WhatsApp reminder)')
+  assert.equal(/saved your note/i.test(o.reply), false)
 })

@@ -59,6 +59,31 @@ export function toText(v: unknown): string | null {
   return s ? s.slice(0, 500) : null
 }
 
+/**
+ * A place name, tidied for display. Typed on a phone it arrives as "zekrit",
+ * which then becomes the listing title ("3 bed Appartement in zekrit") and is
+ * shown throughout the app.
+ *
+ * Words that already carry a capital are left alone, so "Achrafieh" and
+ * "AUB area" survive untouched, and Arabic/French particles stay lowercase the
+ * way Lebanese place names are actually written — "Sin el Fil", not "Sin El Fil".
+ */
+const SMALL_WORDS = new Set(['el', 'al', 'le', 'la', 'les', 'de', 'du', 'des', 'the', 'of', 'bel'])
+
+export function toPlace(v: unknown): string | null {
+  const s = toText(v)
+  if (!s) return null
+  return s
+    .split(/\s+/)
+    .map((word, i) => {
+      if (/[A-ZÀ-Þ]/.test(word)) return word
+      const lower = word.toLowerCase()
+      if (i > 0 && SMALL_WORDS.has(lower)) return lower
+      return lower.charAt(0).toUpperCase() + lower.slice(1)
+    })
+    .join(' ')
+}
+
 /** Case-insensitive match against an allowed set, returning the canonical form. */
 export function toEnum(allowed: string[]) {
   return (v: unknown): string | null => {
@@ -79,7 +104,7 @@ export const CLIENT_FIELDS: Record<string, FieldSpec> = {
   // so the two can never disagree.
   budget:   { column: 'budget_max',        label: 'Budget',    coerce: toMoney },
   status:   { column: 'status',            label: 'Status',    coerce: toEnum(CLIENT_STATUSES), oneOf: CLIENT_STATUSES },
-  location: { column: 'prefered-location', label: 'Wants',     coerce: toText },
+  location: { column: 'prefered-location', label: 'Wants',     coerce: toPlace },
   beds:     { column: 'bedrooms',          label: 'Bedrooms',  coerce: toCount },
   bedrooms: { column: 'bedrooms',          label: 'Bedrooms',  coerce: toCount },
   phone:    { column: 'client phone',      label: 'Phone',     coerce: toText },
@@ -95,10 +120,10 @@ export const PROPERTY_FIELDS: Record<string, FieldSpec> = {
   baths:        { column: 'bathrooms',    label: 'Bathrooms',    coerce: toCount },
   bathrooms:    { column: 'bathrooms',    label: 'Bathrooms',    coerce: toCount },
   title:        { column: 'Title',        label: 'Title',        coerce: toText },
-  location:     { column: 'Location',     label: 'City',         coerce: toText },
-  city:         { column: 'Location',     label: 'City',         coerce: toText },
-  neighborhood: { column: 'Neighborhood', label: 'Neighbourhood', coerce: toText },
-  district:     { column: 'Neighborhood', label: 'Neighbourhood', coerce: toText },
+  location:     { column: 'Location',     label: 'City',         coerce: toPlace },
+  city:         { column: 'Location',     label: 'City',         coerce: toPlace },
+  neighborhood: { column: 'Neighborhood', label: 'Neighbourhood', coerce: toPlace },
+  district:     { column: 'Neighborhood', label: 'Neighbourhood', coerce: toPlace },
   // These live in the Amenities JSON blob, not in columns of their own.
   rent:         { column: 'extras.rent',  label: 'Rent (/mo)',   coerce: toMoney },
   notes:        { column: 'extras.notes', label: 'Notes',        coerce: toText },

@@ -107,7 +107,7 @@ async function route(
   // falls through to normal classification.
   const reminderReply = parseReminderReply(body)
   if (reminderReply.action !== 'unknown') {
-    const reminderAnswer = await handleReminderReply(admin, profile, reminderReply.action, reminderReply.snoozeDays)
+    const reminderAnswer = await handleReminderReply(admin, profile, reminderReply.action, reminderReply.snoozeDays, body)
     if (reminderAnswer !== null) return { intent: 'reminder_response', answer: reminderAnswer }
   }
 

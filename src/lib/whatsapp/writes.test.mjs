@@ -6,7 +6,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  toMoney, toCount, toText, toEnum,
+  toMoney, toCount, toText, toEnum, toPlace,
   buildUpdate, buildNewProperty, hasChanges,
   mergeExtras, appendLog, confirmationText,
   CLIENT_FIELDS, PROPERTY_FIELDS,
@@ -40,6 +40,26 @@ test('toText: trims, drops blanks, caps length', () => {
   assert.equal(toText('   '), null)
   assert.equal(toText('x'.repeat(900)).length, 500)
 })
+test('toPlace: capitalises a name typed in lower case', () => {
+  // From a real session: "zekrit" became the listing title "3 bed Appartement
+  // in zekrit", which then showed that way throughout the app.
+  assert.equal(toPlace('zekrit'), 'Zekrit')
+  assert.equal(toPlace('  beirut  '), 'Beirut')
+})
+test('toPlace: keeps Lebanese particles lower case', () => {
+  assert.equal(toPlace('sin el fil'), 'Sin el Fil')
+  assert.equal(toPlace('jal el dib'), 'Jal el Dib')
+})
+test('toPlace: never re-cases a word that already has a capital', () => {
+  assert.equal(toPlace('Achrafieh'), 'Achrafieh')
+  assert.equal(toPlace('Sin El Fil'), 'Sin El Fil')   // author's choice preserved
+  assert.match(toPlace('AUB area'), /^AUB /)          // acronym not lowercased
+})
+test('toPlace: rejects blanks like toText', () => {
+  assert.equal(toPlace('   '), null)
+  assert.equal(toPlace(null), null)
+})
+
 test('toEnum: case-insensitive, returns the canonical spelling', () => {
   const f = toEnum(['Available', 'Sold'])
   assert.equal(f('sold'), 'Sold')
