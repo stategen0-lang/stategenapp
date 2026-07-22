@@ -8,6 +8,7 @@ import {
   Building2,
   Users,
   KanbanSquare,
+  CalendarDays,
   BarChart3,
   User,
   LogOut,
@@ -20,6 +21,7 @@ const navItems = [
   { href: '/properties',  label: 'Properties', icon: Building2 },
   { href: '/clients',     label: 'Clients',    icon: Users },
   { href: '/pipeline',    label: 'Pipeline',   icon: KanbanSquare },
+  { href: '/calendar',    label: 'Calendar',   icon: CalendarDays },
   { href: '/analytics',   label: 'Reports',    icon: BarChart3 },
   { href: '/settings',    label: 'Profile',    icon: User },
 ]

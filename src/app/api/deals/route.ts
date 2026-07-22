@@ -4,8 +4,8 @@ import { isStage } from '@/lib/pipeline'
 import { recalculateScores } from '@/lib/score-engine'
 import { getSession } from '@/lib/session'
 import { isManager, canSeeDeal, canSeeClientPII, maskClientName } from '@/lib/permissions'
-import { buildRoster, type RosterAgent } from '@/lib/agent-roster'
-import { AGENTS } from '@/lib/data'
+import { type RosterAgent } from '@/lib/agent-roster'
+import { loadCompanyRoster } from '@/lib/agent-roster-server'
 
 const COMPANY_ID = Number(process.env.DEMO_COMPANY_ID ?? 1)
 
@@ -80,17 +80,9 @@ export async function GET(req: NextRequest) {
     // The roster a manager can filter by, derived from real data rather than a
     // hardcoded list — an agent missing from that list was unfilterable, and
     // their deals rendered under the first demo agent's name.
-    const { data: profiles } = await supabase
-      .from('Profiles')
-      .select('agent_code, Full_name')
-      .eq('company_id', session.companyId)
-
-    let agents: RosterAgent[] = buildRoster(
-      (profiles ?? []) as { agent_code: string | null; Full_name: string | null }[],
-      // Unfiltered ids, so switching the filter never shrinks the roster.
-      (data ?? []).map(r => (r as Row).agent_id as string),
-      AGENTS,
-    )
+    // Shared with the calendar so both screens agree on who exists, and so the
+    // roster never shrinks just because the board is filtered.
+    let agents: RosterAgent[] = await loadCompanyRoster(supabase, session.companyId)
 
     // An agent gets only their own entry. They still need it — the board draws
     // each card's avatar from the roster, and an empty one rendered every card
