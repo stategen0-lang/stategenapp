@@ -59,6 +59,24 @@ export function quickIntent(raw: string | null | undefined): IntentResult | null
     return { intent: 'help' }
   }
 
+  // ── "add a viewing with Ahmed tomorrow at 3pm" ────────────────────────────
+  // Checked before the schedule query because "schedule" is both a verb and a
+  // noun: "schedule a call" books one, "my schedule" asks for the list. This
+  // needs a leading command verb AND a calendar noun, so the query form can't
+  // match it. The listing exclusion keeps "add listing" out.
+  if (/^(add|book|schedule|set up|put in|create)\b/i.test(text)
+      && /\b(event|viewing|meeting|call|appointment|follow[- ]?up|reminder to)\b/i.test(text)
+      && !/\b(listing|propert)/i.test(text)) {
+    return { intent: 'create_event', notes: text }
+  }
+
+  // ── "what's on today" / "my schedule tomorrow" ────────────────────────────
+  if (/\b(schedule|calendar|agenda|diary)\b/i.test(text)
+      || /\bwhat('?s| is)?\s+(on|up|happening)\b/i.test(text)
+      || /\bany(thing)?\s+(on|booked|scheduled)\b/i.test(text)) {
+    return { intent: 'query_schedule', notes: text }
+  }
+
   // ── manager reports ───────────────────────────────────────────────────────
   if (/\b(team|agents?)\b.*\b(doing|activity|performance|stats)\b/i.test(text)
       || /\b(agent activity|team report|how are (the )?agents)\b/i.test(text)) {

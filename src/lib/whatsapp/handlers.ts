@@ -20,6 +20,8 @@ export const HELP_TEXT = [
   '• "mark property #23 as sold" — update a listing',
   '• "add listing: 3 bed in Hamra, Beirut, 450k" — new listing',
   '• "spoke to Ahmed, viewing Saturday" — log a call',
+  '• "book a viewing tomorrow at 3pm" — add to your calendar',
+  '• "what\'s on today" — your schedule',
   '• "help" — this message',
   '',
   'Managers can also ask "how is the team doing" or "what follow-ups are overdue".',

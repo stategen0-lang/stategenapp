@@ -6,6 +6,7 @@ import {
   isDue, lastContactAt, reminderText, STALE_AFTER_DAYS,
   type ReminderClient,
 } from '@/lib/whatsapp/reminders'
+import { todaysAgenda } from '@/lib/whatsapp/calendar-handlers'
 
 // Runs from Vercel Cron (see vercel.json). The spec uses Supabase pg_cron; this
 // app is deployed on Vercel, so the schedule lives there and calls this route.
@@ -66,7 +67,7 @@ export async function POST(req: NextRequest) {
 
   if (!profiles?.length) return Response.json({ sent: 0, cleanup, note: 'No agents have a WhatsApp number registered.' })
 
-  const results: { agent: string; client: string; status: string }[] = []
+  const results: { agent: string; client: string; events: number; status: string }[] = []
 
   for (const profile of profiles) {
     // ── Reminders already scheduled and due ─────────────────────────────────
@@ -113,50 +114,64 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // One message per agent per day at most: a morning of separate pings for
-    // eight stale clients gets the bot muted.
+    // ── Today's calendar ────────────────────────────────────────────────────
+    // Folded into the same message rather than sent separately: one message per
+    // agent per day is the rule, and the Twilio account is metered.
+    const agenda = await todaysAgenda(admin, profile.id, now)
+
+    // At most one client nudge — a morning of eight separate pings gets the
+    // bot muted.
     const top = candidates
-      .sort((a, b) => (a.client.lastContactAt ?? '').localeCompare(b.client.lastContactAt ?? ''))
-      .slice(0, 1)
+      .sort((a, b) => (a.client.lastContactAt ?? '').localeCompare(b.client.lastContactAt ?? ''))[0]
 
-    for (const { client, reminderId } of top) {
-      results.push({ agent: profile.Full_name ?? profile.id, client: client.name, status: dry ? 'dry-run' : 'sending' })
-      if (dry) continue
+    const sections = [agenda, top ? reminderText(top.client, now) : ''].filter(Boolean)
+    // An agent with an empty calendar and nobody to chase hears nothing.
+    if (!sections.length) continue
 
-      const sent = await sendWhatsApp(`whatsapp:${profile.whatsapp_number}`, reminderText(client, now))
-      if (!sent.ok) {
-        console.error('[whatsapp] reminder send failed', sent.error)
-        results[results.length - 1].status = `failed: ${sent.error}`
-        continue
-      }
-      results[results.length - 1].status = 'sent'
+    const message = sections.join('\n\n')
+    results.push({
+      agent: profile.Full_name ?? profile.id,
+      client: top?.client.name ?? '—',
+      events: agenda ? agenda.split('\n').length - 1 : 0,
+      status: dry ? 'dry-run' : 'sending',
+    })
+    if (dry) continue
 
-      // Record which client the reminder was about, so the agent's reply
-      // ("done") has something to attach to.
-      if (reminderId) {
+    const sent = await sendWhatsApp(`whatsapp:${profile.whatsapp_number}`, message)
+    if (!sent.ok) {
+      console.error('[whatsapp] reminder send failed', sent.error)
+      results[results.length - 1].status = `failed: ${sent.error}`
+      continue
+    }
+    results[results.length - 1].status = 'sent'
+
+    // Record which client the nudge was about, so a reply ("done") has
+    // something to attach to. Only when there was one.
+    if (top) {
+      if (top.reminderId) {
         await admin.from('reminder_schedule')
           .update({ status: 'sent', sent_at: now.toISOString() })
-          .eq('id', reminderId)
+          .eq('id', top.reminderId)
       } else {
         await admin.from('reminder_schedule').insert({
           company_id: profile.company_id,
           profile_id: profile.id,
-          client_id: client.id,
+          client_id: top.client.id,
           due_date: today,
           status: 'sent',
           sent_at: now.toISOString(),
         })
       }
-
-      await admin.from('whatsapp_logs').insert({
-        company_id: profile.company_id,
-        profile_id: profile.id,
-        from_number: profile.whatsapp_number,
-        direction: 'outbound',
-        message: reminderText(client, now),
-        intent: 'reminder',
-      })
     }
+
+    await admin.from('whatsapp_logs').insert({
+      company_id: profile.company_id,
+      profile_id: profile.id,
+      from_number: profile.whatsapp_number,
+      direction: 'outbound',
+      message,
+      intent: 'reminder',
+    })
   }
 
   return Response.json({ dry, staleAfterDays: STALE_AFTER_DAYS, cleanup, count: results.length, results })

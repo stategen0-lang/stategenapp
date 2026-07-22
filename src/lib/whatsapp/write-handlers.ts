@@ -55,13 +55,17 @@ function clientLabel(profile: Profile, row: Record<string, unknown>): string {
 
 /** What a pending_actions row carries between the confirmation and the write. */
 export interface Payload {
-  table: 'client_requests' | 'Properties'
+  table: 'client_requests' | 'Properties' | 'calendar_events'
   /** Row to update; absent for an insert. */
-  id?: number
+  id?: number | string
   columns: Record<string, unknown>
   extras: Record<string, unknown>
-  /** Which column holds the JSON blob for this table. */
-  blobColumn: 'notes' | 'Amenities'
+  /**
+   * Which column holds the JSON blob for this table, when it has one.
+   * calendar_events has no blob — writing "{}" into a plain text column is not
+   * the same as leaving it alone.
+   */
+  blobColumn?: 'notes' | 'Amenities'
   /** Free-text note to append to the client's log (feedback flow). */
   logEntry?: string
   label: string
@@ -337,12 +341,16 @@ export async function applyPendingAction(
   if (!p || !p.table) return 'That request expired. Please send it again.'
 
   try {
-    // Insert (new listing)
+    // Insert (new listing, or a calendar event)
     if (!p.id) {
-      const insert = { ...p.columns, [p.blobColumn]: JSON.stringify(p.extras) }
+      const insert = p.blobColumn
+        ? { ...p.columns, [p.blobColumn]: JSON.stringify(p.extras) }
+        : { ...p.columns }
       const { data, error } = await admin.from(p.table).insert(insert).select('id').maybeSingle()
       if (error) throw error
-      return `Saved — listing #${data?.id} created.`
+      return p.table === 'calendar_events'
+        ? `Saved — "${p.label}" is on your calendar.`
+        : `Saved — listing #${data?.id} created.`
     }
 
     // Update: re-read the row so permission is checked against current state
@@ -356,7 +364,7 @@ export async function applyPendingAction(
     if (readErr) throw readErr
     if (!row) return 'That record no longer exists.'
 
-    const owner = agentOf(row, p.blobColumn)
+    const owner = p.blobColumn ? agentOf(row, p.blobColumn) : null
     const allowed = p.table === 'Properties'
       ? canEditProperty(toSession(profile), owner)
       : canEditClient(toSession(profile), owner)
@@ -364,12 +372,16 @@ export async function applyPendingAction(
 
     const columns: Record<string, unknown> = { ...p.columns }
 
-    if (p.logEntry) {
-      // Feedback merges the note into the same blob as any field changes.
-      const withLog = appendLog(row[p.blobColumn], p.logEntry)
-      columns[p.blobColumn] = mergeExtras(withLog, p.extras)
-    } else if (Object.keys(p.extras).length) {
-      columns[p.blobColumn] = mergeExtras(row[p.blobColumn], p.extras)
+    // Only tables that carry a JSON blob get the merge treatment.
+    const blob = p.blobColumn
+    if (blob) {
+      if (p.logEntry) {
+        // Feedback merges the note into the same blob as any field changes.
+        const withLog = appendLog(row[blob], p.logEntry)
+        columns[blob] = mergeExtras(withLog, p.extras)
+      } else if (Object.keys(p.extras).length) {
+        columns[blob] = mergeExtras(row[blob], p.extras)
+      }
     }
 
     const { error } = await admin.from(p.table).update(columns).eq('id', p.id)

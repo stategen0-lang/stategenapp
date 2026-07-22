@@ -91,6 +91,30 @@ test('mark <name> as closed', () => {
   assert.deepEqual(r.fields, { status: 'Closed' })
 })
 
+// ── calendar ────────────────────────────────────────────────────────────────
+test('booking an event', () => {
+  for (const s of [
+    'book a viewing with Ahmed tomorrow at 3pm',
+    'add a meeting friday 10am',
+    'schedule a call with Nour on monday',
+    'set up an appointment tomorrow',
+  ]) assert.equal(quickIntent(s)?.intent, 'create_event', s)
+})
+test('adding a listing is not read as a calendar event', () => {
+  // Both start with "add"; only one is a calendar entry.
+  for (const s of ['add a listing', 'add listing: 3 bed in Hamra 450k', 'create a property']) {
+    assert.notEqual(quickIntent(s)?.intent, 'create_event', s)
+  }
+})
+test('asking for the schedule', () => {
+  for (const s of ["what's on today", 'my schedule tomorrow', 'calendar for friday', 'anything booked today?']) {
+    assert.equal(quickIntent(s)?.intent, 'query_schedule', s)
+  }
+})
+test('a property search is not read as a schedule query', () => {
+  assert.notEqual(quickIntent('what properties match 500k in Beirut')?.intent, 'query_schedule')
+})
+
 // ── manager reports ─────────────────────────────────────────────────────────
 test('team activity', () => {
   for (const s of ['how is the team doing?', 'agent activity', 'how are the agents performing']) {

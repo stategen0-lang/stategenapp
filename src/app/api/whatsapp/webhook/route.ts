@@ -12,6 +12,7 @@ import {
 import { startCreatePropertyFlow, continueFlow } from '@/lib/whatsapp/flow-handlers'
 import { isStartListing } from '@/lib/whatsapp/flows'
 import { handleAgentActivity, handleOverdueReminders } from '@/lib/whatsapp/manager-handlers'
+import { stageCreateEvent, handleQuerySchedule } from '@/lib/whatsapp/calendar-handlers'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 // Twilio posts form-encoded data and expects TwiML back.
@@ -133,6 +134,10 @@ async function route(
     case 'query_property': return { intent, answer: await handleQueryProperty(admin, profile, result) }
     case 'query_agents':   return { intent, answer: await handleAgentActivity(admin, profile) }
     case 'query_overdue':  return { intent, answer: await handleOverdueReminders(admin, profile) }
+    case 'query_schedule': return { intent, answer: await handleQuerySchedule(admin, profile, body) }
+    // Dates are inferred from prose, so this stages a confirmation like every
+    // other write rather than booking straight away.
+    case 'create_event':   return { intent, answer: await stageCreateEvent(admin, profile, body) }
     case 'help':           return { intent, answer: HELP_TEXT }
     case 'update_client':  return { intent, answer: await stageClientUpdate(admin, profile, result) }
     case 'update_property':return { intent, answer: await stagePropertyUpdate(admin, profile, result) }

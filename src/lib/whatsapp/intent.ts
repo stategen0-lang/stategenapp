@@ -20,6 +20,8 @@ export type Intent =
   | 'query_client'
   | 'query_property'
   | 'query_agents'
+  | 'query_schedule'
+  | 'create_event'
   | 'query_overdue'
   | 'confirm'
   | 'cancel'
@@ -44,7 +46,7 @@ export interface IntentResult {
 
 const VALID: Intent[] = [
   'reminder_response', 'feedback', 'update_client', 'update_property',
-  'create_property', 'query_client', 'query_property', 'query_agents',
+  'create_property', 'query_client', 'query_property', 'query_agents', 'query_schedule', 'create_event',
   'query_overdue', 'confirm', 'cancel', 'help', 'unknown',
 ]
 
@@ -93,6 +95,8 @@ Intents:
 - query_client: asking for information about a client ("send me info on Ahmed")
 - query_property: asking about listings or matches ("what matches a 500k budget in Beirut")
 - query_agents: asking how the team or a set of agents is performing ("how is the team doing", "agent activity")
+- query_schedule: asking what is on their calendar ("what is on today", "my schedule tomorrow")
+- create_event: wants a calendar entry ("book a viewing with Ahmed tomorrow at 3pm")
 - query_overdue: asking which follow-ups or reminders are late ("what follow-ups are overdue")
 - update_client: wants to change a client record ("update Ahmed's budget to 400k")
 - update_property: wants to change a listing ("mark property #23 as sold")
