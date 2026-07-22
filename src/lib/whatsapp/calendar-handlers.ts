@@ -6,8 +6,9 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { parseWhen, describeWhen } from '@/lib/whatsapp/when'
+import { startOfZonedDay, addZonedDays, formatZonedDate, formatZonedTime } from '@/lib/whatsapp/timezone'
 import { stage, type Profile } from '@/lib/whatsapp/write-handlers'
-import { isEventKind, formatRange, kindStyle, type EventKind } from '@/lib/calendar'
+import { isEventKind, kindStyle, type EventKind } from '@/lib/calendar'
 import { isManager } from '@/lib/permissions'
 
 /** Words that imply a type, so "book a viewing" doesn't land as "meeting". */
@@ -21,6 +22,19 @@ const KIND_WORDS: [RegExp, EventKind][] = [
 export function inferKind(text: string): EventKind {
   for (const [re, kind] of KIND_WORDS) if (re.test(text)) return kind
   return 'meeting'
+}
+
+/**
+ * "2:00 PM – 3:00 PM" in the agency's zone.
+ *
+ * The calendar page's formatRange() renders in the *viewer's* zone, which is
+ * right in a browser and wrong on a server: on Vercel it would print every time
+ * in UTC, three hours off for Beirut.
+ */
+function zonedRange(e: { starts_at: string; ends_at: string }): string {
+  const start = formatZonedTime(new Date(e.starts_at))
+  const end = e.ends_at ? formatZonedTime(new Date(e.ends_at)) : ''
+  return end && end !== start ? `${start} – ${end}` : start
 }
 
 /**
@@ -64,10 +78,11 @@ export async function stageCreateEvent(
   const kind = inferKind(rawMessage)
   const title = eventTitle(rawMessage, when.matched)
 
-  // An all-day event covers the whole local day; a timed one runs an hour.
+  // An all-day event runs to the end of that day in the agency's zone; a timed
+  // one runs an hour.
   const start = when.start
   const end = when.allDay
-    ? new Date(start.getFullYear(), start.getMonth(), start.getDate(), 23, 59, 59)
+    ? new Date(addZonedDays(start, 1).getTime() - 1000)
     : new Date(start.getTime() + 3600_000)
 
   const summary = [
@@ -121,10 +136,12 @@ export async function handleQuerySchedule(
   rawMessage: string,
 ): Promise<string> {
   const when = parseWhen(rawMessage)
-  // No date mentioned ("what's on?") means today.
-  const day = when ? new Date(when.start) : new Date()
-  const from = new Date(day.getFullYear(), day.getMonth(), day.getDate())
-  const to = new Date(from.getTime() + 86_400_000)
+  // No date mentioned ("what's on?") means today. Day boundaries come from the
+  // agency's zone: on a UTC server, midnight-to-midnight UTC puts the first
+  // three hours of every Beirut day on the wrong date.
+  const day = when ? when.start : new Date()
+  const from = startOfZonedDay(day)
+  const to = addZonedDays(from, 1)
 
   let query = admin
     .from('calendar_events')
@@ -140,7 +157,7 @@ export async function handleQuerySchedule(
   const { data } = await query
   const events = (data ?? []) as EventRow[]
 
-  const label = from.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })
+  const label = formatZonedDate(from)
   if (!events.length) return `Nothing scheduled for ${label}.`
 
   // Managers need to know whose event it is; agents already know.
@@ -152,7 +169,7 @@ export async function handleQuerySchedule(
   }
 
   const lines = events.map(e => {
-    const time = e.all_day ? 'All day' : formatRange(e)
+    const time = e.all_day ? 'All day' : zonedRange(e)
     const who = isManager(profile.role) ? ` — ${nameOf.get(e.profile_id) ?? 'unassigned'}` : ''
     const where = e.location ? ` (${e.location})` : ''
     return `• ${time} — ${e.title}${where}${who}`
@@ -172,8 +189,8 @@ export async function todaysAgenda(
   profileId: string,
   now: Date = new Date(),
 ): Promise<string> {
-  const from = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const to = new Date(from.getTime() + 86_400_000)
+  const from = startOfZonedDay(now)
+  const to = addZonedDays(from, 1)
 
   const { data } = await admin
     .from('calendar_events')
@@ -187,7 +204,7 @@ export async function todaysAgenda(
   if (!events.length) return ''
 
   const lines = events.map(e => {
-    const time = e.all_day ? 'All day' : formatRange(e)
+    const time = e.all_day ? 'All day' : zonedRange(e)
     const where = e.location ? ` (${e.location})` : ''
     return `• ${time} — ${e.title}${where}`
   })

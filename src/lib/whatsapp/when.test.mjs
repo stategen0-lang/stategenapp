@@ -8,11 +8,22 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { parseWhen, parseDay, parseTime, describeWhen } from './when.ts'
+import { wallClock, toInstant, APP_TIMEZONE } from './timezone.ts'
 
-// Wednesday 22 July 2026, 10:00 local.
-const NOW = new Date(2026, 6, 22, 10, 0, 0)
-const key = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-const hhmm = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+// Wednesday 22 July 2026, 10:00 in the agency's zone (Asia/Beirut).
+//
+// Asserted through the zone, never through the machine's local getters: the
+// server runs in UTC on Vercel and in Beirut on a laptop, and testing with
+// getHours() passed locally while production stored 3pm appointments at 6pm.
+const NOW = toInstant({ year: 2026, month: 7, day: 22, hour: 10, minute: 0 })
+const key = (d) => {
+  const w = wallClock(d)
+  return `${w.year}-${String(w.month).padStart(2, '0')}-${String(w.day).padStart(2, '0')}`
+}
+const hhmm = (d) => {
+  const w = wallClock(d)
+  return `${String(w.hour).padStart(2, '0')}:${String(w.minute).padStart(2, '0')}`
+}
 
 // ── Time of day ─────────────────────────────────────────────────────────────
 test('parseTime: 12-hour with meridiem', () => {
@@ -50,48 +61,48 @@ test('parseTime: rejects impossible clock values', () => {
 
 // ── Days ────────────────────────────────────────────────────────────────────
 test('parseDay: today and tomorrow', () => {
-  assert.equal(key(parseDay('today', NOW).date), '2026-07-22')
-  assert.equal(key(parseDay('tomorrow', NOW).date), '2026-07-23')
-  assert.equal(key(parseDay('tmrw', NOW).date), '2026-07-23')
-  assert.equal(key(parseDay('day after tomorrow', NOW).date), '2026-07-24')
+  assert.equal(dayKeyOf(parseDay('today', NOW).date), '2026-07-22')
+  assert.equal(dayKeyOf(parseDay('tomorrow', NOW).date), '2026-07-23')
+  assert.equal(dayKeyOf(parseDay('tmrw', NOW).date), '2026-07-23')
+  assert.equal(dayKeyOf(parseDay('day after tomorrow', NOW).date), '2026-07-24')
 })
 test('parseDay: times of day count as today', () => {
-  assert.equal(key(parseDay('tonight', NOW).date), '2026-07-22')
-  assert.equal(key(parseDay('this afternoon', NOW).date), '2026-07-22')
+  assert.equal(dayKeyOf(parseDay('tonight', NOW).date), '2026-07-22')
+  assert.equal(dayKeyOf(parseDay('this afternoon', NOW).date), '2026-07-22')
 })
 test('parseDay: a bare weekday means the next one coming', () => {
   // NOW is Wednesday. Friday is in 2 days; Monday is in 5.
-  assert.equal(key(parseDay('friday', NOW).date), '2026-07-24')
-  assert.equal(key(parseDay('monday', NOW).date), '2026-07-27')
-  assert.equal(key(parseDay('sat', NOW).date), '2026-07-25')
+  assert.equal(dayKeyOf(parseDay('friday', NOW).date), '2026-07-24')
+  assert.equal(dayKeyOf(parseDay('monday', NOW).date), '2026-07-27')
+  assert.equal(dayKeyOf(parseDay('sat', NOW).date), '2026-07-25')
 })
 test('parseDay: the same weekday as today means next week, not today', () => {
   // Saying "wednesday" on a Wednesday means the coming one.
-  assert.equal(key(parseDay('wednesday', NOW).date), '2026-07-29')
+  assert.equal(dayKeyOf(parseDay('wednesday', NOW).date), '2026-07-29')
 })
 test('parseDay: "next" skips a week', () => {
-  assert.equal(key(parseDay('next friday', NOW).date), '2026-07-31')
-  assert.equal(key(parseDay('next monday', NOW).date), '2026-08-03')
+  assert.equal(dayKeyOf(parseDay('next friday', NOW).date), '2026-07-31')
+  assert.equal(dayKeyOf(parseDay('next monday', NOW).date), '2026-08-03')
 })
 test('parseDay: relative offsets', () => {
-  assert.equal(key(parseDay('in 3 days', NOW).date), '2026-07-25')
-  assert.equal(key(parseDay('in 2 weeks', NOW).date), '2026-08-05')
+  assert.equal(dayKeyOf(parseDay('in 3 days', NOW).date), '2026-07-25')
+  assert.equal(dayKeyOf(parseDay('in 2 weeks', NOW).date), '2026-08-05')
 })
 test('parseDay: numeric dates are day-first', () => {
   // 8/9 is 8 September, not 9 August.
-  assert.equal(key(parseDay('8/9', NOW).date), '2026-09-08')
-  assert.equal(key(parseDay('25/12/2026', NOW).date), '2026-12-25')
+  assert.equal(dayKeyOf(parseDay('8/9', NOW).date), '2026-09-08')
+  assert.equal(dayKeyOf(parseDay('25/12/2026', NOW).date), '2026-12-25')
 })
 test('parseDay: a numeric date already past rolls to next year', () => {
-  assert.equal(key(parseDay('5/1', NOW).date), '2027-01-05')
+  assert.equal(dayKeyOf(parseDay('5/1', NOW).date), '2027-01-05')
 })
 test('parseDay: named months, either order', () => {
-  assert.equal(key(parseDay('15 August', NOW).date), '2026-08-15')
-  assert.equal(key(parseDay('August 15', NOW).date), '2026-08-15')
-  assert.equal(key(parseDay('3 sep', NOW).date), '2026-09-03')
+  assert.equal(dayKeyOf(parseDay('15 August', NOW).date), '2026-08-15')
+  assert.equal(dayKeyOf(parseDay('August 15', NOW).date), '2026-08-15')
+  assert.equal(dayKeyOf(parseDay('3 sep', NOW).date), '2026-09-03')
 })
 test('parseDay: a named month already past rolls to next year', () => {
-  assert.equal(key(parseDay('10 January', NOW).date), '2027-01-10')
+  assert.equal(dayKeyOf(parseDay('10 January', NOW).date), '2027-01-10')
 })
 test('parseDay: rejects impossible dates', () => {
   assert.equal(parseDay('32/1', NOW), null)
@@ -161,3 +172,42 @@ test('describeWhen: marks an all-day event as such', () => {
 })
 
 function pick(t) { return t ? [t.hours, t.minutes] : null }
+
+// ── Timezone independence ───────────────────────────────────────────────────
+// These are the assertions that would have caught the production bug: the
+// stored instant must be 3pm in the agency's zone no matter where the process
+// thinks it is.
+test('the agency timezone is what the parser anchors to', () => {
+  assert.equal(APP_TIMEZONE, 'Asia/Beirut')
+})
+test('a parsed time is that wall time in the agency zone, not the server zone', () => {
+  const r = parseWhen('viewing tomorrow at 3pm', NOW)
+  assert.equal(hhmm(r.start), '15:00')
+  // In July, Beirut is UTC+3 — so 3pm local is 12:00 UTC.
+  assert.equal(r.start.getUTCHours(), 12, r.start.toISOString())
+})
+test('an all-day event starts at local midnight, not UTC midnight', () => {
+  const r = parseWhen('open house on friday', NOW)
+  assert.equal(hhmm(r.start), '00:00')
+  assert.equal(r.start.getUTCHours(), 21)   // previous day 21:00 UTC
+})
+test('toInstant round-trips a wall clock through the zone', () => {
+  const wanted = { year: 2026, month: 7, day: 22, hour: 15, minute: 30 }
+  const w = wallClock(toInstant(wanted))
+  assert.equal(w.hour, 15)
+  assert.equal(w.minute, 30)
+  assert.equal(w.day, 22)
+})
+test('toInstant is correct either side of a DST change', () => {
+  // Beirut moves to summer time in late March and back in late October.
+  for (const d of [{ year: 2026, month: 1, day: 15 }, { year: 2026, month: 7, day: 15 }]) {
+    const w = wallClock(toInstant({ ...d, hour: 9, minute: 0 }))
+    assert.equal(w.hour, 9, JSON.stringify(d))
+    assert.equal(w.day, d.day, JSON.stringify(d))
+  }
+})
+
+/** parseDay returns calendar-day numbers, deliberately not a Date. */
+function dayKeyOf(d) {
+  return `${d.year}-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')}`
+}

@@ -8,6 +8,8 @@
 // Anything this cannot parse returns null, and the caller asks rather than
 // guessing. Pure, so every phrasing below is unit-tested.
 
+import { wallClock, toInstant, formatZonedDate, formatZonedTime } from './timezone.ts'
+
 export interface ParsedWhen {
   /** Local instant the event starts. */
   start: Date
@@ -24,14 +26,29 @@ const MONTHS = [
   'july', 'august', 'september', 'october', 'november', 'december',
 ]
 
-function startOfDay(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+// Days are handled as plain calendar numbers in the agency's zone, never as
+// server-local Dates: `new Date(y, m, d)` means a different instant on Vercel
+// (UTC) than on a laptop in Beirut, which stored 3pm appointments three hours
+// out in production.
+interface CalDay { year: number; month: number; day: number }
+
+function toCalDay(instant: Date): CalDay {
+  const w = wallClock(instant)
+  return { year: w.year, month: w.month, day: w.day }
 }
 
-function addDays(d: Date, n: number): Date {
-  const out = new Date(d)
-  out.setDate(out.getDate() + n)
-  return out
+/** Shift a calendar day, letting Date.UTC normalise month/year overflow. */
+function shiftDay(d: CalDay, days: number): CalDay {
+  const t = new Date(Date.UTC(d.year, d.month - 1, d.day + days))
+  return { year: t.getUTCFullYear(), month: t.getUTCMonth() + 1, day: t.getUTCDate() }
+}
+
+function dayOfWeek(d: CalDay): number {
+  return new Date(Date.UTC(d.year, d.month - 1, d.day)).getUTCDay()
+}
+
+function compareDays(a: CalDay, b: CalDay): number {
+  return Date.UTC(a.year, a.month - 1, a.day) - Date.UTC(b.year, b.month - 1, b.day)
 }
 
 // ── Time of day ─────────────────────────────────────────────────────────────
@@ -84,26 +101,26 @@ export function parseTime(text: string): ParsedTime | null {
 
 // ── Day ─────────────────────────────────────────────────────────────────────
 
-interface ParsedDay { date: Date; matched: string }
+interface ParsedDay { date: CalDay; matched: string }
 
 /** "today", "tomorrow", "monday", "next friday", "15/7", "15 July". */
 export function parseDay(text: string, now: Date): ParsedDay | null {
   const s = text.toLowerCase()
-  const today = startOfDay(now)
+  const today = toCalDay(now)
 
   if (/\btoday\b|\btonight\b|\bthis evening\b|\bthis afternoon\b|\bthis morning\b/.test(s)) {
     return { date: today, matched: 'today' }
   }
   // Checked before plain "tomorrow", which otherwise matches inside it and
   // books the event a day early.
-  if (/\bday after tomorrow\b/.test(s)) return { date: addDays(today, 2), matched: 'day after tomorrow' }
-  if (/\btomorrow\b|\btmrw\b|\btmr\b/.test(s)) return { date: addDays(today, 1), matched: 'tomorrow' }
+  if (/\bday after tomorrow\b/.test(s)) return { date: shiftDay(today, 2), matched: 'day after tomorrow' }
+  if (/\btomorrow\b|\btmrw\b|\btmr\b/.test(s)) return { date: shiftDay(today, 1), matched: 'tomorrow' }
 
   // "in 3 days"
   const inDays = s.match(/\bin\s+(\d{1,2})\s+days?\b/)
-  if (inDays) return { date: addDays(today, parseInt(inDays[1], 10)), matched: inDays[0] }
+  if (inDays) return { date: shiftDay(today, parseInt(inDays[1], 10)), matched: inDays[0] }
   const inWeeks = s.match(/\bin\s+(\d{1,2})\s+weeks?\b/)
-  if (inWeeks) return { date: addDays(today, parseInt(inWeeks[1], 10) * 7), matched: inWeeks[0] }
+  if (inWeeks) return { date: shiftDay(today, parseInt(inWeeks[1], 10) * 7), matched: inWeeks[0] }
 
   // Day names: "saturday", "next saturday", "this saturday".
   for (let i = 0; i < 7; i++) {
@@ -111,12 +128,12 @@ export function parseDay(text: string, now: Date): ParsedDay | null {
     const m = s.match(re)
     if (!m) continue
     const wantsNext = /next/.test(m[1] ?? '')
-    let delta = (i - today.getDay() + 7) % 7
+    let delta = (i - dayOfWeek(today) + 7) % 7
     // A bare day name means the next one that hasn't happened; "next X" always
     // skips a week when X is today or already this week.
     if (delta === 0) delta = 7
     if (wantsNext && delta < 7) delta += 7
-    return { date: addDays(today, delta), matched: m[0] }
+    return { date: shiftDay(today, delta), matched: m[0] }
   }
 
   // "15/7", "15-07", "15/7/2026" — day first, as written in Lebanon.
@@ -125,12 +142,12 @@ export function parseDay(text: string, now: Date): ParsedDay | null {
     const day = parseInt(numeric[1], 10)
     const month = parseInt(numeric[2], 10)
     if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
-      let year = numeric[3] ? parseInt(numeric[3], 10) : now.getFullYear()
+      let year = numeric[3] ? parseInt(numeric[3], 10) : today.year
       if (year < 100) year += 2000
-      const date = new Date(year, month - 1, day)
+      let date: CalDay = { year, month, day }
       // A bare day/month that has already passed means next year.
-      if (!numeric[3] && date < today) date.setFullYear(year + 1)
-      if (date.getDate() === day) return { date, matched: numeric[0] }
+      if (!numeric[3] && compareDays(date, today) < 0) date = { ...date, year: year + 1 }
+      if (isRealDate(date)) return { date, matched: numeric[0] }
     }
   }
 
@@ -143,12 +160,18 @@ export function parseDay(text: string, now: Date): ParsedDay | null {
     if (!m) continue
     const day = parseInt(m[1] ?? m[4], 10)
     if (!(day >= 1 && day <= 31)) continue
-    const date = new Date(now.getFullYear(), i, day)
-    if (date < today) date.setFullYear(now.getFullYear() + 1)
-    if (date.getDate() === day) return { date, matched: m[0] }
+    let date: CalDay = { year: today.year, month: i + 1, day }
+    if (compareDays(date, today) < 0) date = { ...date, year: today.year + 1 }
+    if (isRealDate(date)) return { date, matched: m[0] }
   }
 
   return null
+}
+
+/** Rejects 31 February and friends, which Date silently rolls forward. */
+function isRealDate(d: CalDay): boolean {
+  const t = new Date(Date.UTC(d.year, d.month - 1, d.day))
+  return t.getUTCDate() === d.day && t.getUTCMonth() === d.month - 1
 }
 
 // ── Combined ────────────────────────────────────────────────────────────────
@@ -166,26 +189,31 @@ export function parseWhen(text: string, now: Date = new Date()): ParsedWhen | nu
   const day = parseDay(text, now)
   const time = parseTime(text)
 
-  // A time with no day means today, or tomorrow if that hour has passed.
+  // A time with no day means today, or tomorrow if that hour has already gone.
   if (!day && time) {
-    const candidate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), time.hours, time.minutes)
-    if (candidate <= now) candidate.setDate(candidate.getDate() + 1)
-    return { start: candidate, allDay: false, matched: time.matched }
+    const today = toCalDay(now)
+    let start = toInstant({ ...today, hour: time.hours, minute: time.minutes })
+    if (start <= now) {
+      start = toInstant({ ...shiftDay(today, 1), hour: time.hours, minute: time.minutes })
+    }
+    return { start, allDay: false, matched: time.matched }
   }
 
   if (!day) return null
 
-  if (!time) return { start: day.date, allDay: true, matched: day.matched }
+  // Midnight in the agency's zone, not the server's.
+  if (!time) return { start: toInstant(day.date), allDay: true, matched: day.matched }
 
-  const start = new Date(day.date)
-  start.setHours(time.hours, time.minutes, 0, 0)
-  return { start, allDay: false, matched: `${day.matched} ${time.matched}`.trim() }
+  return {
+    start: toInstant({ ...day.date, hour: time.hours, minute: time.minutes }),
+    allDay: false,
+    matched: `${day.matched} ${time.matched}`.trim(),
+  }
 }
 
-/** Human summary for the confirmation message. */
+/** Human summary for the confirmation message, in the agency's zone. */
 export function describeWhen(when: ParsedWhen): string {
-  const date = when.start.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })
+  const date = formatZonedDate(when.start)
   if (when.allDay) return `${date} (all day)`
-  const time = when.start.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-  return `${date} at ${time}`
+  return `${date} at ${formatZonedTime(when.start)}`
 }
