@@ -43,6 +43,8 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
     notes: initial?.notes ?? '',
   })
   const [photos, setPhotos] = useState<string[]>(initial?.photos ?? [])
+  const [uploading, setUploading] = useState(false)
+  const [photoError, setPhotoError] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState('')
   const [templates, setTemplates] = useState<DescriptionTemplate[]>(loadTemplates())
@@ -88,15 +90,31 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
     }
   }
 
-  function handlePhotoFiles(files: FileList | null) {
-    if (!files) return
-    Array.from(files).forEach(file => {
-      const reader = new FileReader()
-      reader.onload = e => {
-        setPhotos(prev => [...prev, e.target?.result as string])
+  // Photos are uploaded to Storage and stored as URLs. They used to be read as
+  // base64 and crammed into the database row, which bloated every property and
+  // did not scale past a couple of images.
+  async function handlePhotoFiles(files: FileList | null) {
+    if (!files || !files.length) return
+    setPhotoError('')
+    setUploading(true)
+    try {
+      for (const file of Array.from(files)) {
+        const body = new FormData()
+        body.append('file', file)
+        const res = await fetch('/api/upload', { method: 'POST', body })
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          setPhotoError(data.error || `Could not upload ${file.name}.`)
+          continue   // keep whatever else uploaded
+        }
+        const { url } = await res.json()
+        setPhotos(prev => [...prev, url])
       }
-      reader.readAsDataURL(file)
-    })
+    } finally {
+      setUploading(false)
+      // Allow re-selecting the same file after a removal.
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
   }
 
   async function handleSave() {
@@ -388,11 +406,12 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="flex flex-col items-center justify-center rounded-xl gap-1 text-xs font-medium transition-colors hover:bg-blue-50"
+                disabled={uploading}
+                className="flex flex-col items-center justify-center rounded-xl gap-1 text-xs font-medium transition-colors hover:bg-blue-50 disabled:opacity-50"
                 style={{ width: 72, height: 52, border: '1.5px dashed #C4CAD6', color: '#7A8499' }}
               >
                 <ImagePlus className="h-4 w-4" />
-                Add
+                {uploading ? 'Uploading…' : 'Add'}
               </button>
               <input
                 ref={fileInputRef}
@@ -403,6 +422,9 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
                 onChange={e => handlePhotoFiles(e.target.files)}
               />
             </div>
+            {photoError && (
+              <p className="text-xs mt-1.5" style={{ color: '#A23434' }}>{photoError}</p>
+            )}
           </div>
         </div>
 
@@ -412,11 +434,11 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
           </button>
           <button
             onClick={handleSave}
-            disabled={!form.title || !form.district || !form.city}
+            disabled={!form.title || !form.district || !form.city || uploading}
             className="flex-1 rounded-xl py-2 text-sm font-bold text-white disabled:opacity-50"
             style={{ background: '#0E1F3D' }}
           >
-            {editing ? 'Save changes' : 'Save listing'}
+            {uploading ? 'Uploading…' : editing ? 'Save changes' : 'Save listing'}
           </button>
         </div>
       </div>
