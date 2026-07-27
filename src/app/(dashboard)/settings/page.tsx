@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { TrendingUp, DollarSign, Home, BadgeDollarSign, X, ChevronRight, Plus, Trash2, Check } from 'lucide-react'
+import { TrendingUp, DollarSign, Home, BadgeDollarSign, X, ChevronRight, Plus, Trash2, Check, Download } from 'lucide-react'
 import { DEALS, AGENTS, formatPrice, Deal, typeStyle } from '@/lib/data'
 import { useSession } from '@/hooks/use-session'
 import { isManager } from '@/lib/permissions'
 import { DescriptionTemplate, DEFAULT_TEMPLATES, STORAGE_KEY, loadTemplates } from '@/lib/templates'
+import { EXPORTS, EXPORT_LABELS, type ExportKind } from '@/lib/export-columns'
 
 const COMMISSION_RATE = 2.5
 const H   = '#1A2B4A'
@@ -82,6 +83,40 @@ export default function ProfilePage() {
   }
 
   function toggleKpi(k: KpiKey) { setKpiPanel(p => p === k ? null : k) }
+
+  // ── CSV export (managers only) ──
+  const [exporting, setExporting] = useState<ExportKind | null>(null)
+  const [exportError, setExportError] = useState('')
+
+  async function exportCsv(kind: ExportKind) {
+    setExporting(kind)
+    setExportError('')
+    try {
+      const res = await fetch(`/api/export?kind=${kind}`)
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        setExportError(body.error || 'Export failed. Please try again.')
+        return
+      }
+      // Turn the response into a file download. The filename comes from the
+      // server's Content-Disposition, so the date is authoritative.
+      const blob = await res.blob()
+      const disposition = res.headers.get('Content-Disposition') ?? ''
+      const named = disposition.match(/filename="(.+?)"/)?.[1]
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = named || `stategen-${kind}.csv`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch {
+      setExportError('Export failed. Please try again.')
+    } finally {
+      setExporting(null)
+    }
+  }
 
   const kpis: { key: KpiKey; label: string; value: string | number; sub: string; subColor: string; iconBg: string; iconFg: string; Icon: React.ElementType }[] = [
     { key: 'sold',       label: 'Properties sold',   value: mySold.length,                      sub: 'All time',            subColor: '#2E5288', iconBg: '#EAF0FA', iconFg: '#2E5288', Icon: Home           },
@@ -337,6 +372,33 @@ export default function ProfilePage() {
           {COMMISSION_RATE}%
         </div>
       </div>
+
+      {/* Export company data — managers only */}
+      {manager && (
+        <div className="rounded-2xl bg-white overflow-hidden" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #EEF0F4' }}>
+          <div className="px-5 py-4" style={{ borderBottom: '1px solid #EEF0F4' }}>
+            <p className="text-sm font-bold" style={{ color: H }}>Export company data</p>
+            <p className="text-xs mt-0.5" style={{ color: SUB }}>Download the whole agency&apos;s records as a CSV (opens in Excel or Sheets)</p>
+          </div>
+          <div className="p-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {EXPORTS.map(kind => (
+              <button
+                key={kind}
+                onClick={() => exportCsv(kind)}
+                disabled={exporting !== null}
+                className="flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-semibold transition-colors disabled:opacity-50"
+                style={{ border: '1.5px solid #EEF0F4', background: '#F7F8FB', color: H }}
+              >
+                <Download className="h-4 w-4" style={{ color: '#2E5288' }} />
+                {exporting === kind ? 'Preparing…' : EXPORT_LABELS[kind]}
+              </button>
+            ))}
+          </div>
+          {exportError && (
+            <p className="px-5 pb-4 text-xs" style={{ color: '#A23434' }}>{exportError}</p>
+          )}
+        </div>
+      )}
 
       {/* Description Templates */}
       <div className="rounded-2xl bg-white overflow-hidden" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #EEF0F4' }}>
