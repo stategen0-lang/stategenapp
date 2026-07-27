@@ -27,12 +27,14 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  // Require authentication for app pages. Public paths (login, signup, and API
-  // routes) are always allowed through.
+  // Require authentication for app pages. Public paths are always allowed
+  // through: login, signup, API routes, and shared listing pages (/l/<token>),
+  // which are meant for clients who have no account.
   const isPublicPath =
     pathname.startsWith('/login') ||
     pathname.startsWith('/signup') ||
-    pathname.startsWith('/api')
+    pathname.startsWith('/api') ||
+    pathname.startsWith('/l/')
 
   if (!user && !isPublicPath) {
     return NextResponse.redirect(new URL('/login', request.url))

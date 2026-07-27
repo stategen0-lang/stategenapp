@@ -17,6 +17,32 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
   const photos = p.photos ?? []
   const [activePhoto, setActivePhoto] = useState(0)
   const [stackedClient, setStackedClient] = useState<Client | null>(null)
+  const [shareLabel, setShareLabel] = useState('Share')
+
+  // Ask the server to mint a signed public link, then copy it. The token can't
+  // be built client-side — it's signed with a server secret — so this is a
+  // fetch, not a string build.
+  async function sharePropertyLink() {
+    setShareLabel('…')
+    try {
+      const res = await fetch(`/api/share?id=${p.id}`)
+      if (!res.ok) { setShareLabel('Failed'); setTimeout(() => setShareLabel('Share'), 2000); return }
+      const { url } = await res.json()
+      try {
+        await navigator.clipboard.writeText(url)
+        setShareLabel('Copied ✓')
+      } catch {
+        // Clipboard blocked (older browser / insecure context): show the link
+        // so the agent can copy it by hand rather than losing it.
+        window.prompt('Share this listing link:', url)
+        setShareLabel('Share')
+      }
+      setTimeout(() => setShareLabel('Share'), 2500)
+    } catch {
+      setShareLabel('Failed')
+      setTimeout(() => setShareLabel('Share'), 2000)
+    }
+  }
 
   return (
     <>
@@ -46,6 +72,13 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
                 {p.type} · {p.transaction}
               </span>
               <div className="flex items-center gap-2">
+                <button
+                  onClick={sharePropertyLink}
+                  className="h-7 px-3 rounded-full flex items-center justify-center text-white text-xs font-semibold leading-none"
+                  style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)' }}
+                >
+                  {shareLabel}
+                </button>
                 {onEdit && (
                   <button
                     onClick={() => onEdit(p)}
