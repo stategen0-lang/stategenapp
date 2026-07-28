@@ -126,6 +126,7 @@ export const PROPERTY_FIELDS: Record<string, FieldSpec> = {
   district:     { column: 'Neighborhood', label: 'Neighbourhood', coerce: toPlace },
   // These live in the Amenities JSON blob, not in columns of their own.
   rent:         { column: 'extras.rent',  label: 'Rent (/mo)',   coerce: toMoney },
+  parkings:     { column: 'extras.parkings', label: 'Parking',   coerce: toCount },
   notes:        { column: 'extras.notes', label: 'Notes',        coerce: toText },
   type:         { column: 'extras.type',        label: 'Type',        coerce: toEnum(PROPERTY_TYPES), oneOf: PROPERTY_TYPES },
   transaction:  { column: 'extras.transaction', label: 'Listing',     coerce: toEnum(TRANSACTIONS), oneOf: TRANSACTIONS },

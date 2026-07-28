@@ -1,178 +1,188 @@
-// Unit tests for the multi-step listing flow (src/lib/whatsapp/flows.ts).
+// Unit tests for the listing form (src/lib/whatsapp/flows.ts).
+// The bot now asks every field at once as a fill-in form, so the tests cover
+// building that form, parsing a filled one, and knowing what's still required.
 // Run with:  npm test
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  CREATE_PROPERTY_STEPS, nextStep, isComplete, applyAnswer,
-  seedContext, progress, derivedTitle, isStartListing,
+  CREATE_PROPERTY_STEPS, seedContext, derivedTitle, isStartListing,
   coerceType, extrasOf, answersOf, EXTRA_KEY,
+  listingForm, parseListingForm, missingMandatory,
 } from './flows.ts'
-
-// ── Property type, as people actually write it ──────────────────────────────
-// From a real session: the agent answered "Apartment" and was told the type
-// wasn't recognised, because the app stores the French "Appartement".
-test('coerceType: accepts the English spelling', () => {
-  assert.equal(coerceType('Apartment'), 'Appartement')
-  assert.equal(coerceType('apartment'), 'Appartement')
-  assert.equal(coerceType('appartment'), 'Appartement')
-  assert.equal(coerceType('flat'), 'Appartement')
-  assert.equal(coerceType('apt'), 'Appartement')
-})
-test('coerceType: still accepts the canonical spellings', () => {
-  for (const t of ['Appartement', 'Villa', 'Office', 'Shop', 'Land', 'Chalet', 'Building']) {
-    assert.equal(coerceType(t), t)
-    assert.equal(coerceType(t.toLowerCase()), t)
-  }
-})
-test('coerceType: other common words', () => {
-  assert.equal(coerceType('house'), 'Villa')
-  assert.equal(coerceType('store'), 'Shop')
-  assert.equal(coerceType('plot'), 'Land')
-})
-test('coerceType: finds the type inside a longer answer', () => {
-  assert.equal(coerceType('a 3 bed apartment'), 'Appartement')
-  assert.equal(coerceType('its a villa'), 'Villa')
-})
-test('coerceType: rejects what genuinely is not a type', () => {
-  assert.equal(coerceType('spaceship'), null)
-  assert.equal(coerceType(''), null)
-  assert.equal(coerceType(null), null)
-})
-
-// ── Details volunteered but never asked about ───────────────────────────────
-test('seedContext: keeps fields the flow does not ask about', () => {
-  // Real case: "3 bed 3 bath 2 parking 140sqm" saved only the bedrooms.
-  const ctx = seedContext({ beds: 3, baths: 3, size: 140, parkings: 2 })
-  assert.equal(ctx.beds, 3)
-  assert.deepEqual(extrasOf(ctx), { baths: 3, size: 140 })
-})
-test('extras do not count as answered questions', () => {
-  const ctx = seedContext({ beds: 3, baths: 2 })
-  assert.equal(nextStep(ctx).key, 'type')          // still asks the unanswered ones
-  assert.equal(EXTRA_KEY in answersOf(ctx), false)
-})
-test('extras do not inflate the progress counter', () => {
-  const ctx = seedContext({ beds: 3, baths: 2, size: 140 })
-  assert.equal(progress(ctx), `(1/${CREATE_PROPERTY_STEPS.length})`)
-})
-test('seedContext: no extras means no extras key', () => {
-  assert.equal(EXTRA_KEY in seedContext({ beds: 3 }), false)
-  assert.deepEqual(extrasOf(seedContext({ beds: 3 })), {})
-})
-test('answersOf / extrasOf tolerate a missing or malformed bag', () => {
-  assert.deepEqual(extrasOf({}), {})
-  assert.deepEqual(extrasOf({ [EXTRA_KEY]: 'oops' }), {})
-  assert.deepEqual(answersOf({ beds: 3 }), { beds: 3 })
-})
-
-// ── Starting the flow without a model round-trip ────────────────────────────
-test('isStartListing: recognises the obvious phrasings', () => {
-  for (const s of [
-    'add a listing', 'add listing', 'Add a new listing',
-    'I want to add a new listing', 'create a property',
-    'add a villa in Hamra', 'list a new apartment',
-    'add listing: 3 bed apartment in Hamra, 450k',
-  ]) assert.ok(isStartListing(s), `should match: ${s}`)
-})
-test('isStartListing: does not swallow unrelated messages', () => {
-  for (const s of [
-    'what properties match 500k in Beirut', 'info on Ahmed',
-    'mark property #23 as sold', 'done', 'help', '',
-    "set Ahmed's budget to 400k",
-  ]) assert.equal(isStartListing(s), false, `should not match: ${s}`)
-})
-
-const stepFor = (key) => CREATE_PROPERTY_STEPS.find(s => s.key === key)
 
 const full = {
   type: 'Appartement', transaction: 'For Sale', location: 'Beirut',
-  neighborhood: 'Hamra', price: 450000, beds: 3,
-  ownerName: 'Mr Khoury', ownerContact: '03111222',
+  neighborhood: 'Hamra', price: 450000, ownerName: 'Mr Khoury', ownerContact: '03111222',
 }
 
-// ── Step order ──────────────────────────────────────────────────────────────
-test('covers the fields the spec requires', () => {
-  const keys = CREATE_PROPERTY_STEPS.map(s => s.key)
-  for (const required of ['type', 'location', 'price', 'beds', 'ownerName', 'ownerContact']) {
-    assert.ok(keys.includes(required), `missing required field: ${required}`)
+// ── Property type, as people actually write it ──────────────────────────────
+test('coerceType: accepts the English spelling and common words', () => {
+  assert.equal(coerceType('Apartment'), 'Appartement')
+  assert.equal(coerceType('flat'), 'Appartement')
+  assert.equal(coerceType('house'), 'Villa')
+  assert.equal(coerceType('store'), 'Shop')
+  assert.equal(coerceType('a 3 bed apartment'), 'Appartement')
+})
+test('coerceType: keeps the canonical spellings, rejects nonsense', () => {
+  for (const t of ['Appartement', 'Villa', 'Office', 'Shop', 'Land', 'Chalet', 'Building']) {
+    assert.equal(coerceType(t.toLowerCase()), t)
   }
-})
-test('nextStep: walks the steps in order', () => {
-  assert.equal(nextStep({}).key, 'type')
-  assert.equal(nextStep({ type: 'Villa' }).key, 'transaction')
-})
-test('nextStep: returns null once everything is collected', () => {
-  assert.equal(nextStep(full), null)
-  assert.equal(isComplete(full), true)
-})
-test('nextStep: a zero value counts as answered', () => {
-  // "0 bedrooms" is a real answer for land or a shop, not a missing field.
-  const ctx = { ...full, beds: 0 }
-  assert.equal(isComplete(ctx), true)
+  assert.equal(coerceType('spaceship'), null)
+  assert.equal(coerceType(''), null)
 })
 
-// ── Answers ─────────────────────────────────────────────────────────────────
-test('applyAnswer: stores a valid answer', () => {
-  const r = applyAnswer(stepFor('type'), 'villa', {})
-  assert.equal(r.error, undefined)
-  assert.equal(r.context.type, 'Villa')      // canonical spelling
+// ── The form the agent sees ─────────────────────────────────────────────────
+test('listingForm: lists every field with a required/optional tag', () => {
+  const form = listingForm()
+  for (const s of CREATE_PROPERTY_STEPS) {
+    assert.ok(form.includes(`${s.label} (`), `form is missing "${s.label}"`)
+  }
+  assert.match(form, /Type \(required/)
+  assert.match(form, /Bedrooms \(optional/)
+  assert.match(form, /Bathrooms \(optional/)
+  assert.match(form, /Size \(optional/)
+  assert.match(form, /Parking spaces \(optional/)
 })
-test('applyAnswer: rejects a bad answer and leaves the context untouched', () => {
-  const r = applyAnswer(stepFor('price'), 'expensive', { type: 'Villa' })
-  assert.ok(r.error)
-  assert.deepEqual(r.context, { type: 'Villa' })
+test('listingForm: pre-fills what is already known and drops that field\'s hint', () => {
+  const form = listingForm({ type: 'Villa', price: 450000 })
+  assert.match(form, /Type \(required\): Villa/)
+  assert.match(form, /Price \(required\): 450000/)
+  // An unknown field still shows its hint to guide the agent.
+  assert.match(form, /Bedrooms \(optional, e\.g\. 3\):/)
 })
-test('applyAnswer: understands money shorthand', () => {
-  assert.equal(applyAnswer(stepFor('price'), '450k', {}).context.price, 450000)
-  assert.equal(applyAnswer(stepFor('price'), '$1.2m', {}).context.price, 1_200_000)
+test('listingForm: an optional hint never appears after the colon', () => {
+  // Otherwise "Size (optional): m², e.g. 180" would be parsed back as the value.
+  const form = listingForm()
+  const fieldLines = form.split('\n').filter(l => /\((required|optional)/.test(l))
+  assert.ok(fieldLines.length === CREATE_PROPERTY_STEPS.length)
+  for (const line of fieldLines) {
+    const after = line.slice(line.indexOf(':') + 1)
+    assert.equal(after.trim(), '', `hint leaked after the colon: "${line}"`)
+  }
 })
-test('applyAnswer: transaction accepts natural phrasing', () => {
-  assert.equal(applyAnswer(stepFor('transaction'), 'for rent', {}).context.transaction, 'For Rent')
-  assert.equal(applyAnswer(stepFor('transaction'), 'rent', {}).context.transaction, 'For Rent')
-  assert.equal(applyAnswer(stepFor('transaction'), 'selling it', {}).context.transaction, 'For Sale')
+
+// ── Parsing a filled-in form ────────────────────────────────────────────────
+test('parseListingForm: reads label: value lines', () => {
+  const { context, invalid } = parseListingForm([
+    'Type (required): Apartment',
+    'Sale or rent (required): sale',
+    'City (required): Beirut',
+    'Area (required): Hamra',
+    'Price (required): 450k',
+    'Bedrooms (optional): 3',
+    'Bathrooms (optional): 2',
+    'Size (optional): 180',
+    'Parking spaces (optional): 1',
+    'Owner name (required): Mr Khoury',
+    'Owner phone (required): 03111222',
+  ].join('\n'))
+  assert.deepEqual(invalid, [])
+  assert.equal(context.type, 'Appartement')
+  assert.equal(context.transaction, 'For Sale')
+  assert.equal(context.location, 'Beirut')
+  assert.equal(context.neighborhood, 'Hamra')
+  assert.equal(context.price, 450000)
+  assert.equal(context.beds, 3)
+  assert.equal(context.baths, 2)
+  assert.equal(context.size, 180)
+  assert.equal(context.parkings, 1)
+  assert.equal(context.ownerName, 'Mr Khoury')
+  assert.equal(context.ownerContact, '03111222')
 })
-test('applyAnswer: zero bedrooms is accepted, not treated as a failure', () => {
-  const r = applyAnswer(stepFor('beds'), '0', {})
-  assert.equal(r.error, undefined)
-  assert.equal(r.context.beds, 0)
+test('parseListingForm: a blank optional is left unset, not an error', () => {
+  const { context, invalid } = parseListingForm('Bedrooms (optional):\nBathrooms (optional): ')
+  assert.deepEqual(invalid, [])
+  assert.equal('beds' in context, false)
+})
+test('parseListingForm: an unparseable value is reported by its label', () => {
+  const { invalid } = parseListingForm('Price (required): free\nBedrooms (optional): lots')
+  assert.ok(invalid.includes('Price'))
+  assert.ok(invalid.includes('Bedrooms'))
+})
+test('parseListingForm: tolerates the agent\'s own labels', () => {
+  const { context } = parseListingForm('sqm: 200\nparking: 2\nbeds: 4\nowner number: 03999')
+  assert.equal(context.size, 200)
+  assert.equal(context.parkings, 2)
+  assert.equal(context.beds, 4)
+  assert.equal(context.ownerContact, '03999')
+})
+test('parseListingForm: merges onto an existing context', () => {
+  const { context } = parseListingForm('Price (required): 500k', { type: 'Villa' })
+  assert.equal(context.type, 'Villa')
+  assert.equal(context.price, 500000)
+})
+test('parseListingForm: lines without a colon or a known label are ignored', () => {
+  const { context, invalid } = parseListingForm('hello there\njust chatting')
+  assert.deepEqual(invalid, [])
+  assert.deepEqual(context, {})
+})
+test('a filled form round-trips through the form and the parser', () => {
+  const seeded = { type: 'Villa', location: 'Beirut' }
+  const parsed = parseListingForm(listingForm(seeded), {}).context
+  assert.equal(parsed.type, 'Villa')
+  assert.equal(parsed.location, 'Beirut')
+})
+
+// ── What is still required ──────────────────────────────────────────────────
+test('missingMandatory: lists unfilled required fields', () => {
+  const missing = missingMandatory({ type: 'Villa' }).map(s => s.key)
+  assert.ok(missing.includes('location'))
+  assert.ok(missing.includes('price'))
+  assert.ok(missing.includes('ownerName'))
+  assert.equal(missing.includes('type'), false)      // provided
+  assert.equal(missing.includes('beds'), false)      // optional
+})
+test('missingMandatory: empty once every required field is present', () => {
+  assert.deepEqual(missingMandatory(full), [])
+})
+test('missingMandatory: optionals never block saving', () => {
+  // No beds/baths/size/parking, but all required present → nothing missing.
+  assert.equal(missingMandatory(full).length, 0)
 })
 
 // ── Seeding from the opening message ────────────────────────────────────────
-test('seedContext: pre-fills what the first message already contained', () => {
-  const ctx = seedContext({ type: 'Villa', price: '450k', location: 'Beirut' })
-  assert.equal(ctx.type, 'Villa')
-  assert.equal(ctx.price, 450000)
-  assert.equal(nextStep(ctx).key, 'transaction')   // type already known, skipped
-})
-test('seedContext: maps the aliases the model tends to emit', () => {
-  const ctx = seedContext({ bedrooms: 3, district: 'Hamra', city: 'Beirut', owner: 'Mr K' })
+test('seedContext: form fields land in the context, extras elsewhere', () => {
+  const ctx = seedContext({ beds: 3, baths: 2, size: 140, parkings: 1, rent: 1200 })
   assert.equal(ctx.beds, 3)
+  assert.equal(ctx.baths, 2)      // now a real field, not an extra
+  assert.equal(ctx.size, 140)
+  assert.equal(ctx.parkings, 1)
+  assert.deepEqual(extrasOf(ctx), { rent: 1200 })   // rent isn't a form field
+})
+test('seedContext: maps the aliases the model emits', () => {
+  const ctx = seedContext({ bedrooms: 3, bathrooms: 2, district: 'Hamra', city: 'Beirut', owner: 'Mr K' })
+  assert.equal(ctx.beds, 3)
+  assert.equal(ctx.baths, 2)
   assert.equal(ctx.neighborhood, 'Hamra')
   assert.equal(ctx.location, 'Beirut')
   assert.equal(ctx.ownerName, 'Mr K')
 })
-test('seedContext: silently drops values that will not parse', () => {
-  const ctx = seedContext({ price: 'negotiable', type: 'Spaceship' })
+test('seedContext: drops values that will not parse, ignores unknown keys', () => {
+  const ctx = seedContext({ price: 'negotiable', type: 'Spaceship', company_id: 99 })
   assert.equal(ctx.price, undefined)
   assert.equal(ctx.type, undefined)
+  assert.equal('company_id' in ctx, false)
 })
-test('seedContext: ignores fields that are not part of the flow', () => {
-  const ctx = seedContext({ company_id: 99, id: 5 })
-  assert.deepEqual(ctx, {})
-})
-test('seedContext: no fields yields an empty context', () => {
+test('seedContext: empty / no-extras cases', () => {
   assert.deepEqual(seedContext(undefined), {})
+  assert.equal(EXTRA_KEY in seedContext({ beds: 3 }), false)
+  assert.deepEqual(answersOf({ beds: 3 }), { beds: 3 })
+  assert.deepEqual(extrasOf({}), {})
 })
 
-// ── Presentation ────────────────────────────────────────────────────────────
-test('progress: counts collected fields', () => {
-  assert.equal(progress({}), `(0/${CREATE_PROPERTY_STEPS.length})`)
-  assert.equal(progress(full), `(${CREATE_PROPERTY_STEPS.length}/${CREATE_PROPERTY_STEPS.length})`)
+// ── Starting the flow, and the title ────────────────────────────────────────
+test('isStartListing: recognises the obvious phrasings', () => {
+  for (const s of ['add a listing', 'Add a new listing', 'create a property', 'add a villa in Hamra', 'list a new apartment']) {
+    assert.ok(isStartListing(s), `should match: ${s}`)
+  }
+})
+test('isStartListing: does not swallow unrelated messages', () => {
+  for (const s of ['what properties match 500k in Beirut', 'info on Ahmed', 'mark property #23 as sold', 'done', 'help', '', "set Ahmed's budget to 400k"]) {
+    assert.equal(isStartListing(s), false, `should not match: ${s}`)
+  }
 })
 test('derivedTitle: builds a readable title', () => {
-  assert.equal(derivedTitle(full), '3 bed Appartement in Hamra')
-})
-test('derivedTitle: omits bedrooms when there are none', () => {
-  assert.equal(derivedTitle({ ...full, beds: 0 }), 'Office in Hamra'.replace('Office', 'Appartement'))
+  assert.equal(derivedTitle(full), 'Appartement in Hamra')
+  assert.equal(derivedTitle({ ...full, beds: 3 }), '3 bed Appartement in Hamra')
 })

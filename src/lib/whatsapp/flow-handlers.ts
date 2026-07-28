@@ -6,8 +6,8 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
-  CREATE_PROPERTY_STEPS, nextStep, applyAnswer, seedContext,
-  progress, derivedTitle, answersOf, extrasOf, type FlowContext,
+  seedContext, listingForm, parseListingForm, missingMandatory,
+  derivedTitle, answersOf, extrasOf, type FlowContext,
 } from '@/lib/whatsapp/flows'
 import { buildUpdate, confirmationText, PROPERTY_FIELDS } from '@/lib/whatsapp/writes'
 import { stage, type Profile } from '@/lib/whatsapp/write-handlers'
@@ -54,15 +54,10 @@ async function finish(admin: SupabaseClient, profile: Profile, context: FlowCont
   })
 }
 
-function ask(context: FlowContext, prefix = ''): string {
-  const step = nextStep(context)
-  if (!step) return ''
-  return `${prefix}${prefix ? '\n\n' : ''}${step.question} ${progress(context)}`
-}
-
 /**
- * Begin collecting a listing, pre-filled with whatever the opening message
- * already contained so nothing is asked twice.
+ * Begin a listing. The agent gets the whole form at once (not one question at a
+ * time), pre-filled with anything the opening message already contained. If
+ * they gave everything mandatory up front, skip straight to the confirmation.
  */
 export async function startCreatePropertyFlow(
   admin: SupabaseClient,
@@ -70,17 +65,10 @@ export async function startCreatePropertyFlow(
   intent: IntentResult,
 ): Promise<string> {
   const context = seedContext(intent.fields)
-  const step = nextStep(context)
+  if (missingMandatory(context).length === 0) return finish(admin, profile, context)
 
-  if (!step) return finish(admin, profile, context)
-
-  await saveFlow(admin, profile, context, step.key)
-  // Count real details, not the extras bag (which is one key holding several).
-  const known = Object.keys(answersOf(context)).length + Object.keys(extrasOf(context)).length
-  const opener = known
-    ? `Adding a listing — got ${known} detail${known > 1 ? 's' : ''} so far.`
-    : "Adding a listing. I'll ask a few questions — reply \"cancel\" to stop."
-  return ask(context, opener)
+  await saveFlow(admin, profile, context, 'form')
+  return listingForm(context)
 }
 
 /**
@@ -112,40 +100,32 @@ export async function continueFlow(
     return 'Cancelled — the listing was not saved.'
   }
 
-  // "help" is what an agent types when they feel stuck, so it must explain the
-  // situation rather than being consumed as an answer to the current question.
+  const prev = (state.context ?? {}) as FlowContext
+
+  // "help" explains the situation rather than being read as form input.
   if (/^help\b\??$/i.test(body.trim())) {
-    const current = nextStep((state.context ?? {}) as FlowContext)
+    const missing = missingMandatory(prev).map(s => s.label)
     return [
       "You're part-way through adding a listing.",
+      missing.length ? `Still required: ${missing.join(', ')}.` : 'All required fields are in — send the form back to save.',
       '',
-      `Next question: ${current?.question ?? '(none)'}`,
-      '',
-      'Reply with the answer, or "cancel" to stop adding this listing.',
+      'Fill in the form and send it back, or reply "cancel" to stop.',
     ].join('\n')
   }
 
-  const context = (state.context ?? {}) as FlowContext
-  const step = nextStep(context)
-  if (!step) return finish(admin, profile, context)
+  // Merge whatever this reply supplied into what we already had.
+  const { context, invalid } = parseListingForm(body, prev)
+  const missing = missingMandatory(context)
 
-  const result = applyAnswer(step, body, context)
-  if (result.error) {
-    // Re-ask the same question; the context is deliberately unchanged.
-    //
-    // The escape hatch is repeated on every failure, not just at the start. An
-    // agent mid-flow has everything they type read as an answer, so "info on
-    // Ahmed" comes back "I didn't recognise that type" — without this line
-    // there is no way to discover how to get out.
-    return `${result.error}\n\n${step.question} ${progress(context)}`
-      + '\n\nOr reply "cancel" to stop adding this listing.'
+  if (invalid.length || missing.length) {
+    await saveFlow(admin, profile, context, 'form')
+    const problems: string[] = []
+    if (invalid.length) problems.push(`Couldn't read: ${invalid.join(', ')}.`)
+    if (missing.length) problems.push(`Still need: ${missing.map(s => s.label).join(', ')}.`)
+    return `${problems.join(' ')}\n\n${listingForm(context)}\n\nOr reply "cancel" to stop.`
   }
 
-  const done = nextStep(result.context)
-  if (!done) return finish(admin, profile, result.context)
-
-  await saveFlow(admin, profile, result.context, done.key)
-  return ask(result.context)
+  return finish(admin, profile, context)
 }
 
 /** Is this agent mid-flow? Used to decide message routing. */
