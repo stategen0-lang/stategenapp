@@ -18,6 +18,7 @@ import {
   mergeExtras, appendLog, CLIENT_FIELDS, PROPERTY_FIELDS,
 } from '@/lib/whatsapp/writes'
 import { reminderOutcome } from '@/lib/whatsapp/reminders'
+import { splitClientRef } from '@/lib/whatsapp/client-ref'
 import type { ReminderAction } from '@/lib/whatsapp/replies'
 import { createListingAlerts } from '@/lib/alerts-server'
 
@@ -103,23 +104,30 @@ type Resolved =
   | { ok: false; message: string }
 
 async function resolveClient(admin: SupabaseClient, profile: Profile, name: string | undefined): Promise<Resolved> {
-  if (!name) return { ok: false, message: 'Which client? Try "update Ahmed\'s budget to 400k".' }
+  const ref = splitClientRef(name)
+  if (!ref.name) return { ok: false, message: 'Which client? Try "update Ahmed\'s budget to 400k".' }
 
-  const { data } = await admin
+  let q = admin
     .from('client_requests')
     .select('*')
     .eq('company_id', profile.company_id)
-    .ilike('Client Name', `%${name}%`)
-    .limit(5)
+    .ilike('Client Name', `%${ref.name}%`)
+    .limit(6)
+  // An area qualifier ("… in Beit Mery") disambiguates same-named clients.
+  if (ref.location) q = q.ilike('prefered-location', `%${ref.location}%`)
 
+  const { data } = await q
   const rows = data ?? []
-  if (!rows.length) return { ok: false, message: `No client matching "${name}".` }
+  if (!rows.length) return { ok: false, message: `No client matching "${ref.name}"${ref.location ? ` in ${ref.location}` : ''}.` }
   if (rows.length > 1) {
-    // Masked for the same reason as above: disambiguation must not become a way
-    // to enumerate other agents' client names.
+    // Masked names for the same reason as above (no enumerating other agents'
+    // clients), but each carries its area so identical names can be told apart
+    // and the agent knows how to pick one.
+    const lines = rows.map(r => `• ${clientLabel(profile, r)} — ${(r['prefered-location'] as string) || 'no area set'}`)
+    const egArea = (rows[0]['prefered-location'] as string) || 'Beirut'
     return {
       ok: false,
-      message: `${rows.length} clients match "${name}":\n${rows.map(r => `• ${clientLabel(profile, r)}`).join('\n')}\n\nUse the full name.`,
+      message: `${rows.length} clients match "${ref.name}":\n${lines.join('\n')}\n\nAdd the area to pick one, e.g. "${ref.name} in ${egArea}".`,
     }
   }
   return { ok: true, row: rows[0] }

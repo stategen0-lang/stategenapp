@@ -121,19 +121,24 @@ export function quickIntent(raw: string | null | undefined): IntentResult | null
     }
   }
 
-  // ── "info on Ahmed" ───────────────────────────────────────────────────────
-  // Checked after the update patterns so "set Ahmed's budget" isn't read as a query.
-  const infoOn = text.match(/^(?:send me\s+)?(?:info|information|details|data)\s+(?:on|about|for)\s+(?:client\s+)?(.+?)\s*\??$/i)
+  // ── "info on Ahmed", "who is Ahmed", "pull up Ahmed" ──────────────────────
+  // Checked after the update patterns so "set Ahmed's budget" isn't read as a
+  // query. Several phrasings, all meaning "tell me about this client".
+  const infoOn =
+    text.match(/^(?:send me\s+)?(?:info|information|details|data|profile)\s+(?:on|about|for)\s+(?:client\s+)?(.+?)\s*\??$/i)
+    || text.match(/^(?:who(?:'?s| is)|pull up|look up|bring up|find me)\s+(?:client\s+)?(.+?)\s*\??$/i)
   if (infoOn) {
     const name = infoOn[1].trim()
-    // "info on properties in Beirut" is a listing query, not a client lookup.
-    if (!/\b(propert|listing|apartment|villa|office|shop|land|chalet|building)/i.test(name)) {
+    // "who is available" / "info on properties in Beirut" are listing queries,
+    // not client lookups — a property word in the name rules the client out.
+    // Prefix match (no trailing \b) so "propert" catches "property"/"properties".
+    if (name && !/\b(propert|listing|apartment|flat|villa|office|shop|land|chalet|building|house|studio|available|sold|rented)/i.test(name)) {
       return { intent: 'query_client', clientName: name }
     }
   }
 
   // ── "what matches 500k in Beirut" / "properties in Hamra" ─────────────────
-  if (/\b(match(es|ing)?|properties|listings|apartments?|villas?|offices?|shops?)\b/i.test(text)
+  if (/\b(match(es|ing)?|properties|propertys|listings?|apartments?|flats?|villas?|houses?|offices?|shops?|studios?|chalets?)\b/i.test(text)
       && !/^(add|create|list|post|register)\b/i.test(text)) {
     const { budget, location } = budgetAndLocation(text)
     if (budget || location) return { intent: 'query_property', budget, location }

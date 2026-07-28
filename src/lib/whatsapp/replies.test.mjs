@@ -39,6 +39,37 @@ test('parseReminderReply: bare snooze falls back to 3 days', () => {
 test('parseReminderReply: natural delays without the word snooze', () => {
   assert.deepEqual(parseReminderReply('tomorrow'), { action: 'snooze', snoozeDays: 1 })
   assert.deepEqual(parseReminderReply('next week'), { action: 'snooze', snoozeDays: 7 })
+  assert.deepEqual(parseReminderReply('remind me next month'), { action: 'snooze', snoozeDays: 30 })
+})
+
+test('parseReminderReply: a command with a date word is NOT a snooze', () => {
+  // The real bug: "book a viewing tomorrow at 3pm" was read as "snooze until
+  // tomorrow" because it contained a date word while a reminder was open.
+  for (const s of [
+    'book a viewing tomorrow at 3pm',
+    'schedule a call next week',
+    'add a meeting tomorrow',
+    'set Ahmed\'s budget to 400k',
+    'mark property #2 as sold',
+    'find me a villa',
+    'info on Ahmed',
+    'what\'s on tomorrow',
+  ]) {
+    assert.equal(parseReminderReply(s).action, 'unknown', s)
+  }
+})
+
+test('parseReminderReply: an explicit snooze word still wins over a command look', () => {
+  // "remind me" is unambiguous even if phrased like a request.
+  assert.equal(parseReminderReply('remind me tomorrow').action, 'snooze')
+  assert.equal(parseReminderReply('snooze until next week').action, 'snooze')
+})
+
+test('parseReminderReply: "done" is not triggered by a command', () => {
+  // "delete Ahmed" starts with a command; must not be read as done/complete.
+  assert.equal(parseReminderReply('delete that').action, 'unknown')
+  // But a genuine completion reply still works.
+  assert.equal(parseReminderReply('called them, all good').action, 'done')
 })
 
 test('parseReminderReply: anything else is unknown (defer to Grok)', () => {

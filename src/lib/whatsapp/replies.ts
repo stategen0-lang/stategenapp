@@ -16,6 +16,11 @@ const DONE = /^(done|called|did it|spoke|spoke to (them|him|her)|contacted|finis
 const NOT_INTERESTED = /\b(not interested|no longer interested|uninterested|dead|drop (it|them)|lost)\b/i
 const SNOOZE = /\b(snooze|later|postpone|remind me)\b/i
 
+// A message that opens with one of these is a fresh command, not a reply to a
+// reminder — so a date word inside it ("book a viewing tomorrow") must not be
+// mistaken for a snooze. Only an explicit snooze word overrides this.
+const COMMAND_START = /^(add|book|schedule|create|set ?up|put in|set|mark|update|change|move|remove|delete|find|show|list|search|info|details?|who|what|which|how|where|any)\b/i
+
 // "3d", "3 days", "2w", "2 weeks", "1 month"
 const DURATION = /(\d+)\s*(d|day|days|w|week|weeks|m|month|months)\b/i
 
@@ -52,15 +57,22 @@ export function parseReminderReply(raw: string | null | undefined): ReminderRepl
   const text = (raw ?? '').trim()
   if (!text) return { action: 'unknown' }
 
+  // A fresh command ("book a viewing tomorrow", "set X's budget…") is never a
+  // reminder reply, even if it contains a date word. This stopped a real bug:
+  // "book a viewing tomorrow at 3pm" was read as "snooze until tomorrow".
+  const isCommand = COMMAND_START.test(text)
+
   // Checked before "done" so "not interested" can't be read as a completion.
-  if (NOT_INTERESTED.test(text)) return { action: 'not_interested' }
+  if (NOT_INTERESTED.test(text) && !isCommand) return { action: 'not_interested' }
 
   const days = parseSnoozeDays(text)
-  if (SNOOZE.test(text) || days !== null) {
+  // An explicit "snooze/postpone/remind me" always counts. A bare date word
+  // only counts when the message isn't itself a command.
+  if (SNOOZE.test(text) || (days !== null && !isCommand)) {
     return { action: 'snooze', snoozeDays: days ?? DEFAULT_SNOOZE_DAYS }
   }
 
-  if (DONE.test(text)) return { action: 'done' }
+  if (DONE.test(text) && !isCommand) return { action: 'done' }
 
   return { action: 'unknown' }
 }

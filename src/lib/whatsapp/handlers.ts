@@ -11,6 +11,7 @@ import { dbRowToClient, dbRowToProperty } from '@/lib/db-mappers'
 import { matchProperties } from '@/lib/matching'
 import { formatPrice } from '@/lib/data'
 import type { IntentResult } from '@/lib/whatsapp/intent'
+import { splitClientRef } from '@/lib/whatsapp/client-ref'
 
 export const HELP_TEXT = [
   'I can help with:',
@@ -58,26 +59,35 @@ export async function handleQueryClient(
   profile: Profile,
   intent: IntentResult,
 ): Promise<string> {
-  const name = intent.clientName
-  if (!name) return 'Which client? Try "info on Ahmed".'
+  const ref = splitClientRef(intent.clientName)
+  if (!ref.name) return 'Which client? Try "info on Ahmed".'
 
-  const { data } = await admin
+  let q = admin
     .from('client_requests')
     .select('*')
     .eq('company_id', profile.company_id)
-    .ilike('Client Name', `%${name}%`)
-    .limit(5)
+    .ilike('Client Name', `%${ref.name}%`)
+    .limit(6)
+  // An area qualifier ("… in Beit Mery") narrows same-named clients.
+  if (ref.location) q = q.ilike('prefered-location', `%${ref.location}%`)
 
+  const { data } = await q
   const rows = data ?? []
-  if (!rows.length) return `No client matching "${name}".`
+  if (!rows.length) return `No client matching "${ref.name}"${ref.location ? ` in ${ref.location}` : ''}.`
 
   const session = toSession(profile)
 
   if (rows.length > 1) {
-    const names = rows.map(r =>
-      canSeeClientPII(session, clientAgent(r)) ? (r['Client Name'] as string) : maskClientName(Number(r.id)),
-    )
-    return `${rows.length} clients match "${name}":\n${names.map(n => `• ${n}`).join('\n')}\n\nBe more specific.`
+    // Show each client's area so identical names are distinguishable, and tell
+    // the agent how to pick — "be more specific" is no help when the name is
+    // already exact.
+    const lines = rows.map(r => {
+      const label = canSeeClientPII(session, clientAgent(r)) ? (r['Client Name'] as string) : maskClientName(Number(r.id))
+      const area = (r['prefered-location'] as string) || 'no area set'
+      return `• ${label} — ${area}`
+    })
+    const egArea = (rows[0]['prefered-location'] as string) || 'Beirut'
+    return `${rows.length} clients match "${ref.name}":\n${lines.join('\n')}\n\nAdd the area to pick one, e.g. "info on ${ref.name} in ${egArea}".`
   }
 
   const row = rows[0]

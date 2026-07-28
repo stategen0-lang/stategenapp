@@ -91,6 +91,13 @@ export function parseIntentJson(raw: string | null | undefined): IntentResult {
 const SYSTEM = `You classify WhatsApp messages from real estate agents into one intent and extract any obvious entities.
 Reply with a single JSON object and nothing else.
 
+The agent is typing quickly on a phone. Expect typos, missing apostrophes,
+abbreviations, and casual phrasing — read through them to the intent. Many
+different wordings mean the same thing ("info on Ahmed" = "who is Ahmed" =
+"pull up ahmed" = "details for ahmed"). Pick the closest intent and extract what
+you can. Only answer "unknown" if you genuinely cannot tell what they want — a
+best guess at a real intent is better than refusing a slightly misspelt message.
+
 Intents:
 - query_client: asking for information about a client ("send me info on Ahmed")
 - query_property: asking about listings or matches ("what matches a 500k budget in Beirut")
@@ -122,10 +129,17 @@ using ONLY these key names (anything else is discarded):
   status must be one of: Available, Reserved, Sold, Rented
   "location" is the city, "neighborhood" is the area within it
 
-Examples:
+Examples (note the typos and varied phrasing):
 "set Ahmed's budget to 400k" -> {"intent":"update_client","clientName":"Ahmed","fields":{"budget":400000}}
+"chnge ahmeds budget 2 400k" -> {"intent":"update_client","clientName":"Ahmed","fields":{"budget":400000}}
+"who is sara" -> {"intent":"query_client","clientName":"Sara"}
+"pull up ahmed for me" -> {"intent":"query_client","clientName":"Ahmed"}
+"any flats under 500k in beirut" -> {"intent":"query_property","budget":500000,"location":"Beirut"}
 "mark property #23 as sold" -> {"intent":"update_property","propertyId":23,"fields":{"status":"Sold"}}
+"prop 23 is sold" -> {"intent":"update_property","propertyId":23,"fields":{"status":"Sold"}}
 "add listing: 3 bed apartment in Hamra, Beirut, 450k, 180 sqm" -> {"intent":"create_property","fields":{"title":"3 bed apartment","beds":3,"neighborhood":"Hamra","location":"Beirut","price":450000,"size":180}}
+"book a viewing with ahmed tomorow at 3pm" -> {"intent":"create_event","clientName":"Ahmed","notes":"viewing tomorrow at 3pm"}
+"whats on today" -> {"intent":"query_schedule"}
 "called Ahmed, he wants a viewing Saturday" -> {"intent":"feedback","clientName":"Ahmed","notes":"wants a viewing Saturday"}`
 
 /**

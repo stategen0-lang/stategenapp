@@ -29,6 +29,20 @@ test('info on <name>: phrasing variants', () => {
     assert.equal(r?.clientName, 'Ahmed', s)
   }
 })
+test('client lookup: "who is", "pull up", "look up" all work', () => {
+  for (const s of ['who is Ahmed', "who's Ahmed", 'pull up Ahmed', 'look up Ahmed', 'bring up Ahmed', 'find me Ahmed']) {
+    const r = quickIntent(s)
+    assert.equal(r?.intent, 'query_client', s)
+    assert.equal(r?.clientName, 'Ahmed', s)
+  }
+})
+test('client lookup keeps an area qualifier on the name', () => {
+  // Disambiguation is handled downstream; the quick matcher just passes it through.
+  assert.equal(quickIntent('info on Nour in Beit Mery')?.clientName, 'Nour in Beit Mery')
+})
+test('"who is available" is a property query, not a client', () => {
+  assert.notEqual(quickIntent('who is available')?.intent, 'query_client')
+})
 test('info on a full name keeps the whole name', () => {
   assert.equal(quickIntent('info on Sara Rizk')?.clientName, 'Sara Rizk')
 })
