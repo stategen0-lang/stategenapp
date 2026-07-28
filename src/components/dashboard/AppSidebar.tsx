@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import {
@@ -9,6 +10,7 @@ import {
   Users,
   KanbanSquare,
   CalendarDays,
+  Bell,
   BarChart3,
   User,
   LogOut,
@@ -36,6 +38,18 @@ export default function AppSidebar({ profile, user }: AppSidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
+
+  // Unseen match-alert count, for the badge. Refetched when the route changes
+  // so visiting /alerts (which marks them read) clears the badge.
+  const [unseenAlerts, setUnseenAlerts] = useState(0)
+  useEffect(() => {
+    let live = true
+    fetch('/api/alerts')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (live && d && typeof d.unseen === 'number') setUnseenAlerts(d.unseen) })
+      .catch(() => {})
+    return () => { live = false }
+  }, [pathname])
 
   async function handleSignOut() {
     await supabase.auth.signOut()
@@ -81,6 +95,26 @@ export default function AppSidebar({ profile, user }: AppSidebarProps) {
               </Link>
             )
           })}
+
+          {/* Alerts — kept out of navItems so it doesn't crowd the mobile tab
+              bar; carries the unseen badge. */}
+          <Link
+            href="/alerts"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
+            style={{
+              background: isActive('/alerts') ? 'rgba(94,143,214,0.16)' : 'transparent',
+              color: isActive('/alerts') ? '#ffffff' : '#9DB2CC',
+              borderLeft: isActive('/alerts') ? '2px solid #5E8FD6' : '2px solid transparent',
+            }}
+          >
+            <Bell className="h-4 w-4 shrink-0" />
+            <span className="flex-1">Alerts</span>
+            {unseenAlerts > 0 && (
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: '#D94A4A', color: '#fff' }}>
+                {unseenAlerts > 99 ? '99+' : unseenAlerts}
+              </span>
+            )}
+          </Link>
         </nav>
 
         {/* Profile */}
@@ -104,6 +138,16 @@ export default function AppSidebar({ profile, user }: AppSidebarProps) {
       <div className="md:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 py-3" style={{ background: '#0E1F3D', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
         <Logo variant="white" size={26} withWordmark priority />
         <div className="flex items-center gap-2">
+          {/* Alerts bell — the mobile home for alerts, since the bottom tab bar
+              is already full. */}
+          <Link href="/alerts" className="relative p-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.08)' }}>
+            <Bell className="h-3.5 w-3.5" style={{ color: '#9DB2CC' }} />
+            {unseenAlerts > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center" style={{ background: '#D94A4A', color: '#fff' }}>
+                {unseenAlerts > 9 ? '9+' : unseenAlerts}
+              </span>
+            )}
+          </Link>
           <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: '#2E5288', color: '#fff' }}>
             {initials}
           </div>

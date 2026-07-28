@@ -19,6 +19,7 @@ import {
 } from '@/lib/whatsapp/writes'
 import { reminderOutcome } from '@/lib/whatsapp/reminders'
 import type { ReminderAction } from '@/lib/whatsapp/replies'
+import { createListingAlerts } from '@/lib/alerts-server'
 
 export interface Profile {
   id: string
@@ -346,11 +347,16 @@ export async function applyPendingAction(
       const insert = p.blobColumn
         ? { ...p.columns, [p.blobColumn]: JSON.stringify(p.extras) }
         : { ...p.columns }
-      const { data, error } = await admin.from(p.table).insert(insert).select('id').maybeSingle()
+      const { data, error } = await admin.from(p.table).insert(insert).select('*').maybeSingle()
       if (error) throw error
-      return p.table === 'calendar_events'
-        ? `Saved — "${p.label}" is on your calendar.`
-        : `Saved — listing #${data?.id} created.`
+      if (p.table === 'calendar_events') return `Saved — "${p.label}" is on your calendar.`
+
+      // A listing added from WhatsApp raises the same match alerts as one added
+      // from the web form.
+      if (p.table === 'Properties' && data) {
+        await createListingAlerts(admin, profile.company_id, data as Record<string, unknown>)
+      }
+      return `Saved — listing #${data?.id} created.`
     }
 
     // Update: re-read the row so permission is checked against current state
