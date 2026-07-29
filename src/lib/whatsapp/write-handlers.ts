@@ -358,6 +358,7 @@ export async function applyPendingAction(
       const { data, error } = await admin.from(p.table).insert(insert).select('*').maybeSingle()
       if (error) throw error
       if (p.table === 'calendar_events') return `Saved — "${p.label}" is on your calendar.`
+      if (p.table === 'client_requests') return `Saved — ${p.label} added as a client.`
 
       // A listing added from WhatsApp raises the same match alerts as one added
       // from the web form.

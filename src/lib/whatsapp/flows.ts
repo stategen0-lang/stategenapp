@@ -49,16 +49,14 @@ export interface FlowStep {
   key: string
   /** Short label used on the form line, e.g. "Bedrooms". */
   label: string
-  /** Conversational form, kept for a one-field re-ask. */
-  question: string
-  /** Required to save the listing, vs. nice-to-have. */
+  /** Required to save, vs. nice-to-have. */
   mandatory: boolean
   /** Example shown on the form line, e.g. "e.g. 450k". */
   hint?: string
+  /** Other labels an agent might type for this field. */
+  aliases?: string[]
   /** Returns the cleaned value, or null if the answer can't be used. */
   coerce: (v: unknown) => unknown
-  /** Shown when coercion fails. */
-  retry: string
 }
 
 const coerceTransaction = (v: unknown) => {
@@ -75,28 +73,43 @@ const coerceTransaction = (v: unknown) => {
  * for them.
  */
 export const CREATE_PROPERTY_STEPS: FlowStep[] = [
-  { key: 'type',         label: 'Type',          mandatory: true,  hint: PROPERTY_TYPES.join('/'), coerce: coerceType,
-    question: `What type of property? (${PROPERTY_TYPES.join(', ')})`, retry: `I didn't recognise that type. Choose one: ${PROPERTY_TYPES.join(', ')}.` },
-  { key: 'transaction',  label: 'Sale or rent',  mandatory: true,  hint: 'sale/rent', coerce: coerceTransaction,
-    question: 'Is it for sale or for rent?', retry: 'Please reply "for sale" or "for rent".' },
-  { key: 'location',     label: 'City',          mandatory: true,  hint: 'e.g. Beirut', coerce: toText,
-    question: 'Which city? (e.g. Beirut)', retry: 'I need a city name.' },
-  { key: 'neighborhood', label: 'Area',          mandatory: true,  hint: 'e.g. Hamra', coerce: toText,
-    question: 'Which area or neighbourhood? (e.g. Hamra)', retry: 'I need an area name.' },
-  { key: 'price',        label: 'Price',         mandatory: true,  hint: 'USD, e.g. 450k', coerce: toMoney,
-    question: 'What is the price in USD? (e.g. 450k)', retry: 'I need a number, e.g. "450k" or "450000".' },
-  { key: 'beds',         label: 'Bedrooms',      mandatory: false, hint: 'e.g. 3', coerce: toCount,
-    question: 'How many bedrooms?', retry: 'I need a number of bedrooms, e.g. "3".' },
-  { key: 'baths',        label: 'Bathrooms',     mandatory: false, hint: 'e.g. 2', coerce: toCount,
-    question: 'How many bathrooms?', retry: 'I need a number of bathrooms, e.g. "2".' },
-  { key: 'size',         label: 'Size',          mandatory: false, hint: 'm², e.g. 180', coerce: toCount,
-    question: 'What size in m²?', retry: 'I need a size in m², e.g. "180".' },
-  { key: 'parkings',     label: 'Parking spaces', mandatory: false, hint: 'e.g. 1', coerce: toCount,
-    question: 'How many parking spaces?', retry: 'I need a number of parking spaces, e.g. "1".' },
-  { key: 'ownerName',    label: 'Owner name',    mandatory: true,  coerce: toText,
-    question: "What is the owner's name?", retry: 'I need the owner\'s name.' },
-  { key: 'ownerContact', label: 'Owner phone',   mandatory: true,  hint: 'e.g. 03 123456', coerce: toText,
-    question: "What is the owner's phone number?", retry: 'I need a contact number for the owner.' },
+  { key: 'type',         label: 'Type',          mandatory: true,  hint: PROPERTY_TYPES.join('/'), coerce: coerceType, aliases: ['property type'] },
+  { key: 'transaction',  label: 'Sale or rent',  mandatory: true,  hint: 'sale/rent', coerce: coerceTransaction, aliases: ['transaction', 'listing', 'for sale or rent', 'buy or rent'] },
+  { key: 'location',     label: 'City',          mandatory: true,  hint: 'e.g. Beirut', coerce: toText, aliases: ['location'] },
+  { key: 'neighborhood', label: 'Area',          mandatory: true,  hint: 'e.g. Hamra', coerce: toText, aliases: ['neighbourhood', 'neighborhood', 'district'] },
+  { key: 'price',        label: 'Price',         mandatory: true,  hint: 'USD, e.g. 450k', coerce: toMoney, aliases: ['price usd', 'asking', 'asking price'] },
+  { key: 'beds',         label: 'Bedrooms',      mandatory: false, hint: 'e.g. 3', coerce: toCount, aliases: ['beds', 'bed', 'br'] },
+  { key: 'baths',        label: 'Bathrooms',     mandatory: false, hint: 'e.g. 2', coerce: toCount, aliases: ['baths', 'bath', 'ba'] },
+  { key: 'size',         label: 'Size',          mandatory: false, hint: 'm², e.g. 180', coerce: toCount, aliases: ['sqm', 'm2', 'size m2', 'area sqm'] },
+  { key: 'parkings',     label: 'Parking spaces', mandatory: false, hint: 'e.g. 1', coerce: toCount, aliases: ['parking', 'parkings', 'garage'] },
+  { key: 'ownerName',    label: 'Owner name',    mandatory: true,  coerce: toText, aliases: ['owner'] },
+  { key: 'ownerContact', label: 'Owner phone',   mandatory: true,  hint: 'e.g. 03 123456', coerce: toText, aliases: ['owner number', 'owner contact', 'owner phone'] },
+]
+
+// ── Client fields ─────────────────────────────────────────────────────────────
+
+/** Buyer or renter, from how the agent phrased it. */
+const coerceClientType = (v: unknown) => {
+  const s = String(v ?? '').trim().toLowerCase()
+  if (/\brent|tenant|lease/.test(s)) return 'Renter'
+  if (/\bbuy|buyer|purchase|sale/.test(s)) return 'Buyer'
+  return toEnum(['Buyer', 'Renter'])(v)
+}
+
+/**
+ * Everything needed to register a client and let the matcher work: who they
+ * are, how to reach them, and what they're after. Optional details refine
+ * matching but don't block saving.
+ */
+export const CREATE_CLIENT_STEPS: FlowStep[] = [
+  { key: 'name',        label: 'Name',          mandatory: true,  coerce: toText, aliases: ['client name', 'full name'] },
+  { key: 'phone',       label: 'Phone',         mandatory: true,  hint: 'e.g. 03 123456', coerce: toText, aliases: ['number', 'contact', 'mobile'] },
+  { key: 'clientType',  label: 'Buyer or renter', mandatory: true, hint: 'buyer/renter', coerce: coerceClientType, aliases: ['type', 'buyer/renter'] },
+  { key: 'propertyType', label: 'Looking for',  mandatory: true,  hint: PROPERTY_TYPES.join('/'), coerce: coerceType, aliases: ['property type', 'wants', 'interested in'] },
+  { key: 'location',    label: 'Preferred area', mandatory: true, hint: 'e.g. Achrafieh', coerce: toText, aliases: ['area', 'location', 'where'] },
+  { key: 'budget',      label: 'Budget',        mandatory: true,  hint: 'USD, e.g. 400k', coerce: toMoney, aliases: ['budget usd', 'price'] },
+  { key: 'beds',        label: 'Bedrooms',      mandatory: false, hint: 'e.g. 3', coerce: toCount, aliases: ['beds', 'bed', 'br'] },
+  { key: 'email',       label: 'Email',         mandatory: false, coerce: toText, aliases: ['e-mail', 'mail'] },
 ]
 
 // ── The all-at-once form ──────────────────────────────────────────────────────
@@ -104,8 +117,9 @@ export const CREATE_PROPERTY_STEPS: FlowStep[] = [
 /**
  * The fill-in form the agent copies, completes, and sends back. Any value we
  * already know (from the opening message) is pre-filled so they don't retype it.
+ * Generic over the field set, so listings and clients share one renderer.
  */
-export function listingForm(context: FlowContext = {}, steps: FlowStep[] = CREATE_PROPERTY_STEPS): string {
+export function renderForm(intro: string, steps: FlowStep[], context: FlowContext = {}): string {
   const lines = steps.map(s => {
     const known = context[s.key]
     const has = known !== undefined && known !== null && known !== ''
@@ -116,36 +130,22 @@ export function listingForm(context: FlowContext = {}, steps: FlowStep[] = CREAT
     return `${s.label} (${meta}):${has ? ' ' + known : ''}`
   })
   return [
-    'Adding a listing. Copy this, fill in the value after each ":" and send it back.',
-    'Leave the optional ones blank if they don\'t apply.',
+    intro,
+    'Copy this, fill in the value after each ":" and send it back. Leave optional ones blank if they don\'t apply.',
     '',
     ...lines,
   ].join('\n')
 }
 
-// Words an agent might use for each field, so their labels are recognised even
-// if they don't copy ours exactly.
-const LABEL_ALIASES: Record<string, string> = {
-  type: 'type', 'property type': 'type',
-  'sale or rent': 'transaction', transaction: 'transaction', listing: 'transaction', 'for': 'transaction',
-  city: 'location', location: 'location',
-  area: 'neighborhood', neighbourhood: 'neighborhood', neighborhood: 'neighborhood', district: 'neighborhood',
-  price: 'price', 'price usd': 'price', 'price (usd)': 'price', asking: 'price',
-  bedrooms: 'beds', beds: 'beds', bed: 'beds', br: 'beds',
-  bathrooms: 'baths', baths: 'baths', bath: 'baths', ba: 'baths',
-  size: 'size', 'size m2': 'size', sqm: 'size', 'm2': 'size', area_sqm: 'size',
-  parking: 'parkings', 'parking spaces': 'parkings', parkings: 'parkings', garage: 'parkings',
-  'owner name': 'ownerName', owner: 'ownerName',
-  'owner phone': 'ownerContact', 'owner number': 'ownerContact', 'owner contact': 'ownerContact', phone: 'ownerContact',
-}
+const clean = (s: string) => s.toLowerCase().replace(/\([^)]*\)/g, '').replace(/²/g, '').replace(/\s+/g, ' ').trim()
 
-function normaliseLabel(raw: string): string | null {
-  const clean = raw.toLowerCase()
-    .replace(/\([^)]*\)/g, '')   // drop any parenthetical: "(required, e.g. 3)", "(m²)"
-    .replace(/²/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-  return LABEL_ALIASES[clean] ?? null
+/** Find the step an agent's label refers to, by key, label, or a known alias. */
+function findStep(rawLabel: string, steps: FlowStep[]): FlowStep | null {
+  const c = clean(rawLabel)
+  if (!c) return null
+  return steps.find(s =>
+    c === clean(s.key) || c === clean(s.label) || (s.aliases ?? []).some(a => clean(a) === c),
+  ) ?? null
 }
 
 export interface FormResult {
@@ -159,36 +159,28 @@ export interface FormResult {
  * coerced. Blank values are skipped (an optional left empty is fine). A value
  * that won't parse is reported so the agent can fix just that one.
  */
-export function parseListingForm(text: string, base: FlowContext = {}, steps: FlowStep[] = CREATE_PROPERTY_STEPS): FormResult {
+export function parseForm(text: string, steps: FlowStep[], base: FlowContext = {}): FormResult {
   const out: FlowContext = { ...base }
   const invalid: string[] = []
 
   for (const line of String(text ?? '').split('\n')) {
     const idx = line.indexOf(':')
     if (idx === -1) continue
-    const key = normaliseLabel(line.slice(0, idx))
-    if (!key) continue
-    const raw = line.slice(idx + 1).replace(/\((?:required|optional|mandatory)\)/gi, '').trim()
+    const step = findStep(line.slice(0, idx), steps)
+    if (!step) continue
+    const raw = line.slice(idx + 1).trim()
     if (!raw) continue   // left blank
 
-    const step = steps.find(s => s.key === key)
-    if (!step) continue
     const value = step.coerce(raw)
     if (value === null) invalid.push(step.label)
-    else out[key] = value
+    else out[step.key] = value
   }
   return { context: out, invalid }
 }
 
 /** Mandatory fields still empty in the context. */
-export function missingMandatory(context: FlowContext, steps: FlowStep[] = CREATE_PROPERTY_STEPS): FlowStep[] {
+export function missingMandatory(context: FlowContext, steps: FlowStep[]): FlowStep[] {
   return steps.filter(s => s.mandatory && (context[s.key] === undefined || context[s.key] === null || context[s.key] === ''))
-}
-
-/** Did the agent's message yield any recognised fields? */
-export function looksLikeForm(text: string, steps: FlowStep[] = CREATE_PROPERTY_STEPS): boolean {
-  const { context, invalid } = parseListingForm(text, {}, steps)
-  return Object.keys(context).length > 0 || invalid.length > 0
 }
 
 /**
@@ -203,6 +195,29 @@ export function isStartListing(text: string | null | undefined): boolean {
   const s = (text ?? '').trim()
   if (!s) return false
   return /^(i (want|need|would like) to\s+)?(add|create|list|post|register)\b[^.!?]*\b(listing|property|properties|apartment|appartement|flat|villa|office|shop|chalet|building|land|house)\b/i.test(s)
+}
+
+/** Does this message plainly ask to add a client/lead/buyer/renter? */
+export function isStartClient(text: string | null | undefined): boolean {
+  const s = (text ?? '').trim()
+  if (!s) return false
+  return /^(i (want|need|would like) to\s+)?(add|create|register|new|save)\b[^.!?]*\b(client|customer|lead|buyer|renter|tenant)\b/i.test(s)
+}
+
+export const LISTING_INTRO = 'Adding a listing.'
+export const CLIENT_INTRO = 'Adding a client.'
+
+/** Map an opening message's extracted fields onto a form's steps. */
+export function seedForm(fields: Record<string, unknown> | undefined, steps: FlowStep[]): FlowContext {
+  const out: FlowContext = {}
+  if (!fields) return out
+  for (const [k, v] of Object.entries(fields)) {
+    const step = findStep(k, steps)
+    if (!step) continue
+    const value = step.coerce(v)
+    if (value !== null) out[step.key] = value
+  }
+  return out
 }
 
 export type FlowContext = Record<string, unknown>

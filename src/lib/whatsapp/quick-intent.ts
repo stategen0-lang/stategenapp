@@ -70,6 +70,15 @@ export function quickIntent(raw: string | null | undefined): IntentResult | null
     return { intent: 'create_event', notes: text }
   }
 
+  // ── "add a client" / "new buyer Ahmed" ───────────────────────────────────
+  // A command verb plus a person noun, and no property words (so "add a listing"
+  // stays a listing).
+  if (/^(add|create|register|new|save)\b/i.test(text)
+      && /\b(client|customer|lead|buyer|renter|tenant)\b/i.test(text)
+      && !/\b(listing|propert|apartment|villa|office|shop|chalet|building|land)\b/i.test(text)) {
+    return { intent: 'create_client', notes: text }
+  }
+
   // ── "what's on today" / "my schedule tomorrow" ────────────────────────────
   if (/\b(schedule|calendar|agenda|diary)\b/i.test(text)
       || /\bwhat('?s| is)?\s+(on|up|happening)\b/i.test(text)

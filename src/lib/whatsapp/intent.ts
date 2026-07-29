@@ -22,6 +22,7 @@ export type Intent =
   | 'query_agents'
   | 'query_schedule'
   | 'create_event'
+  | 'create_client'
   | 'query_overdue'
   | 'confirm'
   | 'cancel'
@@ -47,7 +48,7 @@ export interface IntentResult {
 const VALID: Intent[] = [
   'reminder_response', 'feedback', 'update_client', 'update_property',
   'create_property', 'query_client', 'query_property', 'query_agents', 'query_schedule', 'create_event',
-  'query_overdue', 'confirm', 'cancel', 'help', 'unknown',
+  'create_client', 'query_overdue', 'confirm', 'cancel', 'help', 'unknown',
 ]
 
 /**
@@ -108,6 +109,7 @@ Intents:
 - update_client: wants to change a client record ("update Ahmed's budget to 400k")
 - update_property: wants to change a listing ("mark property #23 as sold")
 - create_property: wants to add a new listing (describes a property to add)
+- create_client: wants to add a new client/lead/buyer/renter ("add a client", "new buyer Ahmed")
 - feedback: reporting the outcome of a call or a note about a client
 - reminder_response: responding to a call reminder
 - help: asking what the bot can do
@@ -140,6 +142,8 @@ Examples (note the typos and varied phrasing):
 "add listing: 3 bed apartment in Hamra, Beirut, 450k, 180 sqm" -> {"intent":"create_property","fields":{"title":"3 bed apartment","beds":3,"neighborhood":"Hamra","location":"Beirut","price":450000,"size":180}}
 "book a viewing with ahmed tomorow at 3pm" -> {"intent":"create_event","clientName":"Ahmed","notes":"viewing tomorrow at 3pm"}
 "whats on today" -> {"intent":"query_schedule"}
+"add a client" -> {"intent":"create_client"}
+"new buyer Ahmed looking for a villa in Hamra, budget 600k, 03111222" -> {"intent":"create_client","fields":{"name":"Ahmed","clientType":"buyer","propertyType":"villa","location":"Hamra","budget":600000,"phone":"03111222"}}
 "called Ahmed, he wants a viewing Saturday" -> {"intent":"feedback","clientName":"Ahmed","notes":"wants a viewing Saturday"}`
 
 /**

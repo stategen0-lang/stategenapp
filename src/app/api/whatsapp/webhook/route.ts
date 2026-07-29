@@ -9,8 +9,8 @@ import {
   stageClientUpdate, stagePropertyUpdate, stageFeedback,
   applyPendingAction, handleReminderReply,
 } from '@/lib/whatsapp/write-handlers'
-import { startCreatePropertyFlow, continueFlow } from '@/lib/whatsapp/flow-handlers'
-import { isStartListing } from '@/lib/whatsapp/flows'
+import { startCreatePropertyFlow, startCreateClientFlow, continueFlow } from '@/lib/whatsapp/flow-handlers'
+import { isStartListing, isStartClient } from '@/lib/whatsapp/flows'
 import { handleAgentActivity, handleOverdueReminders } from '@/lib/whatsapp/manager-handlers'
 import { stageCreateEvent, handleQuerySchedule } from '@/lib/whatsapp/calendar-handlers'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -127,7 +127,9 @@ async function route(
   // Grok is still asked, so any details in the message are extracted and the
   // flow can skip questions — but the routing decision is ours when the wording
   // is unambiguous.
-  const intent = isStartListing(body) ? 'create_property' : result.intent
+  const intent = isStartListing(body) ? 'create_property'
+    : isStartClient(body) ? 'create_client'
+    : result.intent
 
   switch (intent) {
     case 'query_client':   return { intent, answer: await handleQueryClient(admin, profile, result) }
@@ -143,6 +145,7 @@ async function route(
     case 'update_property':return { intent, answer: await stagePropertyUpdate(admin, profile, result) }
     // Starts the multi-step flow, which finishes at the same confirmation step.
     case 'create_property':return { intent, answer: await startCreatePropertyFlow(admin, profile, result) }
+    case 'create_client':  return { intent, answer: await startCreateClientFlow(admin, profile, result) }
     case 'feedback':       return { intent, answer: await stageFeedback(admin, profile, result, body) }
     // Only reached for phrasings the local matcher missed ("go on then").
     case 'confirm':
