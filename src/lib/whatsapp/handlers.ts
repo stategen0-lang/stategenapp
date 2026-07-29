@@ -12,6 +12,7 @@ import { matchProperties } from '@/lib/matching'
 import { formatPrice } from '@/lib/data'
 import type { IntentResult } from '@/lib/whatsapp/intent'
 import { splitClientRef } from '@/lib/whatsapp/client-ref'
+import { makeShareToken, shareSecret } from '@/lib/share'
 
 export const HELP_TEXT = [
   'I can help with:',
@@ -21,6 +22,7 @@ export const HELP_TEXT = [
   '• "mark property #23 as sold" — update a listing',
   '• "add a listing" — new property (fill-in form)',
   '• "add a client" — new buyer/renter (fill-in form)',
+  '• "send me the link for #23" — a shareable listing link',
   '• "spoke to Ahmed, viewing Saturday" — log a call',
   '• "book a viewing tomorrow at 3pm" — add to your calendar',
   '• "what\'s on today" — your schedule',
@@ -178,6 +180,39 @@ export async function handleQueryProperty(
     header,
     ...matches.map(({ property: p, score }) =>
       `• #${p.id} ${p.title} — ${p.transaction === 'For Rent' ? `${formatPrice(p.rent)}/mo` : formatPrice(p.price)} · ${p.district} · ${Math.round(score.total)}% match`),
+  ].join('\n')
+}
+
+// ── "send me the link for #23" ──────────────────────────────────────────────
+// Mints a public, unguessable share link for a listing — the same token the web
+// app's Share button produces — so an agent can forward it to a client straight
+// from WhatsApp. The link only shows client-safe fields; owner name/contact and
+// internal notes never reach the public page (see src/lib/share.ts).
+export async function handleShareListing(
+  admin: SupabaseClient,
+  profile: Profile,
+  intent: IntentResult,
+  origin: string,
+): Promise<string> {
+  if (!intent.propertyId) return 'Which listing? Try "send me the link for #23".'
+
+  const { data } = await admin
+    .from('Properties')
+    .select('*')
+    .eq('company_id', profile.company_id)
+    .eq('id', intent.propertyId)
+    .maybeSingle()
+
+  if (!data) return `No listing with id #${intent.propertyId}.`
+
+  const p = dbRowToProperty(data, 0)
+  const token = makeShareToken(p.id, shareSecret())
+  const price = p.transaction === 'For Rent' ? `${formatPrice(p.rent)}/mo` : formatPrice(p.price)
+  return [
+    `${p.title} — ${price}`,
+    `${origin}/l/${token}`,
+    '',
+    'Forward this to your client. It shows photos, price and details; owner info stays private.',
   ].join('\n')
 }
 

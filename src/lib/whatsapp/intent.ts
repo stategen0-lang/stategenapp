@@ -23,6 +23,7 @@ export type Intent =
   | 'query_schedule'
   | 'create_event'
   | 'create_client'
+  | 'share_listing'
   | 'query_overdue'
   | 'confirm'
   | 'cancel'
@@ -48,7 +49,7 @@ export interface IntentResult {
 const VALID: Intent[] = [
   'reminder_response', 'feedback', 'update_client', 'update_property',
   'create_property', 'query_client', 'query_property', 'query_agents', 'query_schedule', 'create_event',
-  'create_client', 'query_overdue', 'confirm', 'cancel', 'help', 'unknown',
+  'create_client', 'share_listing', 'query_overdue', 'confirm', 'cancel', 'help', 'unknown',
 ]
 
 /**
@@ -110,6 +111,7 @@ Intents:
 - update_property: wants to change a listing ("mark property #23 as sold")
 - create_property: wants to add a new listing (describes a property to add)
 - create_client: wants to add a new client/lead/buyer/renter ("add a client", "new buyer Ahmed")
+- share_listing: wants a shareable public link to a listing to forward to a client ("send me the link for #23", "share property 23")
 - feedback: reporting the outcome of a call or a note about a client
 - reminder_response: responding to a call reminder
 - help: asking what the bot can do
@@ -138,6 +140,8 @@ Examples (note the typos and varied phrasing):
 "pull up ahmed for me" -> {"intent":"query_client","clientName":"Ahmed"}
 "any flats under 500k in beirut" -> {"intent":"query_property","budget":500000,"location":"Beirut"}
 "mark property #23 as sold" -> {"intent":"update_property","propertyId":23,"fields":{"status":"Sold"}}
+"send me the link for #23" -> {"intent":"share_listing","propertyId":23}
+"share property 23 with the client" -> {"intent":"share_listing","propertyId":23}
 "prop 23 is sold" -> {"intent":"update_property","propertyId":23,"fields":{"status":"Sold"}}
 "add listing: 3 bed apartment in Hamra, Beirut, 450k, 180 sqm" -> {"intent":"create_property","fields":{"title":"3 bed apartment","beds":3,"neighborhood":"Hamra","location":"Beirut","price":450000,"size":180}}
 "book a viewing with ahmed tomorow at 3pm" -> {"intent":"create_event","clientName":"Ahmed","notes":"viewing tomorrow at 3pm"}

@@ -59,6 +59,20 @@ export function quickIntent(raw: string | null | undefined): IntentResult | null
     return { intent: 'help' }
   }
 
+  // ── "send me the link for #23" / "share property 23" ──────────────────────
+  // A share/link verb plus a listing id → hand back the public link. Requires a
+  // number tied to a #/property/listing marker (or a bare id right after the
+  // verb) so "share how the team is doing" can't be mistaken for it.
+  if (/\b(share|link)\b/i.test(text)) {
+    const m = text.match(/(?:#|\bpropert\w*|\blisting|\bprop|\bunit)\s*#?\s*(\d+)/i)
+      || text.match(/^\s*(?:share|link|send(?:\s+me)?(?:\s+the)?(?:\s+link)?)\s+#?(\d+)\b/i)
+    if (m) return { intent: 'share_listing', propertyId: Number(m[1]) }
+    // A "link" request with no number is still a share request — the handler
+    // asks which listing. Gated on "link" specifically so "share how the team is
+    // doing" (also has no id) still reaches the team-report matcher below.
+    if (/\blink\b/i.test(text)) return { intent: 'share_listing' }
+  }
+
   // ── "add a viewing with Ahmed tomorrow at 3pm" ────────────────────────────
   // Checked before the schedule query because "schedule" is both a verb and a
   // noun: "schedule a call" books one, "my schedule" asks for the list. This

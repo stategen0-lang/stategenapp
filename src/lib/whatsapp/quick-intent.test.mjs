@@ -71,6 +71,36 @@ test('property by number', () => {
   assert.equal(quickIntent('info on property 23')?.propertyId, 23)
 })
 
+// ── share a listing link ─────────────────────────────────────────────────────
+test('share a listing link: phrasing variants all carry the id', () => {
+  for (const s of [
+    'send me the link for #23', 'share property 23', 'link to listing 23',
+    'link for #23', 'whats the link for property 23', 'share 23', 'link 23',
+    'send me the link 23',
+  ]) {
+    const r = quickIntent(s)
+    assert.equal(r?.intent, 'share_listing', s)
+    assert.equal(r?.propertyId, 23, s)
+  }
+})
+test('a "link" request with no id still routes to share (handler asks which)', () => {
+  // "send me the link" clearly wants a listing link — route it to share_listing
+  // with no id so the handler prompts for the number, rather than generic help.
+  const r = quickIntent('send me the link')
+  assert.equal(r?.intent, 'share_listing')
+  assert.equal(r?.propertyId, undefined)
+})
+test('a share request without the word "link" or an id is not read as share', () => {
+  // "share how the team is doing" has no id and no "link" → falls through to the
+  // team report, not share_listing.
+  assert.notEqual(quickIntent('share how the team is doing')?.intent, 'share_listing')
+})
+test('a property search mentioning a budget is not read as a share', () => {
+  // "500k" must not be mistaken for a listing id.
+  const r = quickIntent('share listings around 500k')
+  assert.notEqual(r?.intent, 'share_listing')
+})
+
 // ── updates ─────────────────────────────────────────────────────────────────
 test('mark property #N as sold', () => {
   const r = quickIntent('mark property #23 as sold')
