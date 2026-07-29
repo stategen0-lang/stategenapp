@@ -37,15 +37,17 @@ export function dbRowToProperty(row: Record<string, unknown>, idx: number): Prop
 export function dbRowToClient(row: Record<string, unknown>, idx: number): Client {
   let extras: Record<string, unknown> = {}
   try { extras = JSON.parse(row.notes as string || '{}') } catch {}
+  const reqExtras = (extras.req as Record<string, unknown>) ?? {}
   const req: ClientReq = {
     transaction: (row['payment_terms'] as ClientReq['transaction']) ?? '',
-    type: ((extras.req as Record<string, unknown>)?.type as ClientReq['type']) ?? '',
+    type: (reqExtras.type as ClientReq['type']) ?? '',
     location: (row['prefered-location'] as string) ?? '',
     priceMin: (row['budget_min'] as number) ?? 0,
     priceMax: (row['budget_max'] as number) ?? 0,
     beds: (row['bedrooms'] as number) ?? 0,
-    baths: 0,
-    size: 0,
+    baths: (reqExtras.baths as number) ?? 0,
+    size: (reqExtras.size as number) ?? 0,
+    parkings: reqExtras.parkings as number | undefined,
     garden: false,
     balcony: false,
     notes: '',

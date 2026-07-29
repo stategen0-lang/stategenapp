@@ -78,13 +78,17 @@ async function finishClient(admin: SupabaseClient, profile: Profile, context: Fl
     status: 'Searching',
   }
   // The app reads these from the notes JSON blob (see db-mappers): the buyer/
-  // renter type, email, the owning agent, and the wanted property type.
+  // renter type, the owning agent, and what they're after — wanted property type
+  // and the bed/bath/parking requirement (bedrooms also gets its own column).
+  const req: Record<string, unknown> = { type: context.propertyType }
+  if (context.beds != null) req.beds = context.beds
+  if (context.baths != null) req.baths = context.baths
+  if (context.parkings != null) req.parkings = context.parkings
   const extras: Record<string, unknown> = {
     type: clientType,
     agentId: profile.agent_code ?? undefined,
-    req: { type: context.propertyType },
+    req,
   }
-  if (context.email) extras.email = context.email
 
   const changes = [
     `Name: ${context.name}`,
@@ -92,7 +96,8 @@ async function finishClient(admin: SupabaseClient, profile: Profile, context: Fl
     `${clientType} · wants ${context.propertyType} in ${context.location}`,
     `Budget: $${budget.toLocaleString('en-US')}`,
     context.beds ? `Bedrooms: ${context.beds}` : null,
-    context.email ? `Email: ${context.email}` : null,
+    context.baths ? `Bathrooms: ${context.baths}` : null,
+    context.parkings ? `Parking: ${context.parkings}` : null,
   ].filter(Boolean) as string[]
 
   return stage(admin, profile, 'create_client', confirmationText('a new client', changes), {

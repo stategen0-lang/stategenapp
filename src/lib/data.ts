@@ -85,6 +85,7 @@ export interface ClientReq {
   beds: number
   baths: number
   size: number
+  parkings?: number
   garden: boolean
   balcony: boolean
   advancedPayment?: boolean   // renter can pay advanced (optional)

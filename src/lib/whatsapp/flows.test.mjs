@@ -127,14 +127,16 @@ const fullClient = {
   propertyType: 'Appartement', location: 'Achrafieh', budget: 400000,
 }
 
-test('client form: lists the client fields with tags', () => {
+test('client form: lists the client fields with tags (no email)', () => {
   const form = clientForm()
   assert.match(form, /Adding a client/)
-  for (const label of ['Name', 'Phone', 'Buyer or renter', 'Looking for', 'Preferred area', 'Budget', 'Bedrooms', 'Email']) {
+  for (const label of ['Name', 'Phone', 'Buyer or renter', 'Looking for', 'Preferred area', 'Budget', 'Bedrooms', 'Bathrooms', 'Parking spaces']) {
     assert.ok(form.includes(`${label} (`), `client form missing "${label}"`)
   }
   assert.match(form, /Name \(required/)
-  assert.match(form, /Email \(optional/)
+  assert.match(form, /Bathrooms \(optional/)
+  assert.match(form, /Parking spaces \(optional/)
+  assert.equal(/Email/.test(form), false)            // email was dropped
 })
 test('parseForm (client): reads and coerces the fields', () => {
   const { context, invalid } = parseClient([
@@ -145,7 +147,8 @@ test('parseForm (client): reads and coerces the fields', () => {
     'Preferred area (required): Achrafieh',
     'Budget (required): 400k',
     'Bedrooms (optional): 3',
-    'Email (optional): a@x.com',
+    'Bathrooms (optional): 2',
+    'Parking spaces (optional): 1',
   ].join('\n'))
   assert.deepEqual(invalid, [])
   assert.equal(context.name, 'Ahmed Khoury')
@@ -154,7 +157,8 @@ test('parseForm (client): reads and coerces the fields', () => {
   assert.equal(context.location, 'Achrafieh')
   assert.equal(context.budget, 400000)
   assert.equal(context.beds, 3)
-  assert.equal(context.email, 'a@x.com')
+  assert.equal(context.baths, 2)
+  assert.equal(context.parkings, 1)
 })
 test('parseForm (client): "renter"/"tenant" become Renter', () => {
   assert.equal(parseClient('Buyer or renter (required): renter').context.clientType, 'Renter')
@@ -163,7 +167,7 @@ test('parseForm (client): "renter"/"tenant" become Renter', () => {
 test('missingMandatory (client): required only', () => {
   const missing = missingClient({ name: 'Ahmed' }).map(s => s.key)
   assert.ok(missing.includes('phone') && missing.includes('budget') && missing.includes('propertyType'))
-  assert.equal(missing.includes('email'), false)     // optional
+  assert.equal(missing.includes('beds'), false)      // bed/bath/parking are optional
   assert.deepEqual(missingClient(fullClient), [])
 })
 test('seedForm (client): maps an opening message\'s fields', () => {

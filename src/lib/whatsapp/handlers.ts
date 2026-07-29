@@ -104,6 +104,8 @@ export async function handleQueryClient(
     c.req.location ? `Wants: ${c.req.location}` : null,
     c.req.type ? `Property type: ${c.req.type}` : null,
     c.req.beds ? `Bedrooms: ${c.req.beds}` : null,
+    c.req.baths ? `Bathrooms: ${c.req.baths}` : null,
+    c.req.parkings ? `Parking: ${c.req.parkings}` : null,
     `Status: ${c.status}`,
     row.lead_score != null ? `Lead score: ${row.lead_score}/100` : null,
     visible ? null : '(Another agent\'s client — contact details hidden)',
