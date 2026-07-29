@@ -11,8 +11,10 @@
 // the two are separate requests and roles can change in between.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { canEditClient, canEditProperty, canSeeClientPII, maskClientName } from '@/lib/permissions'
+import { canEditClient, canEditProperty, canSeeClientPII, isManager, maskClientName } from '@/lib/permissions'
 import type { IntentResult } from '@/lib/whatsapp/intent'
+import { stageLabel } from '@/lib/whatsapp/deals'
+import type { Stage } from '@/lib/pipeline'
 import {
   buildUpdate, buildNewProperty, confirmationText, hasChanges,
   mergeExtras, appendLog, CLIENT_FIELDS, PROPERTY_FIELDS,
@@ -57,7 +59,7 @@ function clientLabel(profile: Profile, row: Record<string, unknown>): string {
 
 /** What a pending_actions row carries between the confirmation and the write. */
 export interface Payload {
-  table: 'client_requests' | 'Properties' | 'calendar_events'
+  table: 'client_requests' | 'Properties' | 'calendar_events' | 'deals'
   /** Row to update; absent for an insert. */
   id?: number | string
   columns: Record<string, unknown>
@@ -103,7 +105,7 @@ type Resolved =
   | { ok: true; row: Record<string, unknown> }
   | { ok: false; message: string }
 
-async function resolveClient(admin: SupabaseClient, profile: Profile, name: string | undefined): Promise<Resolved> {
+export async function resolveClient(admin: SupabaseClient, profile: Profile, name: string | undefined): Promise<Resolved> {
   const ref = splitClientRef(name)
   if (!ref.name) return { ok: false, message: 'Which client? Try "update Ahmed\'s budget to 400k".' }
 
@@ -366,6 +368,25 @@ export async function applyPendingAction(
         await createListingAlerts(admin, profile.company_id, data as Record<string, unknown>)
       }
       return `Saved — listing #${data?.id} created.`
+    }
+
+    // Deals: ownership is the agent_id column (not a JSON blob), so they get
+    // their own permission check and a plain column update. The DB trigger keeps
+    // stage_changed_at and stage_history; the lead score refreshes on the next
+    // web-side recalculation (the webhook has no signed-in session to run one).
+    if (p.table === 'deals') {
+      const { data: deal } = await admin
+        .from('deals').select('id, agent_id').eq('company_id', profile.company_id).eq('id', p.id).maybeSingle()
+      if (!deal) return 'That deal no longer exists.'
+      if (!isManager(profile.role) && (deal as Record<string, unknown>).agent_id !== profile.agent_code) {
+        return 'You no longer have permission to move that deal.'
+      }
+      const stage = p.columns.stage as Stage
+      const cols = { stage, outcome: stage === 'closed' ? (p.columns.outcome ?? null) : null }
+      const { error } = await admin.from('deals').update(cols).eq('id', p.id).eq('company_id', profile.company_id)
+      if (error) throw error
+      const label = cols.outcome ? `${stageLabel('closed')} (${cols.outcome})` : stageLabel(stage)
+      return `Saved — ${p.label} is now ${label}.`
     }
 
     // Update: re-read the row so permission is checked against current state

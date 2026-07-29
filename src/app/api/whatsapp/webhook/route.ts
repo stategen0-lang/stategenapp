@@ -10,6 +10,7 @@ import {
   applyPendingAction, handleReminderReply,
 } from '@/lib/whatsapp/write-handlers'
 import { startCreatePropertyFlow, startCreateClientFlow, continueFlow } from '@/lib/whatsapp/flow-handlers'
+import { stageDealMove, handleQueryPipeline } from '@/lib/whatsapp/pipeline-handlers'
 import { isStartListing, isStartClient } from '@/lib/whatsapp/flows'
 import { handleAgentActivity, handleOverdueReminders } from '@/lib/whatsapp/manager-handlers'
 import { stageCreateEvent, handleQuerySchedule } from '@/lib/whatsapp/calendar-handlers'
@@ -149,6 +150,8 @@ async function route(
     case 'help':           return { intent, answer: HELP_TEXT }
     case 'update_client':  return { intent, answer: await stageClientUpdate(admin, profile, result) }
     case 'update_property':return { intent, answer: await stagePropertyUpdate(admin, profile, result) }
+    case 'update_deal':    return { intent, answer: await stageDealMove(admin, profile, result) }
+    case 'query_pipeline': return { intent, answer: await handleQueryPipeline(admin, profile, result) }
     // Starts the multi-step flow, which finishes at the same confirmation step.
     case 'create_property':return { intent, answer: await startCreatePropertyFlow(admin, profile, result) }
     case 'create_client':  return { intent, answer: await startCreateClientFlow(admin, profile, result) }

@@ -20,6 +20,8 @@ export const HELP_TEXT = [
   '• "what matches 500k in Beirut" — property search',
   '• "set Ahmed\'s budget to 400k" — update a client',
   '• "mark property #23 as sold" — update a listing',
+  '• "move Ahmed to negotiating" — move a deal along the pipeline',
+  '• "what\'s in negotiation" — see your pipeline',
   '• "add a listing" — new property (fill-in form)',
   '• "add a client" — new buyer/renter (fill-in form)',
   '• "send me the link for #23" — a shareable listing link',

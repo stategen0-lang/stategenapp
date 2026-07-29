@@ -128,6 +128,47 @@ test('budget update: phrasing variants', () => {
 test('budget update with an unparseable amount is left to the model', () => {
   assert.equal(quickIntent("set Ahmed's budget to whatever he wants"), null)
 })
+// ── pipeline: move a deal ─────────────────────────────────────────────────────
+test('move <name> to <stage>', () => {
+  const r = quickIntent('move Ahmed to negotiating')
+  assert.equal(r.intent, 'update_deal')
+  assert.equal(r.clientName, 'Ahmed')
+  assert.deepEqual(r.fields, { stage: 'negotiating' })
+})
+test('deal move: verbs and synonyms', () => {
+  assert.equal(quickIntent('advance Sara to viewing')?.fields.stage, 'viewing')
+  assert.equal(quickIntent('push Ahmed to the negotiation stage')?.fields.stage, 'negotiating')
+  assert.equal(quickIntent('move Ahmed to contacted')?.fields.stage, 'contacted')
+})
+test('mark <name> as won/lost closes the deal with an outcome', () => {
+  assert.deepEqual(quickIntent("mark Ahmed's deal as won")?.fields, { stage: 'closed', outcome: 'won' })
+  assert.deepEqual(quickIntent('close Sara as lost')?.fields, { stage: 'closed', outcome: 'lost' })
+  assert.equal(quickIntent('mark Ahmed as won')?.intent, 'update_deal')
+})
+test('"mark <name> as closed" stays a client status change, not a deal move', () => {
+  // "closed" alone is a client status word; deal closing uses won/lost.
+  assert.equal(quickIntent('mark Ahmed as closed')?.intent, 'update_client')
+})
+test('"mark property #23 as sold" stays a property update, not a deal', () => {
+  assert.equal(quickIntent('mark property #23 as sold')?.intent, 'update_property')
+})
+
+// ── pipeline: read the board ──────────────────────────────────────────────────
+test('pipeline reads', () => {
+  assert.equal(quickIntent('show my pipeline')?.intent, 'query_pipeline')
+  assert.equal(quickIntent('my pipeline')?.intent, 'query_pipeline')
+  assert.equal(quickIntent('show my deals')?.intent, 'query_pipeline')
+})
+test('pipeline read carries a named stage', () => {
+  const r = quickIntent("what's in negotiation")
+  assert.equal(r?.intent, 'query_pipeline')
+  assert.deepEqual(r?.fields, { stage: 'negotiating' })
+  assert.deepEqual(quickIntent('anything in viewing?')?.fields, { stage: 'viewing' })
+})
+test('a bare pipeline ask has no stage filter', () => {
+  assert.equal(quickIntent('show my pipeline')?.fields, undefined)
+})
+
 test('mark <name> as closed', () => {
   const r = quickIntent('mark Ahmed as closed')
   assert.equal(r.intent, 'update_client')

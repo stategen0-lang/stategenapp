@@ -16,6 +16,8 @@ export type Intent =
   | 'feedback'
   | 'update_client'
   | 'update_property'
+  | 'update_deal'
+  | 'query_pipeline'
   | 'create_property'
   | 'query_client'
   | 'query_property'
@@ -47,7 +49,7 @@ export interface IntentResult {
 }
 
 const VALID: Intent[] = [
-  'reminder_response', 'feedback', 'update_client', 'update_property',
+  'reminder_response', 'feedback', 'update_client', 'update_property', 'update_deal', 'query_pipeline',
   'create_property', 'query_client', 'query_property', 'query_agents', 'query_schedule', 'create_event',
   'create_client', 'share_listing', 'query_overdue', 'confirm', 'cancel', 'help', 'unknown',
 ]
@@ -109,6 +111,8 @@ Intents:
 - query_overdue: asking which follow-ups or reminders are late ("what follow-ups are overdue")
 - update_client: wants to change a client record ("update Ahmed's budget to 400k")
 - update_property: wants to change a listing ("mark property #23 as sold")
+- update_deal: wants to move a client's deal along the sales pipeline ("move Ahmed to negotiating", "mark Ahmed's deal as won")
+- query_pipeline: asking about the deal pipeline or deals in a stage ("what's in negotiation", "show my pipeline", "what am I closing")
 - create_property: wants to add a new listing (describes a property to add)
 - create_client: wants to add a new client/lead/buyer/renter ("add a client", "new buyer Ahmed")
 - share_listing: wants a shareable public link to a listing to forward to a client ("send me the link for #23", "share property 23")
@@ -132,6 +136,10 @@ using ONLY these key names (anything else is discarded):
 - property: status, price, rent, size, beds, baths, title, location, neighborhood, notes
   status must be one of: Available, Reserved, Sold, Rented
   "location" is the city, "neighborhood" is the area within it
+For update_deal, put the target in "fields":
+- stage must be one of: lead, contacted, viewing, negotiating, closed
+- outcome (only when closing) must be one of: won, lost
+For query_pipeline, if they name a stage put it in "fields" as stage (lead|contacted|viewing|negotiating|closed).
 
 Examples (note the typos and varied phrasing):
 "set Ahmed's budget to 400k" -> {"intent":"update_client","clientName":"Ahmed","fields":{"budget":400000}}
@@ -142,6 +150,10 @@ Examples (note the typos and varied phrasing):
 "mark property #23 as sold" -> {"intent":"update_property","propertyId":23,"fields":{"status":"Sold"}}
 "send me the link for #23" -> {"intent":"share_listing","propertyId":23}
 "share property 23 with the client" -> {"intent":"share_listing","propertyId":23}
+"move ahmed to negotiating" -> {"intent":"update_deal","clientName":"Ahmed","fields":{"stage":"negotiating"}}
+"ahmeds deal is won" -> {"intent":"update_deal","clientName":"Ahmed","fields":{"stage":"closed","outcome":"won"}}
+"whats in negotiation" -> {"intent":"query_pipeline","fields":{"stage":"negotiating"}}
+"show me my pipeline" -> {"intent":"query_pipeline"}
 "prop 23 is sold" -> {"intent":"update_property","propertyId":23,"fields":{"status":"Sold"}}
 "add listing: 3 bed apartment in Hamra, Beirut, 450k, 180 sqm" -> {"intent":"create_property","fields":{"title":"3 bed apartment","beds":3,"neighborhood":"Hamra","location":"Beirut","price":450000,"size":180}}
 "book a viewing with ahmed tomorow at 3pm" -> {"intent":"create_event","clientName":"Ahmed","notes":"viewing tomorrow at 3pm"}

@@ -14,6 +14,14 @@
 
 import type { IntentResult } from '@/lib/whatsapp/intent'
 import { toMoney } from './writes.ts'
+import { coerceDealTarget, findStageInText, type DealTarget } from './deals.ts'
+
+/** Flatten a pipeline target into the intent's fields (only ever strings). */
+function dealFields(t: DealTarget): Record<string, string> {
+  return t.outcome === 'won' || t.outcome === 'lost'
+    ? { stage: t.stage, outcome: t.outcome }
+    : { stage: t.stage }   // non-closed clears outcome later; closed-unknown is asked
+}
 
 /** "500k in Beirut" → { budget, location } */
 function budgetAndLocation(text: string): { budget?: number; location?: string } {
@@ -132,6 +140,29 @@ export function quickIntent(raw: string | null | undefined): IntentResult | null
     if (budget) {
       return { intent: 'update_client', clientName: budgetSet[1].trim(), fields: { budget } }
     }
+  }
+
+  // ── pipeline moves: "move Ahmed to negotiating", "mark Ahmed as won" ───────
+  // A deal move, distinct from a client status change: keyed on move verbs and
+  // on won/lost (pipeline-only words). "mark Ahmed as closed" is left to the
+  // client-status matcher below, so this never fights it.
+  const dealMove = text.match(/^(?:move|advance|push|shift|progress|bump)\s+(.+?)(?:'s)?\s+(?:deal\s+)?(?:to|into|forward to|up to)\s+(?:the\s+)?(\w+)(?:\s+stage)?\s*$/i)
+  if (dealMove) {
+    const target = coerceDealTarget(dealMove[2])
+    if (target) return { intent: 'update_deal', clientName: dealMove[1].trim(), fields: dealFields(target) }
+  }
+  const dealClose = text.match(/^(?:mark|set|close|closed)\s+(.+?)(?:'s)?\s+(?:deal\s+)?(?:as\s+)?(won|lost|sold)\s*$/i)
+  if (dealClose) {
+    const target = coerceDealTarget(dealClose[2])
+    if (target) return { intent: 'update_deal', clientName: dealClose[1].trim(), fields: dealFields(target) }
+  }
+
+  // ── pipeline reads: "my pipeline", "what's in negotiation", "show my deals" ─
+  if (/\bpipeline\b/i.test(text)
+      || (/\bdeals?\b/i.test(text) && /\b(my|show|list|open|active|what|which|any|how many)\b/i.test(text))
+      || /\b(what|whats|who|whos|any|anything|hows?)\b.*\b(?:in|at)\s+(?:the\s+)?(lead|contacted|viewing|negotiating|negotiation|closed|won|lost)\b/i.test(text)) {
+    const stage = findStageInText(text)
+    return { intent: 'query_pipeline', ...(stage ? { fields: { stage } } : {}) }
   }
 
   // ── "mark Ahmed as closed" ────────────────────────────────────────────────
