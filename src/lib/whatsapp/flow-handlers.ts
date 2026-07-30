@@ -152,7 +152,10 @@ export async function continueFlow(
     return null
   }
 
-  if (/^(cancel|stop|abort|nevermind|never mind|quit)\b/i.test(body.trim())) {
+  // "cancel" (not "stop" — a bare STOP is the global opt-out handled upstream)
+  // aborts the flow. The prompts tell the agent to reply "cancel", so this stays
+  // in step with them.
+  if (/^(cancel|abort|nevermind|never mind|quit)\b/i.test(body.trim())) {
     await clearFlow(admin, profile.id)
     return `Cancelled — the ${cfg.noun} was not saved.`
   }

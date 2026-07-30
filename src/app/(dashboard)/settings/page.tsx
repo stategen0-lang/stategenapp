@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { TrendingUp, DollarSign, Home, BadgeDollarSign, X, ChevronRight, Plus, Trash2, Check, Download } from 'lucide-react'
+import { TrendingUp, DollarSign, Home, BadgeDollarSign, X, ChevronRight, Plus, Trash2, Check, Download, MessageCircle, ExternalLink } from 'lucide-react'
 import { DEALS, AGENTS, formatPrice, Deal, typeStyle } from '@/lib/data'
 import { useSession } from '@/hooks/use-session'
 import { isManager } from '@/lib/permissions'
@@ -92,6 +92,43 @@ export default function ProfilePage() {
   }
 
   function toggleKpi(k: KpiKey) { setKpiPanel(p => p === k ? null : k) }
+
+  // ── WhatsApp connection ──
+  type WaStatus = { connected: boolean; number: string | null; enabled: boolean; optInAt: string | null }
+  type WaConnect = { code: string; link: string; message: string; expiresInMinutes: number }
+  const [wa, setWa] = useState<WaStatus | null>(null)
+  const [waConnect, setWaConnect] = useState<WaConnect | null>(null)
+  const [waBusy, setWaBusy] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/me/whatsapp').then(r => r.ok ? r.json() : null).then(setWa).catch(() => {})
+  }, [])
+
+  // While a connect code is outstanding, poll until the agent's text lands.
+  useEffect(() => {
+    if (!waConnect) return
+    const id = setInterval(async () => {
+      const s = await fetch('/api/me/whatsapp').then(r => r.ok ? r.json() : null).catch(() => null)
+      if (s) { setWa(s); if (s.connected) setWaConnect(null) }
+    }, 4000)
+    return () => clearInterval(id)
+  }, [waConnect])
+
+  async function waStartConnect() {
+    setWaBusy(true)
+    try {
+      const r = await fetch('/api/me/whatsapp', { method: 'POST' })
+      if (r.ok) setWaConnect(await r.json())
+    } finally { setWaBusy(false) }
+  }
+  async function waToggle(enabled: boolean) {
+    const r = await fetch('/api/me/whatsapp', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }) })
+    if (r.ok) setWa(w => w ? { ...w, enabled } : w)
+  }
+  async function waDisconnect() {
+    const r = await fetch('/api/me/whatsapp', { method: 'DELETE' })
+    if (r.ok) { setWa({ connected: false, number: null, enabled: true, optInAt: null }); setWaConnect(null) }
+  }
 
   // ── CSV export (managers only) ──
   const [exporting, setExporting] = useState<ExportKind | null>(null)
@@ -408,6 +445,105 @@ export default function ProfilePage() {
           )}
         </div>
       )}
+
+      {/* WhatsApp Assistant */}
+      <div className="rounded-2xl bg-white overflow-hidden" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #EEF0F4' }}>
+        <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid #EEF0F4' }}>
+          <div className="flex items-center gap-2.5">
+            <MessageCircle className="h-5 w-5" style={{ color: '#25D366' }} />
+            <div>
+              <p className="text-sm font-bold" style={{ color: H }}>WhatsApp Assistant</p>
+              <p className="text-xs mt-0.5" style={{ color: SUB }}>Chat with StateGen from your own WhatsApp number</p>
+            </div>
+          </div>
+          {wa && (
+            <span
+              className="px-2.5 py-1 rounded-full text-xs font-bold"
+              style={
+                wa.connected && wa.enabled ? { background: '#E4F7EC', color: '#1B8A4B' }
+                : wa.connected ? { background: '#FBEFD6', color: '#9A6516' }
+                : { background: '#F0F2F5', color: '#6A7488' }
+              }
+            >
+              {wa.connected ? (wa.enabled ? 'Connected' : 'Paused') : 'Not connected'}
+            </span>
+          )}
+        </div>
+
+        <div className="p-5">
+          {wa === null ? (
+            <p className="text-xs" style={{ color: SUB }}>Loading…</p>
+          ) : wa.connected ? (
+            // ── Connected ──
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm font-semibold" style={{ color: H }}>{wa.number}</p>
+                {wa.optInAt && (
+                  <p className="text-xs mt-0.5" style={{ color: SUB }}>Connected since {new Date(wa.optInAt).toLocaleDateString()}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => waToggle(!wa.enabled)}
+                  className="px-3 py-2 rounded-xl text-xs font-bold"
+                  style={{ border: '1.5px solid #EEF0F4', background: '#F7F8FB', color: H }}
+                >
+                  {wa.enabled ? 'Pause assistant' : 'Resume assistant'}
+                </button>
+                <button
+                  onClick={waDisconnect}
+                  className="px-3 py-2 rounded-xl text-xs font-bold"
+                  style={{ border: '1.5px solid #F3D7D7', background: '#FDF5F5', color: '#A23434' }}
+                >
+                  Disconnect
+                </button>
+              </div>
+            </div>
+          ) : waConnect ? (
+            // ── Connecting: show the deep link + code, poll for the inbound ──
+            <div className="space-y-3">
+              <p className="text-sm" style={{ color: H }}>
+                Tap below to open WhatsApp with the message ready, then hit <span className="font-bold">send</span>.
+              </p>
+              <a
+                href={waConnect.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold text-white"
+                style={{ background: '#25D366' }}
+              >
+                <MessageCircle className="h-4 w-4" /> Open WhatsApp to connect <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+              <div className="rounded-xl px-4 py-3 text-center" style={{ background: '#F7F8FB', border: '1px solid #EEF0F4' }}>
+                <p className="text-xs" style={{ color: SUB }}>Or message the bot with this code:</p>
+                <p className="text-lg font-bold tracking-widest mt-1" style={{ color: H }}>{waConnect.code}</p>
+              </div>
+              <div className="flex items-center justify-between">
+                <p className="text-xs" style={{ color: SUB }}>
+                  <span className="inline-block h-2 w-2 rounded-full mr-1.5 animate-pulse" style={{ background: '#25D366' }} />
+                  Waiting for your message… (code expires in {waConnect.expiresInMinutes} min)
+                </p>
+                <button onClick={() => setWaConnect(null)} className="text-xs font-semibold" style={{ color: SUB }}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            // ── Not connected ──
+            <div className="space-y-3">
+              <p className="text-sm" style={{ color: SUB }}>
+                Link your WhatsApp number to add listings and clients, move deals, get descriptions and more — right from a chat.
+              </p>
+              <button
+                onClick={waStartConnect}
+                disabled={waBusy}
+                className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+                style={{ background: '#25D366' }}
+              >
+                <MessageCircle className="h-4 w-4" /> {waBusy ? 'Preparing…' : 'Connect WhatsApp'}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Description Templates */}
       <div className="rounded-2xl bg-white overflow-hidden" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #EEF0F4' }}>

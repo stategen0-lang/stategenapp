@@ -12,6 +12,7 @@ import {
 import { startCreatePropertyFlow, startCreateClientFlow, continueFlow } from '@/lib/whatsapp/flow-handlers'
 import { stageDealMove, handleQueryPipeline } from '@/lib/whatsapp/pipeline-handlers'
 import { isStartListing, isStartClient } from '@/lib/whatsapp/flows'
+import { parseConnect, isStopMessage, normalizeCode, pairingExpired } from '@/lib/whatsapp/pairing'
 import { handleAgentActivity, handleOverdueReminders } from '@/lib/whatsapp/manager-handlers'
 import { stageCreateEvent, handleQuerySchedule } from '@/lib/whatsapp/calendar-handlers'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -45,6 +46,7 @@ interface Profile {
   agent_code: string | null
   Full_name: string | null
   whatsapp_number: string | null
+  whatsapp_enabled: boolean | null
 }
 
 async function log(
@@ -170,6 +172,54 @@ async function route(
   }
 }
 
+/**
+ * An unknown number texting "connect <code>". If the code matches an
+ * outstanding, unexpired pairing on some profile, bind the number to it and
+ * record opt-in. Returns the reply, or null if it wasn't a valid connect.
+ */
+async function tryPair(admin: SupabaseClient, phone: string, body: string): Promise<string | null> {
+  const code = parseConnect(body)
+  if (!code) return null
+
+  const { data: match } = await admin
+    .from('Profiles')
+    .select('id, Full_name, whatsapp_pending_code, whatsapp_pending_expires')
+    .eq('whatsapp_pending_code', code)
+    .maybeSingle<{ id: string; Full_name: string | null; whatsapp_pending_code: string | null; whatsapp_pending_expires: string | null }>()
+
+  // Compare normalised, and re-check expiry here (not just in SQL) so a stale
+  // code is never honoured.
+  if (!match || normalizeCode(match.whatsapp_pending_code) !== code) {
+    return "That code didn't match. Open Settings → WhatsApp in the app and tap Connect for a fresh link."
+  }
+  if (pairingExpired(match.whatsapp_pending_expires)) {
+    return 'That code has expired. Open Settings → WhatsApp in the app and tap Connect for a new one.'
+  }
+
+  await admin.from('Profiles').update({
+    whatsapp_number: phone,
+    whatsapp_enabled: true,
+    whatsapp_opt_in_at: new Date().toISOString(),
+    whatsapp_pending_code: null,
+    whatsapp_pending_expires: null,
+  }).eq('id', match.id)
+
+  const name = (match.Full_name ?? '').split(' ')[0]
+  return `✅ You're connected${name ? `, ${name}` : ''}! I'm your StateGen assistant. Send "help" to see what I can do.\n\n(Reply STOP at any time to disconnect.)`
+}
+
+/** A connected user texting STOP: unbind and record the opt-out. */
+async function optOut(admin: SupabaseClient, profile: Profile): Promise<string> {
+  await admin.from('Profiles').update({
+    whatsapp_number: null,
+    whatsapp_enabled: false,
+    whatsapp_opt_in_at: null,
+    whatsapp_pending_code: null,
+    whatsapp_pending_expires: null,
+  }).eq('id', profile.id)
+  return "You've been unsubscribed and won't get more messages here. To reconnect, open Settings → WhatsApp in the app and tap Connect."
+}
+
 export async function POST(req: NextRequest) {
   const authToken = process.env.TWILIO_AUTH_TOKEN
   if (!authToken) {
@@ -199,13 +249,27 @@ export async function POST(req: NextRequest) {
   const phone = normalizePhone(from)
   const { data: profile } = await admin
     .from('Profiles')
-    .select('id, company_id, role, agent_code, Full_name, whatsapp_number')
+    .select('id, company_id, role, agent_code, Full_name, whatsapp_number, whatsapp_enabled')
     .eq('whatsapp_number', phone)
     .maybeSingle<Profile>()
 
   if (!profile) {
-    await log(admin, { from_number: phone, direction: 'inbound', message: body, intent: 'unregistered' })
-    return reply('You are not registered. Contact your admin to get access.')
+    // An unknown number is either someone connecting ("connect <code>") or a
+    // stranger. Everything else gets pointed at the in-app connect flow.
+    const paired = await tryPair(admin, phone, body)
+    await log(admin, { from_number: phone, direction: 'inbound', message: body, intent: paired ? 'connect' : 'unregistered' })
+    return reply(paired ?? 'This number isn\'t connected to StateGen. Open the app → Settings → WhatsApp and tap Connect to link it.')
+  }
+
+  // A connected user texting STOP opts out (Meta requires honouring this), and
+  // an account whose assistant is paused gets a short notice instead of replies.
+  if (isStopMessage(body)) {
+    await log(admin, { company_id: profile.company_id, profile_id: profile.id, from_number: phone, direction: 'inbound', message: body, intent: 'opt_out' })
+    return reply(await optOut(admin, profile))
+  }
+  if (profile.whatsapp_enabled === false) {
+    await log(admin, { company_id: profile.company_id, profile_id: profile.id, from_number: phone, direction: 'inbound', message: body, intent: 'disabled' })
+    return reply('The WhatsApp assistant is turned off for your account. Turn it back on in Settings → WhatsApp.')
   }
 
   // Logged before routing so an inbound message survives even if a handler
