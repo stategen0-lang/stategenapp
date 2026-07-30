@@ -81,6 +81,16 @@ export function quickIntent(raw: string | null | undefined): IntentResult | null
     if (/\blink\b/i.test(text)) return { intent: 'share_listing' }
   }
 
+  // ── "write a description for #23" / "describe property 23" ─────────────────
+  // A describe verb plus a listing id → generate a listing description. The
+  // confirm-save step lets the agent reject a wrong id, so a loose number match
+  // is safe here.
+  if (/\bdescri(?:be|ption)\b/i.test(text)) {
+    const m = text.match(/(?:#|\bpropert\w*|\blisting|\bunit)\s*#?\s*(\d+)/i)
+      || text.match(/\bdescri(?:be|ption)\b\s*(?:for\s+|of\s+)?(?:the\s+)?#?(\d+)\b/i)
+    if (m) return { intent: 'describe_property', propertyId: Number(m[1]) }
+  }
+
   // ── "add a viewing with Ahmed tomorrow at 3pm" ────────────────────────────
   // Checked before the schedule query because "schedule" is both a verb and a
   // noun: "schedule a call" books one, "my schedule" asks for the list. This

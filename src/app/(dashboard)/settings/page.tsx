@@ -55,6 +55,15 @@ export default function ProfilePage() {
   function saveTemplates(next: DescriptionTemplate[]) {
     setTemplates(next)
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)) } catch { /* ignore */ }
+    // Mirror the active template to the server so description generation off the
+    // browser (the WhatsApp bot) can use it. Fire-and-forget; localStorage stays
+    // the source of truth for the editor itself.
+    const active = next.find(t => t.active)?.body ?? null
+    fetch('/api/company/template', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ template: active }),
+    }).catch(() => { /* offline / not signed in — non-fatal */ })
   }
 
   function toggleActive(id: string) {

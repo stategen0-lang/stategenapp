@@ -25,6 +25,7 @@ export const HELP_TEXT = [
   '• "add a listing" — new property (fill-in form)',
   '• "add a client" — new buyer/renter (fill-in form)',
   '• "send me the link for #23" — a shareable listing link',
+  '• "write a description for #23" — an AI listing description',
   '• "spoke to Ahmed, viewing Saturday" — log a call',
   '• "book a viewing tomorrow at 3pm" — add to your calendar',
   '• "what\'s on today" — your schedule',

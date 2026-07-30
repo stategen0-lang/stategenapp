@@ -15,6 +15,8 @@ import { canEditClient, canEditProperty, canSeeClientPII, isManager, maskClientN
 import type { IntentResult } from '@/lib/whatsapp/intent'
 import { stageLabel } from '@/lib/whatsapp/deals'
 import type { Stage } from '@/lib/pipeline'
+import { dbRowToProperty } from '@/lib/db-mappers'
+import { generateDescription, type DescriptionInput } from '@/lib/ai/property-description'
 import {
   buildUpdate, buildNewProperty, confirmationText, hasChanges,
   mergeExtras, appendLog, CLIENT_FIELDS, PROPERTY_FIELDS,
@@ -203,6 +205,69 @@ export async function stagePropertyUpdate(
     extras: update.extras,
     blobColumn: 'Amenities',
     label: `#${row.id} ${row.Title}`,
+  })
+}
+
+// ── "write a description for #23" ────────────────────────────────────────────
+// Generates a listing description using the company's saved template (if any),
+// shows it, and stages a confirm-save onto the listing's Amenities.aiDescription
+// — the same field the web generator writes and the public page renders.
+export async function stageDescribeProperty(
+  admin: SupabaseClient,
+  profile: Profile,
+  intent: IntentResult,
+): Promise<string> {
+  if (!intent.propertyId) return 'Which listing? Try "write a description for #23".'
+
+  const { data: row } = await admin
+    .from('Properties')
+    .select('*')
+    .eq('company_id', profile.company_id)
+    .eq('id', intent.propertyId)
+    .maybeSingle()
+
+  if (!row) return `No listing with id #${intent.propertyId}.`
+  if (!canEditProperty(toSession(profile), agentOf(row, 'Amenities'))) {
+    return `#${intent.propertyId} was listed by another agent, so I can't change it.`
+  }
+
+  // The company's shared template (null → free-form marketing copy).
+  const { data: company } = await admin
+    .from('Companies').select('description_template').eq('id', profile.company_id).maybeSingle()
+  const template = (company?.description_template as string | null) ?? null
+
+  const p = dbRowToProperty(row, 0)
+  const input: DescriptionInput = {
+    title: p.title, type: p.type, transaction: p.transaction, price: p.price, rent: p.rent,
+    district: p.district, city: p.city, size: p.size, beds: p.beds, baths: p.baths,
+    garden: p.garden, balcony: p.balcony, view: p.view, parkings: p.parkings, buildingAge: p.buildingAge,
+  }
+
+  let text: string
+  try {
+    // No retry and a hard deadline — Twilio abandons the webhook at 15 seconds.
+    text = await generateDescription(input, template, { retry: false, deadlineMs: 12_000 })
+  } catch {
+    return 'That took too long to generate — please try again in a moment.'
+  }
+  if (!text) return "I couldn't generate a description just now. Please try again."
+
+  const label = p.title || `#${p.id}`
+  const summary = [
+    `Here's a description for ${label}${template ? ' (using your saved template)' : ''}:`,
+    '',
+    text,
+    '',
+    'Reply YES to save it to the listing, or NO to discard.',
+  ].join('\n')
+
+  return stage(admin, profile, 'describe_property', summary, {
+    table: 'Properties',
+    id: p.id,
+    columns: {},
+    extras: { aiDescription: text },
+    blobColumn: 'Amenities',
+    label,
   })
 }
 
@@ -423,6 +488,7 @@ export async function applyPendingAction(
     const { error } = await admin.from(p.table).update(columns).eq('id', p.id)
     if (error) throw error
 
+    if (actionType === 'describe_property') return `Saved — description added to ${p.label}.`
     return `Saved — ${p.label} updated.`
   } catch (err) {
     console.error('[whatsapp] apply failed', actionType, err)

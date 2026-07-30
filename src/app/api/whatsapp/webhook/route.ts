@@ -6,7 +6,7 @@ import { parseConfirmation, parseReminderReply } from '@/lib/whatsapp/replies'
 import { classifyIntent, Intent } from '@/lib/whatsapp/intent'
 import { handleQueryClient, handleQueryProperty, handleShareListing, HELP_TEXT } from '@/lib/whatsapp/handlers'
 import {
-  stageClientUpdate, stagePropertyUpdate, stageFeedback,
+  stageClientUpdate, stagePropertyUpdate, stageFeedback, stageDescribeProperty,
   applyPendingAction, handleReminderReply,
 } from '@/lib/whatsapp/write-handlers'
 import { startCreatePropertyFlow, startCreateClientFlow, continueFlow } from '@/lib/whatsapp/flow-handlers'
@@ -141,6 +141,7 @@ async function route(
     case 'query_client':   return { intent, answer: await handleQueryClient(admin, profile, result) }
     case 'query_property': return { intent, answer: await handleQueryProperty(admin, profile, result) }
     case 'share_listing':  return { intent, answer: await handleShareListing(admin, profile, result, origin) }
+    case 'describe_property': return { intent, answer: await stageDescribeProperty(admin, profile, result) }
     case 'query_agents':   return { intent, answer: await handleAgentActivity(admin, profile) }
     case 'query_overdue':  return { intent, answer: await handleOverdueReminders(admin, profile) }
     case 'query_schedule': return { intent, answer: await handleQuerySchedule(admin, profile, body) }

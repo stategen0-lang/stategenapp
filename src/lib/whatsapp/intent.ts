@@ -26,6 +26,7 @@ export type Intent =
   | 'create_event'
   | 'create_client'
   | 'share_listing'
+  | 'describe_property'
   | 'query_overdue'
   | 'confirm'
   | 'cancel'
@@ -51,7 +52,7 @@ export interface IntentResult {
 const VALID: Intent[] = [
   'reminder_response', 'feedback', 'update_client', 'update_property', 'update_deal', 'query_pipeline',
   'create_property', 'query_client', 'query_property', 'query_agents', 'query_schedule', 'create_event',
-  'create_client', 'share_listing', 'query_overdue', 'confirm', 'cancel', 'help', 'unknown',
+  'create_client', 'share_listing', 'describe_property', 'query_overdue', 'confirm', 'cancel', 'help', 'unknown',
 ]
 
 /**
@@ -116,6 +117,7 @@ Intents:
 - create_property: wants to add a new listing (describes a property to add)
 - create_client: wants to add a new client/lead/buyer/renter ("add a client", "new buyer Ahmed")
 - share_listing: wants a shareable public link to a listing to forward to a client ("send me the link for #23", "share property 23")
+- describe_property: wants an AI-written listing description for a property ("write a description for #23", "describe listing 23")
 - feedback: reporting the outcome of a call or a note about a client
 - reminder_response: responding to a call reminder
 - help: asking what the bot can do
@@ -150,6 +152,8 @@ Examples (note the typos and varied phrasing):
 "mark property #23 as sold" -> {"intent":"update_property","propertyId":23,"fields":{"status":"Sold"}}
 "send me the link for #23" -> {"intent":"share_listing","propertyId":23}
 "share property 23 with the client" -> {"intent":"share_listing","propertyId":23}
+"write a description for #23" -> {"intent":"describe_property","propertyId":23}
+"can you write me a blurb for listing 23" -> {"intent":"describe_property","propertyId":23}
 "move ahmed to negotiating" -> {"intent":"update_deal","clientName":"Ahmed","fields":{"stage":"negotiating"}}
 "ahmeds deal is won" -> {"intent":"update_deal","clientName":"Ahmed","fields":{"stage":"closed","outcome":"won"}}
 "whats in negotiation" -> {"intent":"query_pipeline","fields":{"stage":"negotiating"}}

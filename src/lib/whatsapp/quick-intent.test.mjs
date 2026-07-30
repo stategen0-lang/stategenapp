@@ -101,6 +101,22 @@ test('a property search mentioning a budget is not read as a share', () => {
   assert.notEqual(r?.intent, 'share_listing')
 })
 
+// ── describe a listing ────────────────────────────────────────────────────────
+test('write a description: phrasing variants carry the id', () => {
+  for (const s of [
+    'write a description for #23', 'describe property 23', 'describe listing 23',
+    'generate a description for property 23', 'description for #23', 'describe #23',
+    'ai description for listing 23',
+  ]) {
+    const r = quickIntent(s)
+    assert.equal(r?.intent, 'describe_property', s)
+    assert.equal(r?.propertyId, 23, s)
+  }
+})
+test('a describe request with no id is left to the model', () => {
+  assert.equal(quickIntent('write a nice description'), null)
+})
+
 // ── updates ─────────────────────────────────────────────────────────────────
 test('mark property #N as sold', () => {
   const r = quickIntent('mark property #23 as sold')
