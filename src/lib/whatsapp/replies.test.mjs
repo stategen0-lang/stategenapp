@@ -65,6 +65,28 @@ test('parseReminderReply: an explicit snooze word still wins over a command look
   assert.equal(parseReminderReply('snooze until next week').action, 'snooze')
 })
 
+test('parseReminderReply: scheduling an event is NOT a snooze', () => {
+  // The reported bug: "meeting tomorrow at 4pm" (no leading verb) was read as a
+  // snooze and applied to whichever client had an open reminder, inventing a
+  // "random name". An event noun + a date word must never snooze.
+  for (const s of [
+    'meeting tomorrow at 4pm',
+    'viewing at 5pm',
+    'viewing friday',
+    'call Ahmed tomorrow',
+    'showing next week',
+    'appointment tomorrow',
+  ]) {
+    assert.equal(parseReminderReply(s).action, 'unknown', s)
+  }
+})
+
+test('parseReminderReply: an explicit snooze still wins even with an event noun', () => {
+  // "remind me about the viewing next week" is genuinely a snooze.
+  assert.equal(parseReminderReply('remind me about the viewing next week').action, 'snooze')
+  assert.equal(parseReminderReply('snooze the meeting 3d').action, 'snooze')
+})
+
 test('parseReminderReply: "done" is not triggered by a command', () => {
   // "delete Ahmed" starts with a command; must not be read as done/complete.
   assert.equal(parseReminderReply('delete that').action, 'unknown')

@@ -39,13 +39,17 @@ function zonedRange(e: { starts_at: string; ends_at: string }): string {
 
 /**
  * A readable title from the raw message: drop the command verb and the date
- * words, keep what the agent actually called it.
+ * words, keep what the agent actually called it (e.g. "meeting with Ahmed").
+ *
+ * When the agent gives no name or subject — just "meeting tomorrow at 4pm" — the
+ * title is the plain event kind ("Meeting"), never an invented name. `kindLabel`
+ * is that fallback.
  */
-export function eventTitle(text: string, matchedWhen: string): string {
+export function eventTitle(text: string, matchedWhen: string, kindLabel = 'Event'): string {
   let s = String(text ?? '').trim()
 
-  // Remove the leading command.
-  s = s.replace(/^(add|book|schedule|set up|put in|create)\s+(an?\s+)?/i, '')
+  // Remove the leading command ("set up" before "set" so it isn't half-stripped).
+  s = s.replace(/^(add|book|schedule|set up|set|put in|create|arrange|plan|organi[sz]e)\s+(an?\s+)?/i, '')
   // Remove the date/time words we consumed.
   for (const word of matchedWhen.split(/\s+/).filter(Boolean)) {
     s = s.replace(new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'ig'), ' ')
@@ -56,7 +60,13 @@ export function eventTitle(text: string, matchedWhen: string): string {
        .replace(/^[\s,–-]+|[\s,–-]+$/g, '')
        .trim()
 
-  return s || 'Event'
+  // Nothing meaningful left, or just the bare event noun ("meeting", "a viewing")
+  // → use the plain kind label rather than a lowercase fragment or a stray word.
+  if (!s || /^(a |an |the )?(meeting|meet|viewing|showing|visit|call|appointment|follow[- ]?up|event)s?$/i.test(s)) {
+    return kindLabel
+  }
+  // A real subject/name the agent typed — keep it, tidied to start uppercase.
+  return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
 // ── "book a viewing with Ahmed tomorrow at 3pm" ─────────────────────────────
@@ -76,7 +86,7 @@ export async function stageCreateEvent(
   }
 
   const kind = inferKind(rawMessage)
-  const title = eventTitle(rawMessage, when.matched)
+  const title = eventTitle(rawMessage, when.matched, kindStyle(kind).label)
 
   // An all-day event runs to the end of that day in the agency's zone; a timed
   // one runs an hour.

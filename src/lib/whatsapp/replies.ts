@@ -21,6 +21,13 @@ const SNOOZE = /\b(snooze|later|postpone|remind me)\b/i
 // mistaken for a snooze. Only an explicit snooze word overrides this.
 const COMMAND_START = /^(add|book|schedule|create|set ?up|put in|set|mark|update|change|move|remove|delete|find|show|list|search|info|details?|who|what|which|how|where|any)\b/i
 
+// A message naming a calendar event ("meeting tomorrow at 4pm", "viewing at 5")
+// is scheduling something, not replying to a reminder — even without a leading
+// command verb. Its date word must not be read as a snooze, or the message gets
+// applied to whichever client has an outstanding reminder. Only an explicit
+// snooze word ("snooze", "remind me") overrides this.
+const EVENT_NOUN = /\b(meeting|meet|viewing|showing|visit|appointment|follow[- ]?up|call)\b/i
+
 // "3d", "3 days", "2w", "2 weeks", "1 month"
 const DURATION = /(\d+)\s*(d|day|days|w|week|weeks|m|month|months)\b/i
 
@@ -67,8 +74,9 @@ export function parseReminderReply(raw: string | null | undefined): ReminderRepl
 
   const days = parseSnoozeDays(text)
   // An explicit "snooze/postpone/remind me" always counts. A bare date word
-  // only counts when the message isn't itself a command.
-  if (SNOOZE.test(text) || (days !== null && !isCommand)) {
+  // only counts when the message is neither a command nor an event being
+  // scheduled ("meeting tomorrow at 4pm" is a new event, not a snooze).
+  if (SNOOZE.test(text) || (days !== null && !isCommand && !EVENT_NOUN.test(text))) {
     return { action: 'snooze', snoozeDays: days ?? DEFAULT_SNOOZE_DAYS }
   }
 
