@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Building2, Users, Banknote, Clock, X, Plus, ChevronRight } from 'lucide-react'
+import Link from 'next/link'
+import { Building2, Users, Banknote, Clock, X, Plus, ChevronRight, UserCheck } from 'lucide-react'
 import {
   PROPERTIES, CLIENTS, DEALS, getAgent,
   statusStyle, CLIENT_TYPE_STYLE, formatPrice, TYPE_GRADIENTS, typeStyle,
@@ -47,6 +48,18 @@ export default function DashboardPage() {
   const [editClient, setEditClient]     = useState<Client | null>(null)
   const [toast, setToast]               = useState('')
   const [volumeYear, setVolumeYear]     = useState<number | null>(2026)
+
+  // Pending agent-approval requests. /api/agents 403s for non-managers, so this
+  // banner only ever shows for managers.
+  const [pendingAgents, setPendingAgents] = useState(0)
+  useEffect(() => {
+    let live = true
+    fetch('/api/agents')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (live && d && Array.isArray(d.pending)) setPendingAgents(d.pending.length) })
+      .catch(() => {})
+    return () => { live = false }
+  }, [])
 
   // Load live data from the database (falls back to demo data on failure).
   useEffect(() => {
@@ -131,6 +144,30 @@ export default function DashboardPage() {
 
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-5" style={{ fontFamily: 'var(--font-public-sans), -apple-system, BlinkMacSystemFont, sans-serif' }}>
+
+      {/* ── Pending agent approvals (managers) ── */}
+      {pendingAgents > 0 && (
+        <Link
+          href="/approvals"
+          className="flex items-center gap-3 px-4 py-3 rounded-2xl transition-colors"
+          style={{ background: '#FBEFD6', border: '1px solid #F0DCB0' }}
+        >
+          <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: '#F5D999' }}>
+            <UserCheck className="h-5 w-5" style={{ color: '#8A5A12' }} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold" style={{ color: '#8A5A12' }}>
+              {pendingAgents} agent{pendingAgents > 1 ? 's' : ''} waiting for approval
+            </p>
+            <p className="text-xs" style={{ color: '#9A6516' }}>
+              New sign-up{pendingAgents > 1 ? 's' : ''} at your agency — review and approve to give access.
+            </p>
+          </div>
+          <span className="flex items-center gap-1 text-xs font-bold shrink-0" style={{ color: '#8A5A12' }}>
+            Review <ChevronRight className="h-4 w-4" />
+          </span>
+        </Link>
+      )}
 
       {/* ── Header ── */}
       <div className="flex items-center justify-between gap-3">
