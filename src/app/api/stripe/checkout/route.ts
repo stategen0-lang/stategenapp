@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getStripe, getPriceId, PlanId } from '@/lib/stripe'
+import { TRIAL_DAYS } from '@/lib/stripe-plans'
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,6 +17,8 @@ export async function POST(req: NextRequest) {
       payment_method_types: ['card'],
       customer_email: email,
       line_items: [{ price: getPriceId(planId as PlanId), quantity: 1 }],
+      // Let customers enter a promo code (created in the Stripe dashboard).
+      allow_promotion_codes: true,
       metadata: {
         company_name: companyName,
         domain: domain.toLowerCase().trim(),
@@ -23,6 +26,8 @@ export async function POST(req: NextRequest) {
         plan_id: planId,
       },
       subscription_data: {
+        // 1-month free trial on every plan.
+        trial_period_days: TRIAL_DAYS,
         metadata: {
           company_name: companyName,
           domain: domain.toLowerCase().trim(),

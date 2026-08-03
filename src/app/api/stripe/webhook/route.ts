@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
           {
             Name: company_name ?? domain,
             domain,
-            Plan: plan_id ?? 'starter',
+            Plan: plan_id ?? 'team',
             'is active': true,
             stripe_customer_id: session.customer as string ?? null,
             stripe_subscription_id: session.subscription as string ?? null,

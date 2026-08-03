@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Lock, Globe, User, ChevronLeft, CheckCircle2, Clock } from 'lucide-react'
+import { Lock, Globe, User, ChevronLeft, CheckCircle2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import Logo from '@/components/brand/Logo'
 
@@ -29,6 +29,7 @@ export default function AgentSignupPage() {
   const [domainChecking, setDomainChecking] = useState(false)
   const [domainValid, setDomainValid]       = useState<boolean | null>(null)
   const [companyId, setCompanyId]           = useState<number | null>(null)
+  const [slots, setSlots] = useState<{ used: number; limit: number | null; full: boolean } | null>(null)
 
   const [fullName, setFullName]   = useState('')
   const [agentCode, setAgentCode] = useState('')
@@ -50,6 +51,7 @@ export default function AgentSignupPage() {
       setDomainValid(null)
       setCompanyName('')
       setCompanyId(null)
+      setSlots(null)
       return
     }
     const t = setTimeout(async () => {
@@ -64,10 +66,14 @@ export default function AgentSignupPage() {
         setDomainValid(false)
         setCompanyName('')
         setCompanyId(null)
+        setSlots(null)
       } else {
         setDomainValid(true)
         setCompanyName(data.Name)
         setCompanyId(data.id)
+        // Show remaining agent seats (and block the form if the agency is full).
+        fetch(`/api/company/agent-slots?domain=${encodeURIComponent(domain.toLowerCase().trim())}`)
+          .then(r => r.ok ? r.json() : null).then(setSlots).catch(() => setSlots(null))
       }
     }, 600)
     return () => clearTimeout(t)
@@ -77,32 +83,22 @@ export default function AgentSignupPage() {
     e.preventDefault()
     setError(null)
     if (!domainValid || !companyId) { setError('Please enter a valid company domain.'); return }
+    if (slots?.full) { setError('This agency has reached its plan\'s agent limit. Ask your manager to upgrade.'); return }
     if (password !== confirm) { setError('Passwords do not match.'); return }
     if (password.length < 8) { setError('Password must be at least 8 characters.'); return }
     if (!fullName.trim()) { setError('Please enter your full name.'); return }
 
-    const syntheticEmail = `${agentCode.toLowerCase()}@${domain.toLowerCase().trim()}`
-
     setLoading(true)
     try {
-      const { data: authData, error: authErr } = await supabase.auth.signUp({
-        email: syntheticEmail,
-        password,
+      // Server-authoritative: enforces the plan's agent cap and creates the
+      // account with a confirmed email (agent emails have no real inbox).
+      const res = await fetch('/api/signup/agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain, agentCode, fullName: fullName.trim(), password }),
       })
-      if (authErr) throw authErr
-      if (!authData.user) throw new Error('Signup failed — please try again.')
-
-      const { error: profileErr } = await supabase
-        .from('Profiles')
-        .insert({
-          id: authData.user.id,
-          company_id: companyId,
-          Full_name: fullName.trim(),
-          role: 'agent',
-          agent_code: agentCode,
-          approved: false,
-        })
-      if (profileErr) throw profileErr
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'Signup failed — please try again.')
 
       setStep('pending')
     } catch (err: unknown) {
@@ -120,14 +116,14 @@ export default function AgentSignupPage() {
     return (
       <div className="min-h-screen flex items-center justify-center px-6" style={{ background: '#faf9f5' }}>
         <div className="w-full max-w-sm text-center">
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-5" style={{ background: '#FBEFD6' }}>
-            <Clock className="h-7 w-7" style={{ color: '#9A6516' }} />
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-5" style={{ background: '#E3F4EA' }}>
+            <CheckCircle2 className="h-7 w-7" style={{ color: '#1F7A4D' }} />
           </div>
-          <h2 className="text-xl font-bold mb-2" style={{ color: '#1A2B4A' }}>Request sent!</h2>
+          <h2 className="text-xl font-bold mb-2" style={{ color: '#1A2B4A' }}>You&apos;re all set!</h2>
           <p className="text-sm mb-5" style={{ color: '#7A8499' }}>
-            Your account is pending approval by the manager of{' '}
-            <span className="font-semibold" style={{ color: '#1A2B4A' }}>{companyName}</span>.
-            You&apos;ll be able to sign in once they approve you.
+            Your agent account at{' '}
+            <span className="font-semibold" style={{ color: '#1A2B4A' }}>{companyName}</span>{' '}
+            is ready. Sign in with your Agent ID and password.
           </p>
 
           {/* Agent code card */}
@@ -159,7 +155,7 @@ export default function AgentSignupPage() {
           <div className="flex items-start gap-2.5 p-3 rounded-xl mb-6 text-left" style={{ background: '#E3F4EA' }}>
             <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" style={{ color: '#1F7A4D' }} />
             <p className="text-xs" style={{ color: '#1F7A4D' }}>
-              Your manager will receive a notification. Once approved, sign in with your Agent ID and password.
+              Save your Agent ID and password — that&apos;s how you sign in from now on.
             </p>
           </div>
 
@@ -185,13 +181,13 @@ export default function AgentSignupPage() {
             Join your agency<br />on StateGen.
           </h1>
           <p className="text-sm mb-8" style={{ color: '#9DB2CC' }}>
-            Your manager will review your request and approve your account before you can sign in.
+            Join under your agency&apos;s domain and get access straight away — no waiting.
           </p>
           <div className="space-y-4">
             {[
               { label: 'Enter your company domain', desc: 'Your manager shared this with you.' },
               { label: 'Set your name and password', desc: 'We auto-generate your unique agent ID.' },
-              { label: 'Wait for approval', desc: 'Your manager approves you — then you\'re in.' },
+              { label: 'Sign in and start', desc: 'Your account is ready right away.' },
             ].map(({ label, desc }, i) => (
               <div key={label} className="flex gap-3">
                 <div className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5" style={{ background: '#5E8FD6', color: '#fff' }}>
@@ -248,6 +244,14 @@ export default function AgentSignupPage() {
                 {!domainChecking && domainValid === true && (
                   <p className="text-xs font-medium flex items-center gap-1" style={{ color: '#1F7A4D' }}>
                     <CheckCircle2 className="h-3 w-3" /> Found: <span className="font-semibold">{companyName}</span>
+                    {slots && slots.limit !== null && !slots.full && (
+                      <span style={{ color: '#9AA3B2' }}>· {slots.limit - slots.used} of {slots.limit} seats left</span>
+                    )}
+                  </p>
+                )}
+                {!domainChecking && domainValid === true && slots?.full && (
+                  <p className="text-xs mt-1" style={{ color: '#A23434' }}>
+                    This agency has reached its plan&apos;s agent limit. Ask your manager to upgrade to add more seats.
                   </p>
                 )}
                 {!domainChecking && domainValid === false && (
@@ -331,7 +335,7 @@ export default function AgentSignupPage() {
 
             <button
               type="submit"
-              disabled={loading || !domainValid}
+              disabled={loading || !domainValid || slots?.full === true}
               className="w-full py-3 rounded-xl text-sm font-semibold text-white transition-opacity disabled:opacity-50"
               style={{ background: '#0E1F3D' }}
             >

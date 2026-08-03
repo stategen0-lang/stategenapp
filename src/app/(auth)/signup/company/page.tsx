@@ -16,7 +16,7 @@ function CompanySignupInner() {
   const [step, setStep]           = useState<Step>('info')
   const [loading, setLoading]     = useState(false)
   const [error, setError]         = useState<string | null>(null)
-  const [selectedPlan, setSelectedPlan] = useState<PlanId>('pro')
+  const [selectedPlan, setSelectedPlan] = useState<PlanId>('business')
 
   const [companyName, setCompanyName] = useState('')
   const [domain, setDomain]           = useState('')
@@ -160,7 +160,7 @@ function CompanySignupInner() {
                 Choose your plan
               </h2>
               <p className="text-sm mb-7" style={{ color: '#7A8499' }}>
-                All plans include a 14-day free trial. Cancel any time.
+                Every plan is <span className="font-semibold" style={{ color: '#1A2B4A' }}>full access</span> — they differ only by how many agents you can add. All include a <span className="font-semibold" style={{ color: '#1A2B4A' }}>1-month free trial</span>, a promo code option at checkout, and cancel any time.
               </p>
 
               <div className="space-y-3 mb-6">
@@ -222,11 +222,11 @@ function CompanySignupInner() {
                 className="w-full py-3 rounded-xl text-sm font-semibold text-white transition-opacity disabled:opacity-60"
                 style={{ background: '#0E1F3D' }}
               >
-                {loading ? 'Redirecting to Stripe…' : `Pay $${PLANS.find(p => p.id === selectedPlan)?.price}/mo with Stripe →`}
+                {loading ? 'Redirecting to Stripe…' : `Start 1-month free trial — $${PLANS.find(p => p.id === selectedPlan)?.price}/mo after →`}
               </button>
 
               <p className="text-center text-xs mt-4" style={{ color: '#9AA3B2' }}>
-                Secured by Stripe. We never store your card details.
+                No charge today. Secured by Stripe. We never store your card details.
               </p>
             </>
           )}

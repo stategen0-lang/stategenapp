@@ -10,8 +10,11 @@ export async function GET(req: NextRequest) {
       expand: ['subscription'],
     })
 
-    if (session.payment_status !== 'paid') {
-      return NextResponse.json({ error: 'Payment not completed.' }, { status: 402 })
+    // Checkout is "complete" once the customer finishes — even on a free trial,
+    // where no payment is taken upfront (payment_status is 'no_payment_required',
+    // not 'paid'). Gating on 'paid' would reject every trial signup.
+    if (session.status !== 'complete') {
+      return NextResponse.json({ error: 'Checkout not completed.' }, { status: 402 })
     }
 
     const meta = session.metadata ?? {}
@@ -19,7 +22,7 @@ export async function GET(req: NextRequest) {
       companyName: meta.company_name ?? '',
       domain: meta.domain ?? '',
       email: meta.email ?? session.customer_email ?? '',
-      planId: meta.plan_id ?? 'starter',
+      planId: meta.plan_id ?? 'team',
       customerId: (session.customer as string) ?? '',
       subscriptionId: (session.subscription as string) ?? '',
     })
