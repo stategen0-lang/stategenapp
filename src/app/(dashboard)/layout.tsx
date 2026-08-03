@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation'
 import AppSidebar from '@/components/dashboard/AppSidebar'
 import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/session'
@@ -7,6 +8,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   const session = await getSession()
+
+  // Agents wait for a manager to approve them before they can use the app.
+  // (Managers are always approved — see getSession.) /pending lives outside this
+  // layout, so there's no redirect loop.
+  if (session && !session.approved) redirect('/pending')
 
   const profile = {
     Full_name: session?.fullName ?? user?.email ?? 'Agent',

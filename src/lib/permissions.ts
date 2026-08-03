@@ -21,6 +21,7 @@ export interface Session {
   role: Role
   agentCode: string | null   // 'a1'..'a4' — null for managers
   fullName: string
+  approved: boolean           // agents await manager approval; managers always true
 }
 
 export function isManager(role: Role | string | null | undefined): boolean {

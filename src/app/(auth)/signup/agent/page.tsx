@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Lock, Globe, User, ChevronLeft, CheckCircle2 } from 'lucide-react'
+import { Lock, Globe, User, ChevronLeft, CheckCircle2, Clock } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import Logo from '@/components/brand/Logo'
 
@@ -116,14 +116,14 @@ export default function AgentSignupPage() {
     return (
       <div className="min-h-screen flex items-center justify-center px-6" style={{ background: '#faf9f5' }}>
         <div className="w-full max-w-sm text-center">
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-5" style={{ background: '#E3F4EA' }}>
-            <CheckCircle2 className="h-7 w-7" style={{ color: '#1F7A4D' }} />
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-5" style={{ background: '#FBEFD6' }}>
+            <Clock className="h-7 w-7" style={{ color: '#9A6516' }} />
           </div>
-          <h2 className="text-xl font-bold mb-2" style={{ color: '#1A2B4A' }}>You&apos;re all set!</h2>
+          <h2 className="text-xl font-bold mb-2" style={{ color: '#1A2B4A' }}>Request sent!</h2>
           <p className="text-sm mb-5" style={{ color: '#7A8499' }}>
-            Your agent account at{' '}
+            Your account at{' '}
             <span className="font-semibold" style={{ color: '#1A2B4A' }}>{companyName}</span>{' '}
-            is ready. Sign in with your Agent ID and password.
+            is pending approval by a manager. You&apos;ll be able to sign in once they approve you.
           </p>
 
           {/* Agent code card */}
@@ -155,7 +155,7 @@ export default function AgentSignupPage() {
           <div className="flex items-start gap-2.5 p-3 rounded-xl mb-6 text-left" style={{ background: '#E3F4EA' }}>
             <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" style={{ color: '#1F7A4D' }} />
             <p className="text-xs" style={{ color: '#1F7A4D' }}>
-              Save your Agent ID and password — that&apos;s how you sign in from now on.
+              Once your manager approves you, sign in with your Agent ID and password.
             </p>
           </div>
 
@@ -181,13 +181,13 @@ export default function AgentSignupPage() {
             Join your agency<br />on StateGen.
           </h1>
           <p className="text-sm mb-8" style={{ color: '#9DB2CC' }}>
-            Join under your agency&apos;s domain and get access straight away — no waiting.
+            Join under your agency&apos;s domain. A manager approves you, then you&apos;re in.
           </p>
           <div className="space-y-4">
             {[
               { label: 'Enter your company domain', desc: 'Your manager shared this with you.' },
               { label: 'Set your name and password', desc: 'We auto-generate your unique agent ID.' },
-              { label: 'Sign in and start', desc: 'Your account is ready right away.' },
+              { label: 'Wait for approval', desc: 'Your manager approves you — then you\'re in.' },
             ].map(({ label, desc }, i) => (
               <div key={label} className="flex gap-3">
                 <div className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5" style={{ background: '#5E8FD6', color: '#fff' }}>

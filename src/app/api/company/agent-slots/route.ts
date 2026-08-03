@@ -15,11 +15,14 @@ export async function GET(req: NextRequest) {
   if (!company) return NextResponse.json({ error: 'Company not found' }, { status: 404 })
 
   const limit = agentLimitFor(company.Plan as string)
+  // A seat is used by an *approved* agent; pending signups don't count until a
+  // manager approves them.
   const { count } = await admin
     .from('Profiles')
     .select('id', { count: 'exact', head: true })
     .eq('company_id', company.id)
     .eq('role', 'agent')
+    .eq('approved', true)
   const used = count ?? 0
 
   return NextResponse.json({ used, limit, full: limit !== null && used >= limit })

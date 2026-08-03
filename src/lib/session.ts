@@ -4,6 +4,7 @@
 // the UI.
 
 import { createClient } from '@/lib/supabase/server'
+import { isManager } from '@/lib/permissions'
 import type { Role, Session } from '@/lib/permissions'
 
 const COMPANY_ID = Number(process.env.DEMO_COMPANY_ID ?? 1)
@@ -19,7 +20,7 @@ export async function getSession(): Promise<Session | null> {
   // the deployment environment.
   const { data: profile } = await supabase
     .from('Profiles')
-    .select('company_id, role, agent_code, Full_name')
+    .select('company_id, role, agent_code, Full_name, approved')
     .eq('id', user.id)
     .maybeSingle()
 
@@ -32,5 +33,7 @@ export async function getSession(): Promise<Session | null> {
     role,
     agentCode: (profile?.agent_code as string) ?? null,
     fullName: (profile?.Full_name as string) ?? user.email ?? 'Agent',
+    // Managers own the company — never gate them out, even if the flag is off.
+    approved: isManager(role) ? true : (profile?.approved === true),
   }
 }

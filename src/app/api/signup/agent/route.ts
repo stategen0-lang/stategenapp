@@ -37,13 +37,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No agency found for that domain.' }, { status: 404 })
     }
 
-    // Enforce the plan's agent cap.
+    // Enforce the plan's agent cap against approved agents — if every seat is
+    // already taken, a new signup could never be approved anyway.
     const limit = agentLimitFor(company.Plan as string)
     const { count } = await admin
       .from('Profiles')
       .select('id', { count: 'exact', head: true })
       .eq('company_id', company.id)
       .eq('role', 'agent')
+      .eq('approved', true)
     const used = count ?? 0
     if (limit !== null && used >= limit) {
       return NextResponse.json(

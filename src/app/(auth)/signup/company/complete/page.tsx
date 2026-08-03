@@ -86,6 +86,7 @@ function CompanyCompleteInner() {
           company_id: company.id,
           Full_name: info.companyName + ' Manager',
           role: 'owner',
+          approved: true,
         })
       if (profileErr) throw profileErr
 

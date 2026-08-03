@@ -52,6 +52,7 @@ function toSession(p: Profile) {
     role: p.role as 'owner' | 'manager' | 'agent',
     agentCode: p.agent_code,
     fullName: p.Full_name ?? 'Agent',
+    approved: true,
   }
 }
 

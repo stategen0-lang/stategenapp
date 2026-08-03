@@ -13,6 +13,7 @@ import {
   Bell,
   BarChart3,
   User,
+  UserCheck,
   LogOut,
 } from 'lucide-react'
 import { type User as SupabaseUser } from '@supabase/supabase-js'
@@ -50,6 +51,18 @@ export default function AppSidebar({ profile, user }: AppSidebarProps) {
       .catch(() => {})
     return () => { live = false }
   }, [pathname])
+
+  // Pending agent-approval count (managers only), for the badge.
+  const [pendingAgents, setPendingAgents] = useState(0)
+  useEffect(() => {
+    if (profile?.role !== 'owner' && profile?.role !== 'manager') return
+    let live = true
+    fetch('/api/agents')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (live && d && Array.isArray(d.pending)) setPendingAgents(d.pending.length) })
+      .catch(() => {})
+    return () => { live = false }
+  }, [pathname, profile?.role])
 
   async function handleSignOut() {
     await supabase.auth.signOut()
@@ -115,6 +128,27 @@ export default function AppSidebar({ profile, user }: AppSidebarProps) {
               </span>
             )}
           </Link>
+
+          {/* Approvals — managers only; carries the pending-agent badge. */}
+          {isMgr && (
+            <Link
+              href="/approvals"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
+              style={{
+                background: isActive('/approvals') ? 'rgba(94,143,214,0.16)' : 'transparent',
+                color: isActive('/approvals') ? '#ffffff' : '#9DB2CC',
+                borderLeft: isActive('/approvals') ? '2px solid #5E8FD6' : '2px solid transparent',
+              }}
+            >
+              <UserCheck className="h-4 w-4 shrink-0" />
+              <span className="flex-1">Approvals</span>
+              {pendingAgents > 0 && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: '#E08A1E', color: '#fff' }}>
+                  {pendingAgents > 99 ? '99+' : pendingAgents}
+                </span>
+              )}
+            </Link>
+          )}
         </nav>
 
         {/* Profile */}
@@ -138,6 +172,17 @@ export default function AppSidebar({ profile, user }: AppSidebarProps) {
       <div className="md:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 py-3" style={{ background: '#0E1F3D', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
         <Logo variant="white" size={26} withWordmark priority />
         <div className="flex items-center gap-2">
+          {/* Approvals — managers only; mobile has no room in the tab bar. */}
+          {isMgr && (
+            <Link href="/approvals" className="relative p-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.08)' }}>
+              <UserCheck className="h-3.5 w-3.5" style={{ color: '#9DB2CC' }} />
+              {pendingAgents > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center" style={{ background: '#E08A1E', color: '#fff' }}>
+                  {pendingAgents > 9 ? '9+' : pendingAgents}
+                </span>
+              )}
+            </Link>
+          )}
           {/* Alerts bell — the mobile home for alerts, since the bottom tab bar
               is already full. */}
           <Link href="/alerts" className="relative p-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.08)' }}>
