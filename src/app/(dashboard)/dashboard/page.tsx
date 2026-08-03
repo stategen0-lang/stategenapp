@@ -4,46 +4,48 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Building2, Users, Banknote, Clock, X, Plus, ChevronRight, UserCheck } from 'lucide-react'
 import {
-  PROPERTIES, CLIENTS, DEALS, getAgent,
+  getAgent,
   statusStyle, CLIENT_TYPE_STYLE, formatPrice, TYPE_GRADIENTS, typeStyle,
-  Property, Client, Deal,
+  Property, Client,
 } from '@/lib/data'
 import { dbRowToProperty, dbRowToClient } from '@/lib/db-mappers'
+import { STAGES, type Stage } from '@/lib/pipeline'
 import PropertyDetailModal from '@/components/modals/PropertyDetailModal'
 import ClientDetailModal from '@/components/modals/ClientDetailModal'
 import NewPropertyModal from '@/components/modals/NewPropertyModal'
 import NewClientModal from '@/components/modals/NewClientModal'
 
 type Panel = 'listings' | 'clients' | 'deals' | 'volume' | null
-type ActivityLink =
-  | { type: 'prop';   propId: number }
-  | { type: 'client'; clientId: number }
-  | { type: 'deal';   dealId: number }
 
-const ACTIVITY: { id: number; text: string; time: string; color: string; link: ActivityLink }[] = [
-  { id: 1, text: 'Lara Khoury added Raouché Appartement to listings',  time: '2h ago',   color: '#5E8FD6', link: { type: 'prop',   propId: 1   } },
-  { id: 2, text: 'Michel Tanios matched 4 properties (87% avg)',        time: '5h ago',   color: '#1F8A5B', link: { type: 'client', clientId: 1 } },
-  { id: 3, text: 'Deal closed: Hamra Office Suite — USD 610,000',       time: 'Yesterday',color: '#9A6516', link: { type: 'deal',   dealId: 1   } },
-  { id: 4, text: 'Nour Haddad added Sara Stephan as new client',        time: 'Yesterday',color: '#A23434', link: { type: 'client', clientId: 4 } },
-]
+// A deal as returned by /api/deals (real pipeline data).
+type DealView = {
+  id: string
+  clientName: string
+  propertyLabel: string | null
+  value: number
+  stage: Stage
+  outcome: 'won' | 'lost' | null
+  stage_changed_at: string | null
+  created_at: string
+}
 
 const COMMISSION_RATE = 2.5
 const YEARS = [2026, 2025, 2024, 2023]
+const stageLabelOf = (s: string) => STAGES.find(x => x.id === s)?.label ?? s
 
 const H   = '#1A2B4A'
 const SUB = '#7A8499'
-
-function yearOf(d: Deal) { return new Date(d.date).getFullYear() }
 
 export default function DashboardPage() {
   const [panel, setPanel]               = useState<Panel>(null)
   const [detailProp, setDetailProp]     = useState<Property | null>(null)
   const [detailClient, setDetailClient] = useState<Client | null>(null)
-  const [detailDeal, setDetailDeal]     = useState<Deal | null>(null)
+  const [detailDeal, setDetailDeal]     = useState<DealView | null>(null)
   const [newPropOpen, setNewPropOpen]   = useState(false)
   const [newClientOpen, setNewClientOpen] = useState(false)
-  const [props, setProps]               = useState<Property[]>(PROPERTIES)
-  const [clients, setClients]           = useState<Client[]>(CLIENTS)
+  const [props, setProps]               = useState<Property[]>([])
+  const [clients, setClients]           = useState<Client[]>([])
+  const [deals, setDeals]               = useState<DealView[]>([])
   const [editProp, setEditProp]         = useState<Property | null>(null)
   const [editClient, setEditClient]     = useState<Client | null>(null)
   const [toast, setToast]               = useState('')
@@ -61,17 +63,20 @@ export default function DashboardPage() {
     return () => { live = false }
   }, [])
 
-  // Load live data from the database (falls back to demo data on failure).
+  // Load live data. Always reflect the real result (even empty) so a new agency
+  // never sees leftover demo data.
   useEffect(() => {
     const ctrl = new AbortController()
     const t = setTimeout(() => ctrl.abort(), 4000)
     Promise.all([
       fetch('/api/properties', { signal: ctrl.signal }).then(r => r.ok ? r.json() : null).catch(() => null),
       fetch('/api/clients', { signal: ctrl.signal }).then(r => r.ok ? r.json() : null).catch(() => null),
-    ]).then(([pRes, cRes]) => {
+      fetch('/api/deals', { signal: ctrl.signal }).then(r => r.ok ? r.json() : null).catch(() => null),
+    ]).then(([pRes, cRes, dRes]) => {
       clearTimeout(t)
-      if (pRes?.properties?.length) setProps(pRes.properties.map(dbRowToProperty))
-      if (cRes?.clients?.length) setClients(cRes.clients.map(dbRowToClient))
+      if (pRes?.properties) setProps(pRes.properties.map(dbRowToProperty))
+      if (cRes?.clients) setClients(cRes.clients.map(dbRowToClient))
+      if (dRes?.deals) setDeals(dRes.deals as DealView[])
     }).catch(() => clearTimeout(t))
     return () => { clearTimeout(t); ctrl.abort() }
   }, [])
@@ -85,41 +90,36 @@ export default function DashboardPage() {
 
   const activeListings = props.filter(p => p.status === 'Available')
 
-  // Volume data from DEALS
-  const allSales      = DEALS.filter(d => d.transaction === 'Sale')
-  const salesByYear   = YEARS.map(yr => ({ yr, deals: allSales.filter(d => yearOf(d) === yr) }))
-  const maxYearVol    = Math.max(...salesByYear.map(y => y.deals.reduce((s, d) => s + d.value, 0)), 1)
-  const volumeYTD     = allSales.filter(d => yearOf(d) === 2026).reduce((s, d) => s + d.value, 0)
-  const volumeAllTime = allSales.reduce((s, d) => s + d.value, 0)
+  // Volume from real won deals; open deals are anything not yet closed.
+  const wonDeals      = deals.filter(d => d.outcome === 'won')
+  const openDeals     = deals.filter(d => d.stage !== 'closed')
+  const dealYear      = (d: DealView) => new Date(d.stage_changed_at ?? d.created_at).getFullYear()
+  const salesByYear   = YEARS.map(yr => ({ yr, deals: wonDeals.filter(d => dealYear(d) === yr) }))
+  const maxYearVol    = Math.max(...salesByYear.map(y => y.deals.reduce((s, d) => s + (d.value || 0), 0)), 1)
+  const volumeYTD     = wonDeals.filter(d => dealYear(d) === new Date().getFullYear()).reduce((s, d) => s + (d.value || 0), 0)
+  const volumeAllTime = wonDeals.reduce((s, d) => s + (d.value || 0), 0)
 
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 3000) }
   function togglePanel(p: Panel)  { setPanel(prev => prev === p ? null : p) }
 
-  function handleActivityClick(link: ActivityLink) {
-    if (link.type === 'prop') {
-      const p = props.find(x => x.id === link.propId)
-      if (p) setDetailProp(p)
-    } else if (link.type === 'client') {
-      const c = clients.find(x => x.id === link.clientId)
-      if (c) setDetailClient(c)
-    } else if (link.type === 'deal') {
-      const d = DEALS.find(x => x.id === link.dealId)
-      if (d) setDetailDeal(d)
-    }
-  }
+  // Real recent activity: the newest listings, clients and closed deals, merged.
+  const recentActivity = [
+    ...props.map(p => ({ id: `p${p.id}`, ts: 0, color: '#5E8FD6', text: `Listing: ${p.title}`, onClick: () => setDetailProp(p) })),
+    ...clients.map(c => ({ id: `c${c.id}`, ts: 0, color: '#A23434', text: `Client: ${c.name}`, onClick: () => setDetailClient(c) })),
+    ...wonDeals.map(d => ({ id: `d${d.id}`, ts: new Date(d.stage_changed_at ?? d.created_at).getTime(), color: '#1F8A5B', text: `Deal won: ${d.clientName} — ${formatPrice(d.value)}`, onClick: () => setDetailDeal(d) })),
+  ].slice(0, 6)
 
   const kpis = [
-    { key: 'listings', label: 'Active listings', value: activeListings.length, sub: 'across the agency', subColor: SUB,      icon: Building2, iconBg: '#EAF0FA', iconFg: '#2E5288' },
-    { key: 'clients',  label: 'Total clients',   value: clients.length,        sub: '↑ active pipeline', subColor: '#1F7A4D', icon: Users,     iconBg: '#E3F4EA', iconFg: '#1F8A5B' },
-    { key: 'volume',   label: 'Volume YTD',       value: `$${(volumeYTD/1_000_000).toFixed(1)}M`, sub: '↑ 18% vs 2025', subColor: '#1F7A4D', icon: Banknote,  iconBg: '#FBEFD6', iconFg: '#9A6516' },
-    { key: 'deals',    label: 'Open deals',       value: 9,                     sub: '3 closing soon',   subColor: '#9A6516', icon: Clock,     iconBg: '#FBE7E7', iconFg: '#A23434' },
+    { key: 'listings', label: 'Active listings', value: activeListings.length, sub: `${props.length} total`, subColor: SUB,      icon: Building2, iconBg: '#EAF0FA', iconFg: '#2E5288' },
+    { key: 'clients',  label: 'Total clients',   value: clients.length,        sub: 'in your pipeline',   subColor: SUB, icon: Users,     iconBg: '#E3F4EA', iconFg: '#1F8A5B' },
+    { key: 'volume',   label: 'Volume YTD',       value: volumeYTD >= 1_000_000 ? `$${(volumeYTD/1_000_000).toFixed(1)}M` : formatPrice(volumeYTD), sub: `${wonDeals.length} won all-time`, subColor: '#1F7A4D', icon: Banknote,  iconBg: '#FBEFD6', iconFg: '#9A6516' },
+    { key: 'deals',    label: 'Open deals',       value: openDeals.length,      sub: `${deals.length} total`,   subColor: SUB, icon: Clock,     iconBg: '#FBE7E7', iconFg: '#A23434' },
   ] as const
 
   const recentProps = props.filter(p => p.status !== 'Sold').slice(0, 5)
 
-  function DealRow({ d }: { d: Deal }) {
-    const comm = Math.round(d.value * COMMISSION_RATE / 100)
-    const ts   = typeStyle(d.type)
+  function DealRow({ d }: { d: DealView }) {
+    const comm = Math.round((d.value || 0) * COMMISSION_RATE / 100)
     return (
       <div
         onClick={() => setDetailDeal(d)}
@@ -127,12 +127,9 @@ export default function DashboardPage() {
         style={{ borderBottom: '1px solid #F4F5F8' }}
       >
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold truncate" style={{ color: H }}>{d.propTitle}</p>
-          <p className="text-xs" style={{ color: SUB }}>
-            {d.location} · {new Date(d.date).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
-          </p>
+          <p className="text-sm font-semibold truncate" style={{ color: H }}>{d.clientName}</p>
+          <p className="text-xs truncate" style={{ color: SUB }}>{d.propertyLabel || stageLabelOf(d.stage)}</p>
         </div>
-        <span className="text-xs font-semibold px-2 py-0.5 rounded-full shrink-0" style={ts}>{d.type}</span>
         <div className="text-right shrink-0">
           <p className="text-sm font-semibold" style={{ color: H }}>{formatPrice(d.value)}</p>
           <p className="text-xs font-medium" style={{ color: '#1F7A4D' }}>+{formatPrice(comm)}</p>
@@ -286,26 +283,21 @@ export default function DashboardPage() {
           })}
 
           {/* Open deals */}
-          {panel === 'deals' && DEALS.map(d => {
-            const agent = getAgent(d.agentId)
-            return (
-              <div key={d.id} onClick={() => setDetailDeal(d)}
-                className="flex items-center gap-4 px-5 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
-                style={{ borderBottom: '1px solid #F4F5F8' }}>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold truncate" style={{ color: H }}>{d.propTitle}</p>
-                  <p className="text-xs" style={{ color: SUB }}>{d.location}</p>
-                </div>
-                <span className="text-xs font-medium px-2 py-0.5 rounded-full shrink-0" style={typeStyle(d.type)}>{d.type}</span>
-                <p className="text-sm font-semibold shrink-0" style={{ color: H }}>{formatPrice(d.value)}</p>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ background: agent.color }}>{agent.initials}</div>
-                  <span className="text-xs" style={{ color: SUB }}>{agent.shortName}</span>
-                </div>
-                <span className="text-xs shrink-0" style={{ color: SUB }}>{d.days}d</span>
+          {panel === 'deals' && openDeals.length === 0 && (
+            <p className="px-5 py-8 text-sm text-center" style={{ color: '#9AA3B2' }}>No open deals. Start one from the Pipeline.</p>
+          )}
+          {panel === 'deals' && openDeals.map(d => (
+            <div key={d.id} onClick={() => setDetailDeal(d)}
+              className="flex items-center gap-4 px-5 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
+              style={{ borderBottom: '1px solid #F4F5F8' }}>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold truncate" style={{ color: H }}>{d.clientName}</p>
+                <p className="text-xs truncate" style={{ color: SUB }}>{d.propertyLabel || '—'}</p>
               </div>
-            )
-          })}
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full shrink-0" style={{ background: '#EAF0FA', color: '#2E5288' }}>{stageLabelOf(d.stage)}</span>
+              <p className="text-sm font-semibold shrink-0" style={{ color: H }}>{formatPrice(d.value)}</p>
+            </div>
+          ))}
 
           {/* ── Volume panel ── */}
           {panel === 'volume' && (
@@ -420,12 +412,14 @@ export default function DashboardPage() {
         <div className="rounded-2xl bg-white p-5" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #EEF0F4' }}>
           <p className="text-sm font-semibold mb-4" style={{ color: H }}>Recent Activity</p>
           <div className="space-y-4">
-            {ACTIVITY.map(a => (
-              <div key={a.id} onClick={() => handleActivityClick(a.link)} className="flex gap-3 cursor-pointer group">
+            {recentActivity.length === 0 && (
+              <p className="text-xs" style={{ color: '#9AA3B2' }}>Nothing yet — add a listing or a client to get started.</p>
+            )}
+            {recentActivity.map(a => (
+              <div key={a.id} onClick={a.onClick} className="flex gap-3 cursor-pointer group">
                 <div className="mt-1.5 w-2 h-2 rounded-full shrink-0" style={{ background: a.color }} />
                 <div>
                   <p className="text-xs leading-snug transition-colors group-hover:underline" style={{ color: H }}>{a.text}</p>
-                  <p className="text-xs mt-1" style={{ color: SUB }}>{a.time}</p>
                 </div>
               </div>
             ))}
@@ -440,46 +434,31 @@ export default function DashboardPage() {
           onClick={e => e.target === e.currentTarget && setDetailDeal(null)}>
           <div className="w-full md:max-w-sm md:rounded-2xl rounded-t-2xl overflow-hidden bg-white" style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
             <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid #EEF0F4' }}>
-              <p className="font-semibold text-sm" style={{ color: H }}>Closed Deal</p>
+              <p className="font-semibold text-sm" style={{ color: H }}>Deal</p>
               <button onClick={() => setDetailDeal(null)} style={{ color: SUB }} className="text-lg leading-none hover:text-gray-600">✕</button>
             </div>
             <div className="p-5 space-y-3">
-              {(() => {
-                const agent = getAgent(detailDeal.agentId)
-                const comm  = Math.round(detailDeal.value * COMMISSION_RATE / 100)
-                return (
-                  <>
-                    <div>
-                      <p className="text-xs" style={{ color: SUB }}>Property</p>
-                      <p className="text-base font-semibold mt-0.5" style={{ color: H }}>{detailDeal.propTitle}</p>
-                      <p className="text-xs" style={{ color: SUB }}>{detailDeal.location}</p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      {[
-                        { label: 'Type',        value: detailDeal.type,     color: H },
-                        { label: 'Transaction', value: detailDeal.transaction, color: H },
-                        { label: 'Value',       value: formatPrice(detailDeal.value), color: H },
-                        { label: 'Commission',  value: formatPrice(comm),    color: '#1F7A4D' },
-                        { label: 'Days to close', value: `${detailDeal.days} days`, color: H },
-                        { label: 'Closed',      value: new Date(detailDeal.date).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }), color: H },
-                        ...(detailDeal.clientName ? [{ label: 'Client', value: detailDeal.clientName, color: H }] : []),
-                      ].map(({ label, value, color }) => (
-                        <div key={label} className="rounded-xl p-3" style={{ background: '#F7F8FB' }}>
-                          <p className="text-xs" style={{ color: SUB }}>{label}</p>
-                          <p className="text-sm font-semibold mt-0.5" style={{ color }}>{value}</p>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-3 pt-1" style={{ borderTop: '1px solid #EEF0F4' }}>
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ background: agent.color }}>{agent.initials}</div>
-                      <div>
-                        <p className="text-sm font-semibold" style={{ color: H }}>{agent.name}</p>
-                        <p className="text-xs" style={{ color: SUB }}>Closing Agent</p>
-                      </div>
-                    </div>
-                  </>
-                )
-              })()}
+              <div>
+                <p className="text-xs" style={{ color: SUB }}>Client</p>
+                <p className="text-base font-semibold mt-0.5" style={{ color: H }}>{detailDeal.clientName}</p>
+                {detailDeal.propertyLabel && <p className="text-xs" style={{ color: SUB }}>{detailDeal.propertyLabel}</p>}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: 'Stage',      value: detailDeal.outcome ? `Closed (${detailDeal.outcome})` : stageLabelOf(detailDeal.stage), color: H },
+                  { label: 'Value',      value: formatPrice(detailDeal.value), color: H },
+                  { label: 'Commission', value: formatPrice(Math.round((detailDeal.value || 0) * COMMISSION_RATE / 100)), color: '#1F7A4D' },
+                  { label: 'Updated',    value: new Date(detailDeal.stage_changed_at ?? detailDeal.created_at).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }), color: H },
+                ].map(({ label, value, color }) => (
+                  <div key={label} className="rounded-xl p-3" style={{ background: '#F7F8FB' }}>
+                    <p className="text-xs" style={{ color: SUB }}>{label}</p>
+                    <p className="text-sm font-semibold mt-0.5" style={{ color }}>{value}</p>
+                  </div>
+                ))}
+              </div>
+              <a href="/pipeline" className="block w-full text-center py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: '#0E1F3D' }}>
+                Manage in Pipeline →
+              </a>
             </div>
           </div>
         </div>

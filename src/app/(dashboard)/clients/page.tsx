@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { CLIENTS, getAgent, statusStyle, CLIENT_TYPE_STYLE, formatPrice, Client } from '@/lib/data'
+import { getAgent, statusStyle, CLIENT_TYPE_STYLE, formatPrice, Client } from '@/lib/data'
 import { useSession } from '@/hooks/use-session'
 import { sortOwnFirst } from '@/lib/client-order'
 import ClientDetailModal from '@/components/modals/ClientDetailModal'
@@ -10,7 +10,8 @@ import { dbRowToClient } from '@/lib/db-mappers'
 
 export default function ClientsPage() {
   const [scope, setScope] = useState<'me' | 'company'>('company')
-  const [list, setList] = useState<Client[]>(CLIENTS)
+  const [list, setList] = useState<Client[]>([])
+  const [loaded, setLoaded] = useState(false)
   const { session } = useSession()
 
   useEffect(() => {
@@ -19,11 +20,11 @@ export default function ClientsPage() {
     fetch('/api/clients', { signal: ctrl.signal })
       .then(r => { clearTimeout(t); return r.ok ? r.json() : Promise.reject(r.status) })
       .then(data => {
-        if (data.clients && data.clients.length > 0) {
-          setList(data.clients.map(dbRowToClient))
-        }
+        // Always reflect the real result (even empty) — no leftover demo data.
+        if (data.clients) setList(data.clients.map(dbRowToClient))
       })
       .catch(() => clearTimeout(t))
+      .finally(() => setLoaded(true))
   }, [])
   const [detailId, setDetailId] = useState<number | null>(null)
   const [addOpen, setAddOpen] = useState(false)

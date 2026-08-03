@@ -1,9 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import {
-  PROPERTIES, getAgent, Property,
-} from '@/lib/data'
+import { getAgent, Property } from '@/lib/data'
 import PropertyCard from '@/components/properties/MeridianPropertyCard'
 import PropertyDetailModal from '@/components/modals/PropertyDetailModal'
 import NewPropertyModal from '@/components/modals/NewPropertyModal'
@@ -12,7 +10,8 @@ import { useSession } from '@/hooks/use-session'
 
 export default function PropertiesPage() {
   const [scope, setScope] = useState<'me' | 'company'>('company')
-  const [list, setList] = useState<Property[]>(PROPERTIES)
+  const [list, setList] = useState<Property[]>([])
+  const [loaded, setLoaded] = useState(false)
   const { session } = useSession()
 
   useEffect(() => {
@@ -21,11 +20,12 @@ export default function PropertiesPage() {
     fetch('/api/properties', { signal: ctrl.signal })
       .then(r => { clearTimeout(t); return r.ok ? r.json() : Promise.reject(r.status) })
       .then(data => {
-        if (data.properties && data.properties.length > 0) {
-          setList(data.properties.map(dbRowToProperty))
-        }
+        // Always reflect the real result — even an empty one — so a new agency
+        // sees its (empty) list, not leftover demo data.
+        if (data.properties) setList(data.properties.map(dbRowToProperty))
       })
       .catch(() => clearTimeout(t))
+      .finally(() => setLoaded(true))
   }, [])
   const [detailId, setDetailId] = useState<number | null>(null)
   const [addOpen, setAddOpen] = useState(false)
