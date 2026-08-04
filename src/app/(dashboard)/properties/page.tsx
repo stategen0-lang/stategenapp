@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getAgent, Property } from '@/lib/data'
+import { getAgent, Property, Agent } from '@/lib/data'
 import PropertyCard from '@/components/properties/MeridianPropertyCard'
 import PropertyDetailModal from '@/components/modals/PropertyDetailModal'
 import NewPropertyModal from '@/components/modals/NewPropertyModal'
@@ -12,6 +12,7 @@ export default function PropertiesPage() {
   const [scope, setScope] = useState<'me' | 'company'>('company')
   const [list, setList] = useState<Property[]>([])
   const [loaded, setLoaded] = useState(false)
+  const [agents, setAgents] = useState<Record<string, { name: string; initials: string; color: string; whatsapp: string | null }>>({})
   const { session } = useSession()
 
   useEffect(() => {
@@ -26,7 +27,18 @@ export default function PropertiesPage() {
       })
       .catch(() => clearTimeout(t))
       .finally(() => setLoaded(true))
+    // Real agent names/colours/WhatsApp, so listings show who they belong to.
+    fetch('/api/company/agents').then(r => r.ok ? r.json() : null).then(d => { if (d?.agents) setAgents(d.agents) }).catch(() => {})
   }, [])
+
+  // Real agent for a listing's code, falling back to the demo helper for codes
+  // that predate their profile.
+  const agentFor = (code: string): Agent => {
+    const a = agents[code]
+    return a
+      ? { id: code as Agent['id'], name: a.name, initials: a.initials, color: a.color, shortName: a.name.split(' ')[0] }
+      : getAgent(code as Agent['id'])
+  }
   const [detailId, setDetailId] = useState<number | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [editProp, setEditProp] = useState<Property | null>(null)
@@ -42,7 +54,7 @@ export default function PropertiesPage() {
     : list
 
   const detailProp = detailId != null ? list.find(p => p.id === detailId) ?? null : null
-  const detailAgent = detailProp ? getAgent(detailProp.agentId) : null
+  const detailAgent = detailProp ? agentFor(detailProp.agentId) : null
 
   function showToast(msg: string) {
     setToast(msg)
@@ -92,7 +104,7 @@ export default function PropertiesPage() {
             <PropertyCard
               key={p.id}
               property={p}
-              agent={getAgent(p.agentId)}
+              agent={agentFor(p.agentId)}
               onClick={() => setDetailId(p.id)}
             />
           ))}
@@ -114,6 +126,8 @@ export default function PropertiesPage() {
         <PropertyDetailModal
           property={detailProp}
           agent={detailAgent}
+          agentWhatsApp={agents[detailProp.agentId]?.whatsapp ?? null}
+          isOwnListing={session?.agentCode != null && detailProp.agentId === session.agentCode}
           onClose={() => setDetailId(null)}
           onEdit={p => { setDetailId(null); setEditProp(p) }}
         />

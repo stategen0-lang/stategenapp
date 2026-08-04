@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { MessageCircle } from 'lucide-react'
 import { Property, Agent, Client, TYPE_GRADIENTS, statusStyle, formatPrice, buildDesc, getAgent } from '@/lib/data'
 import MatchCards from '@/components/matching/MatchCards'
 import ClientDetailModal from './ClientDetailModal'
@@ -10,9 +11,13 @@ interface Props {
   agent: Agent
   onClose: () => void
   onEdit?: (p: Property) => void
+  /** WhatsApp number of the listing's agent (E.164), when they're reachable. */
+  agentWhatsApp?: string | null
+  /** True when the viewer is the listing's own agent — no "contact yourself". */
+  isOwnListing?: boolean
 }
 
-export default function PropertyDetailModal({ property: p, agent, onClose, onEdit }: Props) {
+export default function PropertyDetailModal({ property: p, agent, onClose, onEdit, agentWhatsApp, isOwnListing }: Props) {
   const sc = statusStyle(p.status)
   const photos = p.photos ?? []
   const [activePhoto, setActivePhoto] = useState(0)
@@ -179,10 +184,21 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
               >
                 {agent.initials}
               </div>
-              <div>
+              <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold" style={{ color: '#14223F' }}>Listed by {agent.name}</p>
                 <p className="text-xs" style={{ color: '#9AA3B2' }}>StateGen</p>
               </div>
+              {!isOwnListing && agentWhatsApp && (
+                <a
+                  href={`https://wa.me/${agentWhatsApp.replace(/\D/g, '')}?text=${encodeURIComponent(`Hi ${agent.name}, about your listing "${p.title}" (#${p.id})`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-white shrink-0"
+                  style={{ background: '#25D366' }}
+                >
+                  <MessageCircle className="h-3.5 w-3.5" /> Message
+                </a>
+              )}
             </div>
 
             {/* ── AI Matching ── */}
