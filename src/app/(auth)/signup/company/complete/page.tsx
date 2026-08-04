@@ -51,44 +51,21 @@ function CompanyCompleteInner() {
     setStatus('submitting')
 
     try {
-      // 1. Create Supabase auth user
-      const { data: authData, error: authErr } = await supabase.auth.signUp({
-        email: info.email,
-        password,
+      // Create the account + company + profile server-side. Email confirmation
+      // is ON in this project, so a browser signUp would return no session and
+      // the follow-up inserts would fail unauthenticated — the server route uses
+      // email_confirm:true and admin writes instead.
+      const res = await fetch('/api/signup/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, password }),
       })
-      if (authErr) throw authErr
-      if (!authData.user) throw new Error('Signup failed — please try again.')
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'Signup failed — please try again.')
 
-      // 2. Upsert company (in case webhook hasn't fired yet)
-      const { data: company, error: companyErr } = await supabase
-        .from('Companies')
-        .upsert(
-          {
-            Name: info.companyName,
-            domain: info.domain,
-            Plan: info.planId,
-            'is active': true,
-            stripe_customer_id: info.customerId || null,
-            stripe_subscription_id: info.subscriptionId || null,
-            stripe_status: 'active',
-          },
-          { onConflict: 'domain' }
-        )
-        .select()
-        .single()
-      if (companyErr) throw companyErr
-
-      // 3. Create manager profile
-      const { error: profileErr } = await supabase
-        .from('Profiles')
-        .insert({
-          id: authData.user.id,
-          company_id: company.id,
-          Full_name: info.companyName + ' Manager',
-          role: 'owner',
-          approved: true,
-        })
-      if (profileErr) throw profileErr
+      // Sign in to establish the session, then into the app.
+      const { error: signInErr } = await supabase.auth.signInWithPassword({ email: info.email, password })
+      if (signInErr) { setStatus('done'); return }  // account exists; show success + let them sign in
 
       setStatus('done')
     } catch (err: unknown) {
@@ -115,8 +92,8 @@ function CompanyCompleteInner() {
           <p className="text-sm mb-6" style={{ color: '#7A8499' }}>
             Share your domain <span className="font-semibold" style={{ color: '#1A2B4A' }}>{info?.domain}</span> with your agents so they can request to join.
           </p>
-          <button onClick={() => router.push('/login')} className="w-full py-3 rounded-xl text-sm font-semibold text-white" style={{ background: '#0E1F3D' }}>
-            Sign In →
+          <button onClick={() => { router.push('/dashboard'); router.refresh() }} className="w-full py-3 rounded-xl text-sm font-semibold text-white" style={{ background: '#0E1F3D' }}>
+            Go to dashboard →
           </button>
         </div>
       </div>
