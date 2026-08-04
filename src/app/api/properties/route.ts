@@ -5,8 +5,6 @@ import { getSession } from '@/lib/session'
 import { canEditProperty, isManager } from '@/lib/permissions'
 import { createListingAlerts } from '@/lib/alerts-server'
 
-const COMPANY_ID = Number(process.env.DEMO_COMPANY_ID ?? 1)
-
 // The listing agent's code lives in the property's Amenities JSON.
 function propertyAgent(row: Record<string, unknown>): string | null {
   try { return (JSON.parse((row.Amenities as string) || '{}').agentId as string) ?? null } catch { return null }
@@ -14,11 +12,14 @@ function propertyAgent(row: Record<string, unknown>): string | null {
 
 export async function GET() {
   try {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const supabase = await createClient()
     const { data, error } = await supabase
       .from('Properties')
       .select('*')
-      .eq('company_id', COMPANY_ID)
+      .eq('company_id', session.companyId)
       .order('created_at', { ascending: false })
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
     const { data, error } = await supabase
       .from('Properties')
       .insert({
-        company_id: COMPANY_ID,
+        company_id: session.companyId,
         Title: body.title,
         Location: body.city,
         Neighborhood: body.district,
@@ -81,7 +82,7 @@ export async function POST(req: NextRequest) {
     // listing is already saved, so a failure here must not fail the request.
     let alerts = 0
     try {
-      alerts = await createListingAlerts(createAdminClient(), COMPANY_ID, data as Record<string, unknown>)
+      alerts = await createListingAlerts(createAdminClient(), session.companyId, data as Record<string, unknown>)
     } catch { /* already logged inside */ }
 
     return NextResponse.json({ property: data, alerts })
@@ -143,7 +144,7 @@ export async function PATCH(req: NextRequest) {
         Status: body.status ?? 'Available',
       })
       .eq('id', id)
-      .eq('company_id', COMPANY_ID)
+      .eq('company_id', session.companyId)
       .select()
       .single()
 

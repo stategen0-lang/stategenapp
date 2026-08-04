@@ -7,7 +7,6 @@ import { isManager, canSeeDeal, canSeeClientPII, maskClientName } from '@/lib/pe
 import { type RosterAgent } from '@/lib/agent-roster'
 import { loadCompanyRoster } from '@/lib/agent-roster-server'
 
-const COMPANY_ID = Number(process.env.DEMO_COMPANY_ID ?? 1)
 
 // Embed the client (name + lead score) and the property in play so the board
 // renders in one trip.
@@ -150,7 +149,7 @@ export async function PATCH(req: NextRequest) {
     // A stage move is a fresh activity signal — refresh that client's score.
     // Non-fatal: scoring must never fail the stage change itself.
     if (stage !== undefined && data?.client_id) {
-      try { await recalculateScores({ clientId: Number(data.client_id), companyId: COMPANY_ID }) } catch { /* ignore */ }
+      try { await recalculateScores({ clientId: Number(data.client_id), companyId: session.companyId }) } catch { /* ignore */ }
     }
 
     return NextResponse.json({ deal: toDeal(data as Row) })

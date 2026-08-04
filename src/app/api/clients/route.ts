@@ -4,7 +4,6 @@ import { recalculateScores } from '@/lib/score-engine'
 import { getSession } from '@/lib/session'
 import { canSeeClientPII, canEditClient, isManager, maskClientName } from '@/lib/permissions'
 
-const COMPANY_ID = Number(process.env.DEMO_COMPANY_ID ?? 1)
 
 // The owning agent code lives in the client's notes JSON.
 function clientAgent(row: Record<string, unknown>): string | null {
@@ -13,8 +12,8 @@ function clientAgent(row: Record<string, unknown>): string | null {
 
 // A client change is a scoring signal — refresh that client's lead score.
 // Non-fatal: a scoring hiccup must never fail the client write itself.
-async function refreshScore(clientId: number) {
-  try { await recalculateScores({ clientId, companyId: COMPANY_ID }) } catch { /* ignore */ }
+async function refreshScore(clientId: number, companyId: number) {
+  try { await recalculateScores({ clientId, companyId }) } catch { /* ignore */ }
 }
 
 export async function GET(req: NextRequest) {
@@ -118,7 +117,7 @@ export async function PATCH(req: NextRequest) {
       .select()
       .single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    await refreshScore(Number(id))
+    await refreshScore(Number(id), session.companyId)
     const { data: fresh } = await supabase
       .from('client_requests').select('*').eq('id', id).single()
     return NextResponse.json({ ok: true, client: fresh ?? data })
@@ -173,7 +172,7 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    if (data?.id) await refreshScore(Number(data.id))
+    if (data?.id) await refreshScore(Number(data.id), session.companyId)
     return NextResponse.json({ client: data })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })

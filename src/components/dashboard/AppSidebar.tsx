@@ -141,7 +141,7 @@ export default function AppSidebar({ profile, user }: AppSidebarProps) {
               }}
             >
               <UserCheck className="h-4 w-4 shrink-0" />
-              <span className="flex-1">Approvals</span>
+              <span className="flex-1">Team</span>
               {pendingAgents > 0 && (
                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: '#E08A1E', color: '#fff' }}>
                   {pendingAgents > 99 ? '99+' : pendingAgents}

@@ -3,7 +3,6 @@ import { createClient } from '@/lib/supabase/server'
 import { recalculateScores } from '@/lib/score-engine'
 import { getSession } from '@/lib/session'
 
-const COMPANY_ID = Number(process.env.DEMO_COMPANY_ID ?? 1)
 const STALE_MS = 12 * 60 * 60 * 1000 // recompute at most twice a day when staleOnly
 
 // POST /api/scores            → recalculate all clients now
@@ -30,7 +29,7 @@ export async function POST(req: NextRequest) {
       const { data } = await supabase
         .from('client_requests')
         .select('score_updated_at')
-        .eq('company_id', COMPANY_ID)
+        .eq('company_id', session.companyId)
         .order('score_updated_at', { ascending: true, nullsFirst: true })
         .limit(1)
       const oldest = data?.[0]?.score_updated_at
@@ -39,7 +38,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const result = await recalculateScores({ clientId, companyId: COMPANY_ID })
+    const result = await recalculateScores({ clientId, companyId: session.companyId })
     return NextResponse.json(result)
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
