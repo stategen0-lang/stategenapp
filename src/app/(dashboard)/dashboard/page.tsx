@@ -46,6 +46,7 @@ export default function DashboardPage() {
   const [props, setProps]               = useState<Property[]>([])
   const [clients, setClients]           = useState<Client[]>([])
   const [deals, setDeals]               = useState<DealView[]>([])
+  const [loaded, setLoaded]             = useState(false)
   const [editProp, setEditProp]         = useState<Property | null>(null)
   const [editClient, setEditClient]     = useState<Client | null>(null)
   const [toast, setToast]               = useState('')
@@ -77,7 +78,7 @@ export default function DashboardPage() {
       if (pRes?.properties) setProps(pRes.properties.map(dbRowToProperty))
       if (cRes?.clients) setClients(cRes.clients.map(dbRowToClient))
       if (dRes?.deals) setDeals(dRes.deals as DealView[])
-    }).catch(() => clearTimeout(t))
+    }).catch(() => clearTimeout(t)).finally(() => setLoaded(true))
     return () => { clearTimeout(t); ctrl.abort() }
   }, [])
 
@@ -164,6 +165,32 @@ export default function DashboardPage() {
             Review <ChevronRight className="h-4 w-4" />
           </span>
         </Link>
+      )}
+
+      {/* ── First-run get-started (brand-new agency) ── */}
+      {loaded && props.length === 0 && clients.length === 0 && (
+        <div className="rounded-2xl p-5" style={{ background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #EEF0F4' }}>
+          <p className="text-sm font-bold" style={{ color: H }}>Welcome to StateGen 👋</p>
+          <p className="text-xs mt-0.5 mb-4" style={{ color: SUB }}>Three quick steps to get your agency up and running.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {[
+              { n: 1, title: 'Add your first listing', desc: 'Put a property on the board.', action: () => setNewPropOpen(true), cta: 'Add listing' },
+              { n: 2, title: 'Add your first client', desc: 'Capture a buyer or renter brief.', action: () => setNewClientOpen(true), cta: 'Add client' },
+              { n: 3, title: 'Invite your team', desc: 'Agents join with your company domain.', href: '/settings', cta: 'Open settings' },
+            ].map(s => (
+              <div key={s.n} className="rounded-xl p-4 flex flex-col" style={{ border: '1px solid #EEF0F4', background: '#F9FAFC' }}>
+                <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white mb-2" style={{ background: '#5E8FD6' }}>{s.n}</div>
+                <p className="text-sm font-semibold" style={{ color: H }}>{s.title}</p>
+                <p className="text-xs mt-0.5 mb-3 flex-1" style={{ color: SUB }}>{s.desc}</p>
+                {s.href ? (
+                  <Link href={s.href} className="text-xs font-bold" style={{ color: '#2E5288' }}>{s.cta} →</Link>
+                ) : (
+                  <button onClick={s.action} className="text-left text-xs font-bold" style={{ color: '#2E5288' }}>{s.cta} →</button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* ── Header ── */}

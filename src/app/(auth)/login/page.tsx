@@ -12,6 +12,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [resetSent, setResetSent] = useState(false)
+  const [resetting, setResetting] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -30,6 +32,22 @@ export default function LoginPage() {
 
     router.push('/dashboard')
     router.refresh()
+  }
+
+  async function handleReset() {
+    setError(null)
+    if (!email.trim()) {
+      setError('Enter your email above first, then tap “Forgot password?”.')
+      return
+    }
+    setResetting(true)
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+    setResetting(false)
+    // Don't reveal whether an email exists — always show the same confirmation.
+    if (error && !/rate/i.test(error.message)) { setError(error.message); return }
+    setResetSent(true)
   }
 
   return (
@@ -138,11 +156,17 @@ export default function LoginPage() {
                 />
               </div>
               <div className="flex justify-end mt-1.5">
-                <button type="button" className="text-xs" style={{ color: '#5E8FD6' }}>
-                  Forgot password?
+                <button type="button" onClick={handleReset} disabled={resetting} className="text-xs disabled:opacity-50" style={{ color: '#5E8FD6' }}>
+                  {resetting ? 'Sending…' : 'Forgot password?'}
                 </button>
               </div>
             </div>
+
+            {resetSent && (
+              <p className="text-xs px-3 py-2 rounded-lg" style={{ background: '#E3F4EA', color: '#1F7A4D' }}>
+                If an account exists for that email, we&apos;ve sent a password reset link. Check your inbox.
+              </p>
+            )}
 
             {error && (
               <p className="text-xs px-3 py-2 rounded-lg" style={{ background: '#FBE7E7', color: '#A23434' }}>

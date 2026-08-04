@@ -94,6 +94,13 @@ export default function ClientsPage() {
             </tr>
           </thead>
           <tbody>
+            {loaded && filtered.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-4 py-12 text-center text-sm" style={{ color: '#9AA3B2' }}>
+                  {scope === 'me' ? 'You have no clients yet.' : 'No clients yet — add your first client to get started.'}
+                </td>
+              </tr>
+            )}
             {filtered.map(c => {
               const agent = getAgent(c.agentId)
               const sc = statusStyle(c.status)
