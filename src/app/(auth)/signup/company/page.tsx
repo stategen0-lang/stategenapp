@@ -226,6 +226,11 @@ function CompanySignupInner() {
               </button>
 
               <p className="text-center text-xs mt-4" style={{ color: '#9AA3B2' }}>
+                By starting your trial you agree to our{' '}
+                <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: '#5E8FD6' }}>Terms</a>{' '}and{' '}
+                <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: '#5E8FD6' }}>Privacy Policy</a>.
+              </p>
+              <p className="text-center text-xs mt-2" style={{ color: '#9AA3B2' }}>
                 No charge today. Secured by Stripe. We never store your card details.
               </p>
             </>

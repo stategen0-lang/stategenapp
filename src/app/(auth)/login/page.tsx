@@ -190,6 +190,11 @@ export default function LoginPage() {
               Create one
             </Link>
           </p>
+          <p className="text-center text-xs mt-4" style={{ color: '#9AA3B2' }}>
+            <Link href="/terms" style={{ color: '#9AA3B2', textDecoration: 'underline' }}>Terms</Link>
+            {' · '}
+            <Link href="/privacy" style={{ color: '#9AA3B2', textDecoration: 'underline' }}>Privacy</Link>
+          </p>
         </div>
       </div>
     </div>
