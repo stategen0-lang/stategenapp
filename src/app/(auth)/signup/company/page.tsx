@@ -3,11 +3,11 @@
 import { useState, Suspense } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { Building2, Mail, Globe, ChevronLeft, Check, Zap } from 'lucide-react'
+import { Building2, Mail, Globe, ChevronLeft, Check, Zap, Lock, Clock } from 'lucide-react'
 import { PLANS, PlanId } from '@/lib/stripe-plans'
 import Logo from '@/components/brand/Logo'
 
-type Step = 'info' | 'plan'
+type Step = 'info' | 'plan' | 'done'
 
 function CompanySignupInner() {
   const params = useSearchParams()
@@ -21,6 +21,8 @@ function CompanySignupInner() {
   const [companyName, setCompanyName] = useState('')
   const [domain, setDomain]           = useState('')
   const [email, setEmail]             = useState('')
+  const [password, setPassword]       = useState('')
+  const [confirm, setConfirm]         = useState('')
 
   function handleInfoSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -29,20 +31,23 @@ function CompanySignupInner() {
     setStep('plan')
   }
 
-  async function handleCheckout() {
+  async function handleCreate() {
     setError(null)
+    if (password.length < 8) { setError('Password must be at least 8 characters.'); return }
+    if (password !== confirm) { setError('Passwords do not match.'); return }
     setLoading(true)
     try {
-      const res = await fetch('/api/stripe/checkout', {
+      const res = await fetch('/api/signup/company', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyName, domain, email, planId: selectedPlan }),
+        body: JSON.stringify({ companyName, domain, email, planId: selectedPlan, password }),
       })
       const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error ?? 'Failed to create checkout session.')
-      window.location.href = data.url
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Sign-up failed.')
+      setStep('done')
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong.')
+    } finally {
       setLoading(false)
     }
   }
@@ -155,12 +160,12 @@ function CompanySignupInner() {
           {/* ── STEP 2: Plan selection ── */}
           {step === 'plan' && (
             <>
-              <p className="text-xs font-bold tracking-widest mb-2 uppercase" style={labelStyle}>Manager signup · Step 2 of 3</p>
+              <p className="text-xs font-bold tracking-widest mb-2 uppercase" style={labelStyle}>Manager signup · Step 2 of 2</p>
               <h2 className="text-2xl font-bold mb-1.5" style={{ color: '#1A2B4A', letterSpacing: '-0.3px' }}>
                 Choose your plan
               </h2>
               <p className="text-sm mb-7" style={{ color: '#7A8499' }}>
-                Every plan is <span className="font-semibold" style={{ color: '#1A2B4A' }}>full access</span> — they differ only by how many agents you can add. All include a <span className="font-semibold" style={{ color: '#1A2B4A' }}>1-month free trial</span>, a promo code option at checkout, and cancel any time.
+                Every plan is <span className="font-semibold" style={{ color: '#1A2B4A' }}>full access</span> — they differ only by how many agents you can add. Billing is by <span className="font-semibold" style={{ color: '#1A2B4A' }}>invoice</span>; we activate your account once payment is arranged.
               </p>
 
               <div className="space-y-3 mb-6">
@@ -214,26 +219,60 @@ function CompanySignupInner() {
                 })}
               </div>
 
+              {/* Set the manager password now — account is created (pending) on submit */}
+              <div className="space-y-3 mb-4">
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: '#9AA3B2' }} />
+                  <input className={inp} style={inpStyle} type="password" required value={password}
+                    onChange={e => setPassword(e.target.value)} placeholder="Create a password (min. 8 characters)"
+                    onFocus={e => (e.target.style.borderColor = '#5E8FD6')} onBlur={e => (e.target.style.borderColor = '#D7DCE5')} />
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: '#9AA3B2' }} />
+                  <input className={inp} style={inpStyle} type="password" required value={confirm}
+                    onChange={e => setConfirm(e.target.value)} placeholder="Confirm password"
+                    onFocus={e => (e.target.style.borderColor = '#5E8FD6')} onBlur={e => (e.target.style.borderColor = '#D7DCE5')} />
+                </div>
+              </div>
+
               {error && <p className="text-xs px-3 py-2 rounded-lg mb-4" style={{ background: '#FBE7E7', color: '#A23434' }}>{error}</p>}
 
               <button
-                onClick={handleCheckout}
+                onClick={handleCreate}
                 disabled={loading}
                 className="w-full py-3 rounded-xl text-sm font-semibold text-white transition-opacity disabled:opacity-60"
                 style={{ background: '#0E1F3D' }}
               >
-                {loading ? 'Redirecting to Stripe…' : `Start 1-month free trial — $${PLANS.find(p => p.id === selectedPlan)?.price}/mo after →`}
+                {loading ? 'Creating account…' : `Create account · ${PLANS.find(p => p.id === selectedPlan)?.name} ($${PLANS.find(p => p.id === selectedPlan)?.price}/mo)`}
               </button>
 
               <p className="text-center text-xs mt-4" style={{ color: '#9AA3B2' }}>
-                By starting your trial you agree to our{' '}
+                By creating an account you agree to our{' '}
                 <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: '#5E8FD6' }}>Terms</a>{' '}and{' '}
                 <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: '#5E8FD6' }}>Privacy Policy</a>.
               </p>
               <p className="text-center text-xs mt-2" style={{ color: '#9AA3B2' }}>
-                No charge today. Secured by Stripe. We never store your card details.
+                No card needed — StateGen activates your account once payment is arranged.
               </p>
             </>
+          )}
+
+          {/* ── Done: pending activation ── */}
+          {step === 'done' && (
+            <div className="text-center py-6">
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-5" style={{ background: '#FBEFD6' }}>
+                <Clock className="h-7 w-7" style={{ color: '#9A6516' }} />
+              </div>
+              <h2 className="text-2xl font-bold mb-2" style={{ color: '#1A2B4A', letterSpacing: '-0.3px' }}>Account created</h2>
+              <p className="text-sm mb-6" style={{ color: '#7A8499' }}>
+                <span className="font-semibold" style={{ color: '#1A2B4A' }}>{companyName}</span> is set up on the{' '}
+                <span className="font-semibold" style={{ color: '#1A2B4A' }}>{PLANS.find(p => p.id === selectedPlan)?.name}</span> plan.
+                We&apos;ll activate it as soon as payment is arranged — you can sign in now to check status.
+              </p>
+              <Link href="/login" className="inline-block w-full py-3 rounded-xl text-sm font-semibold text-white" style={{ background: '#0E1F3D' }}>
+                Go to sign in →
+              </Link>
+            </div>
           )}
         </div>
       </div>

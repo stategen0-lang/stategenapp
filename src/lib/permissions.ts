@@ -22,6 +22,12 @@ export interface Session {
   agentCode: string | null   // 'a1'..'a4' — null for managers
   fullName: string
   approved: boolean           // agents await manager approval; managers always true
+  // Manual-billing fields — set by getSession; optional so other Session
+  // builders (e.g. the WhatsApp handlers) don't need them.
+  isPlatformAdmin?: boolean   // StateGen operator; bypasses the company access gate
+  email?: string
+  companyAccessStatus?: string
+  companyAccessUntil?: string | null
 }
 
 export function isManager(role: Role | string | null | undefined): boolean {

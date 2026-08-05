@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import AppSidebar from '@/components/dashboard/AppSidebar'
 import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/session'
+import { companyHasAccess } from '@/lib/billing'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   // Real signed-in identity (role + agent code) instead of the old mock user.
@@ -9,10 +10,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const { data: { user } } = await supabase.auth.getUser()
   const session = await getSession()
 
+  // The company must have active (manually-billed) access — unless this is a
+  // StateGen operator. /renew lives outside this layout, so no redirect loop.
+  if (session && !session.isPlatformAdmin && !companyHasAccess(session.companyAccessStatus, session.companyAccessUntil)) {
+    redirect('/renew')
+  }
+
   // Agents wait for a manager to approve them before they can use the app.
-  // (Managers are always approved — see getSession.) /pending lives outside this
-  // layout, so there's no redirect loop.
-  if (session && !session.approved) redirect('/pending')
+  // (Managers are always approved — see getSession; operators bypass.)
+  if (session && !session.isPlatformAdmin && !session.approved) redirect('/pending')
 
   const profile = {
     Full_name: session?.fullName ?? user?.email ?? 'Agent',
