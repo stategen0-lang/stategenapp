@@ -30,7 +30,9 @@ export default function LoginPage() {
       return
     }
 
-    router.push('/dashboard')
+    // StateGen operators go to the admin panel, not a company dashboard.
+    const me = await fetch('/api/me').then(r => r.ok ? r.json() : null).catch(() => null)
+    router.push(me?.session?.isPlatformAdmin ? '/admin' : '/dashboard')
     router.refresh()
   }
 

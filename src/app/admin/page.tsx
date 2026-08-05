@@ -37,6 +37,11 @@ export default function AdminPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const [showCreate, setShowCreate] = useState(false)
+  const [form, setForm] = useState({ companyName: '', domain: '', email: '', planId: 'business', password: '', trial: true })
+  const [creating, setCreating] = useState(false)
+  const [createErr, setCreateErr] = useState<string | null>(null)
+
   const loadCompanies = useCallback(async () => {
     const r = await fetch('/api/admin/companies').then(x => x.ok ? x.json() : null).catch(() => null)
     setCompanies(r?.companies ?? [])
@@ -50,6 +55,21 @@ export default function AdminPage() {
   function toggle(id: number) {
     setOpenId(cur => cur === id ? null : id)
     if (openId !== id && !invoices[id]) loadInvoices(id)
+  }
+
+  async function createCompany() {
+    setCreating(true); setCreateErr(null)
+    try {
+      const r = await fetch('/api/admin/companies', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, accessDays: form.trial ? 30 : 0 }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { setCreateErr(j.error || 'Could not create the company.'); return }
+      setShowCreate(false)
+      setForm({ companyName: '', domain: '', email: '', planId: 'business', password: '', trial: true })
+      await loadCompanies()
+    } finally { setCreating(false) }
   }
 
   async function patchCompany(id: number, patch: Record<string, unknown>) {
@@ -101,7 +121,14 @@ export default function AdminPage() {
             <Shield className="h-6 w-6" style={{ color: '#2E5288' }} />
             <h1 className="text-2xl font-bold" style={{ color: H, letterSpacing: '-0.3px' }}>StateGen Admin</h1>
           </div>
-          <Logo size={26} withWordmark />
+          <div className="flex items-center gap-3">
+            {isAdmin && (
+              <button onClick={() => { setCreateErr(null); setShowCreate(true) }} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold text-white" style={{ background: '#0E1F3D' }}>
+                <Plus className="h-4 w-4" /> Create company
+              </button>
+            )}
+            <Logo size={26} withWordmark />
+          </div>
         </div>
         <p className="text-sm mb-6" style={{ color: SUB }}>Activate companies, manage plans, and record invoice payments.</p>
 
@@ -204,6 +231,52 @@ export default function AdminPage() {
           )}
         </div>
       </div>
+
+      {/* Create company modal */}
+      {showCreate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(14,31,61,0.45)' }} onClick={e => e.target === e.currentTarget && setShowCreate(false)}>
+          <div className="w-full max-w-md rounded-2xl bg-white p-5" style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
+            <p className="text-base font-bold mb-1" style={{ color: H }}>Create a company</p>
+            <p className="text-xs mb-4" style={{ color: SUB }}>Onboards an agency and its manager directly. Share the temporary password with them; they can change it via &quot;Forgot password&quot;.</p>
+            <div className="space-y-2.5">
+              {([
+                ['companyName', 'Agency name', 'text', 'Meridian Realty'],
+                ['domain', 'Domain', 'text', 'meridian.com'],
+                ['email', 'Manager email', 'email', 'manager@meridian.com'],
+                ['password', 'Temporary password', 'text', 'min. 8 characters'],
+              ] as const).map(([key, label, type, ph]) => (
+                <div key={key}>
+                  <label className="text-xs font-semibold" style={{ color: SUB }}>{label}</label>
+                  <input
+                    type={type} value={form[key]} placeholder={ph}
+                    onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+                    className="w-full mt-0.5 rounded-xl px-3 py-2 text-sm outline-none"
+                    style={{ border: '1.5px solid #D7DCE5', color: '#14223F' }}
+                  />
+                </div>
+              ))}
+              <div>
+                <label className="text-xs font-semibold" style={{ color: SUB }}>Plan</label>
+                <select value={form.planId} onChange={e => setForm(f => ({ ...f, planId: e.target.value }))}
+                  className="w-full mt-0.5 rounded-xl px-3 py-2 text-sm" style={{ border: '1.5px solid #D7DCE5', color: '#14223F', background: '#fff' }}>
+                  {PLANS.map(p => <option key={p.id} value={p.id}>{p.name} (${p.price}, {p.agentLimit ?? '∞'} agents)</option>)}
+                </select>
+              </div>
+              <label className="flex items-center gap-2 text-xs pt-1" style={{ color: H }}>
+                <input type="checkbox" checked={form.trial} onChange={e => setForm(f => ({ ...f, trial: e.target.checked }))} />
+                Activate now with a 30-day free trial (otherwise created as pending)
+              </label>
+            </div>
+            {createErr && <p className="text-xs px-3 py-2 rounded-lg mt-3" style={{ background: '#FBE7E7', color: '#A23434' }}>{createErr}</p>}
+            <div className="flex gap-2 justify-end mt-4">
+              <button onClick={() => setShowCreate(false)} className="px-4 py-2 rounded-xl text-sm font-semibold" style={{ border: '1.5px solid #D7DCE5', color: H }}>Cancel</button>
+              <button onClick={createCompany} disabled={creating} className="px-4 py-2 rounded-xl text-sm font-bold text-white disabled:opacity-50" style={{ background: '#0E1F3D' }}>
+                {creating ? 'Creating…' : 'Create company'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

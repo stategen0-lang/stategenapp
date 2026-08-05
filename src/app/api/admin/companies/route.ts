@@ -55,6 +55,60 @@ export async function GET() {
   return NextResponse.json({ companies: rows })
 }
 
+// Operator onboards an agency directly (no self-signup).
+export async function POST(req: NextRequest) {
+  const gate = await requireAdmin()
+  if ('error' in gate) return NextResponse.json({ error: gate.error }, { status: gate.status })
+
+  const body = await req.json().catch(() => ({}))
+  const companyName = String(body.companyName ?? '').trim()
+  const domain = String(body.domain ?? '').toLowerCase().trim()
+  const email = String(body.email ?? '').toLowerCase().trim()
+  const planId = String(body.planId ?? '')
+  const password = String(body.password ?? '')
+  const accessDays = Number(body.accessDays ?? 0)   // >0 = activate now for that many days
+
+  if (!companyName || !domain || !email || !password) return NextResponse.json({ error: 'Missing required fields.' }, { status: 400 })
+  if (!planFor(planId)) return NextResponse.json({ error: 'Pick a plan.' }, { status: 400 })
+  if (password.length < 8) return NextResponse.json({ error: 'Password must be at least 8 characters.' }, { status: 400 })
+
+  const admin = createAdminClient()
+  const { data: existing } = await admin.from('Companies').select('id').eq('domain', domain).maybeSingle()
+  if (existing) return NextResponse.json({ error: 'A company with that domain already exists.' }, { status: 409 })
+
+  const { data: created, error: authErr } = await admin.auth.admin.createUser({
+    email, password, email_confirm: true, user_metadata: { full_name: `${companyName} Manager` },
+  })
+  if (authErr || !created?.user) {
+    const already = /already|registered|exists/i.test(authErr?.message ?? '')
+    return NextResponse.json({ error: already ? 'An account already exists for that email.' : (authErr?.message ?? 'Could not create the account.') }, { status: already ? 409 : 500 })
+  }
+
+  const { data: company, error: companyErr } = await admin.from('Companies').insert({
+    Name: companyName,
+    domain,
+    Plan: planId,
+    'is active': true,
+    access_status: accessDays > 0 ? 'active' : 'pending',
+    access_until: accessDays > 0 ? new Date(Date.now() + accessDays * 86_400_000).toISOString() : null,
+  }).select().single()
+  if (companyErr) {
+    await admin.auth.admin.deleteUser(created.user.id).catch(() => {})
+    return NextResponse.json({ error: companyErr.message }, { status: 500 })
+  }
+
+  const { error: profileErr } = await admin.from('Profiles').insert({
+    id: created.user.id, company_id: company.id, Full_name: `${companyName} Manager`, role: 'owner', approved: true,
+  })
+  if (profileErr) {
+    await admin.from('Companies').delete().eq('id', company.id)
+    await admin.auth.admin.deleteUser(created.user.id).catch(() => {})
+    return NextResponse.json({ error: profileErr.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ ok: true, companyId: company.id })
+}
+
 export async function PATCH(req: NextRequest) {
   const gate = await requireAdmin()
   if ('error' in gate) return NextResponse.json({ error: gate.error }, { status: gate.status })
