@@ -151,6 +151,20 @@ export default function AdminPage() {
                             : <button disabled={busy} onClick={() => patchCompany(c.id, { access_status: 'suspended', access_until: null })} className="flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg" style={{ border: '1.5px solid #F3D7D7', background: '#FDF5F5', color: '#A23434' }}><Ban className="h-3 w-3" /> Suspend</button>}
                         </div>
 
+                        {/* Access period — grant/extend without an invoice (free trials, comps) */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label className="text-xs font-semibold" style={{ color: SUB }}>Access until</label>
+                          <button disabled={busy}
+                            onClick={() => patchCompany(c.id, { access_status: 'active', access_until: new Date(Date.now() + 30 * 86400000).toISOString() })}
+                            className="text-xs font-bold px-2.5 py-1.5 rounded-lg text-white" style={{ background: '#1B8A4B' }}>Free trial · 30 days</button>
+                          <button disabled={busy}
+                            onClick={() => { const base = c.accessUntil && new Date(c.accessUntil) > new Date() ? new Date(c.accessUntil).getTime() : Date.now(); patchCompany(c.id, { access_status: 'active', access_until: new Date(base + 30 * 86400000).toISOString() }) }}
+                            className="text-xs font-bold px-2.5 py-1.5 rounded-lg" style={{ border: '1.5px solid #D7DCE5', background: '#fff', color: H }}>Extend +1 month</button>
+                          <input type="date" disabled={busy} defaultValue={c.accessUntil ? c.accessUntil.slice(0, 10) : ''}
+                            onChange={e => e.target.value && patchCompany(c.id, { access_status: 'active', access_until: new Date(e.target.value).toISOString() })}
+                            className="text-xs rounded-lg px-2 py-1.5" style={{ border: '1px solid #D7DCE5', background: '#fff', color: H }} />
+                        </div>
+
                         {/* Invoices */}
                         <div>
                           <div className="flex items-center justify-between mb-2">
