@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getAgent, statusStyle, CLIENT_TYPE_STYLE, formatPrice, Client } from '@/lib/data'
+import { getAgent, statusStyle, CLIENT_TYPE_STYLE, formatPrice, Client, Agent } from '@/lib/data'
 import { useSession } from '@/hooks/use-session'
 import { sortOwnFirst } from '@/lib/client-order'
 import ClientDetailModal from '@/components/modals/ClientDetailModal'
@@ -12,6 +12,7 @@ export default function ClientsPage() {
   const [scope, setScope] = useState<'me' | 'company'>('company')
   const [list, setList] = useState<Client[]>([])
   const [loaded, setLoaded] = useState(false)
+  const [agents, setAgents] = useState<Record<string, { name: string; initials: string; color: string; whatsapp: string | null }>>({})
   const { session } = useSession()
 
   useEffect(() => {
@@ -25,7 +26,16 @@ export default function ClientsPage() {
       })
       .catch(() => clearTimeout(t))
       .finally(() => setLoaded(true))
+    // Real agent names/colours for avatars (falls back to the demo helper).
+    fetch('/api/company/agents').then(r => r.ok ? r.json() : null).then(d => { if (d?.agents) setAgents(d.agents) }).catch(() => {})
   }, [])
+
+  const agentFor = (code: string): Agent => {
+    const a = agents[code]
+    return a
+      ? { id: code as Agent['id'], name: a.name, initials: a.initials, color: a.color, shortName: a.name.split(' ')[0] }
+      : getAgent(code as Agent['id'])
+  }
   const [detailId, setDetailId] = useState<number | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [editClient, setEditClient] = useState<Client | null>(null)
@@ -43,7 +53,7 @@ export default function ClientsPage() {
     : sortOwnFirst(list, session?.agentCode)
 
   const detailClient = detailId != null ? list.find(c => c.id === detailId) ?? null : null
-  const detailAgent = detailClient ? getAgent(detailClient.agentId) : null
+  const detailAgent = detailClient ? agentFor(detailClient.agentId) : null
 
   function showToast(msg: string) {
     setToast(msg)
@@ -102,7 +112,7 @@ export default function ClientsPage() {
               </tr>
             )}
             {filtered.map(c => {
-              const agent = getAgent(c.agentId)
+              const agent = agentFor(c.agentId)
               const sc = statusStyle(c.status)
               const tc = CLIENT_TYPE_STYLE[c.type]
               const initials = c.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
@@ -140,7 +150,7 @@ export default function ClientsPage() {
           <p className="text-center py-12 text-sm" style={{ color: '#9AA3B2' }}>No clients found</p>
         )}
         {filtered.map(c => {
-          const agent = getAgent(c.agentId)
+          const agent = agentFor(c.agentId)
           const sc = statusStyle(c.status)
           const tc = CLIENT_TYPE_STYLE[c.type]
           const initials = c.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)

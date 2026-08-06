@@ -6,7 +6,7 @@ import { Building2, Users, Banknote, Clock, X, Plus, ChevronRight, UserCheck } f
 import {
   getAgent,
   statusStyle, CLIENT_TYPE_STYLE, formatPrice, TYPE_GRADIENTS, typeStyle,
-  Property, Client,
+  Property, Client, Agent,
 } from '@/lib/data'
 import { dbRowToProperty, dbRowToClient } from '@/lib/db-mappers'
 import { STAGES, type Stage } from '@/lib/pipeline'
@@ -47,6 +47,7 @@ export default function DashboardPage() {
   const [clients, setClients]           = useState<Client[]>([])
   const [deals, setDeals]               = useState<DealView[]>([])
   const [loaded, setLoaded]             = useState(false)
+  const [agents, setAgents]             = useState<Record<string, { name: string; initials: string; color: string; whatsapp: string | null }>>({})
   const [editProp, setEditProp]         = useState<Property | null>(null)
   const [editClient, setEditClient]     = useState<Client | null>(null)
   const [toast, setToast]               = useState('')
@@ -79,8 +80,17 @@ export default function DashboardPage() {
       if (cRes?.clients) setClients(cRes.clients.map(dbRowToClient))
       if (dRes?.deals) setDeals(dRes.deals as DealView[])
     }).catch(() => clearTimeout(t)).finally(() => setLoaded(true))
+    fetch('/api/company/agents').then(r => r.ok ? r.json() : null).then(d => { if (d?.agents) setAgents(d.agents) }).catch(() => {})
     return () => { clearTimeout(t); ctrl.abort() }
   }, [])
+
+  // Real agent for a code, falling back to the demo helper for legacy codes.
+  const agentFor = (code: string): Agent => {
+    const a = agents[code]
+    return a
+      ? { id: code as Agent['id'], name: a.name, initials: a.initials, color: a.color, shortName: a.name.split(' ')[0] }
+      : getAgent(code as Agent['id'])
+  }
 
   function upsertProp(p: Property) {
     setProps(prev => prev.some(x => x.id === p.id) ? prev.map(x => x.id === p.id ? p : x) : [p, ...prev])
@@ -257,7 +267,7 @@ export default function DashboardPage() {
 
           {/* Listings */}
           {panel === 'listings' && activeListings.map(p => {
-            const agent = getAgent(p.agentId)
+            const agent = agentFor(p.agentId)
             const sc = statusStyle(p.status)
             return (
               <div key={p.id} onClick={() => setDetailProp(p)}
@@ -285,7 +295,7 @@ export default function DashboardPage() {
 
           {/* Clients */}
           {panel === 'clients' && clients.map(c => {
-            const agent = getAgent(c.agentId)
+            const agent = agentFor(c.agentId)
             const sc = statusStyle(c.status)
             const tc = CLIENT_TYPE_STYLE[c.type]
             const initials = c.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0,2)
@@ -397,7 +407,7 @@ export default function DashboardPage() {
           <p className="text-sm font-semibold mb-4" style={{ color: H }}>Recent Properties</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {recentProps.map(p => {
-              const agent = getAgent(p.agentId)
+              const agent = agentFor(p.agentId)
               const sc = statusStyle(p.status)
               return (
                 <div key={p.id} onClick={() => setDetailProp(p)}
@@ -503,7 +513,7 @@ export default function DashboardPage() {
       {detailProp && (
         <PropertyDetailModal
           property={detailProp}
-          agent={getAgent(detailProp.agentId)}
+          agent={agentFor(detailProp.agentId)}
           onClose={() => setDetailProp(null)}
           onEdit={p => { setDetailProp(null); setEditProp(p) }}
         />
@@ -511,7 +521,7 @@ export default function DashboardPage() {
       {detailClient && (
         <ClientDetailModal
           client={detailClient}
-          agent={getAgent(detailClient.agentId)}
+          agent={agentFor(detailClient.agentId)}
           onClose={() => setDetailClient(null)}
           onEdit={c => { setDetailClient(null); setEditClient(c) }}
           onStatusChange={(id, status) => setClients(prev => prev.map(x => x.id === id ? { ...x, status } : x))}

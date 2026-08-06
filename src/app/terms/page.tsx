@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import LegalPage, { H2, P, UL } from '@/components/legal/LegalPage'
 
 export const metadata: Metadata = {
-  title: 'Terms of Service · StateGen',
+  title: 'Terms of Service',
   description: 'The terms governing use of the StateGen real estate platform.',
 }
 

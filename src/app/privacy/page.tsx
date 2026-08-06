@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import LegalPage, { H2, P, UL } from '@/components/legal/LegalPage'
 
 export const metadata: Metadata = {
-  title: 'Privacy Policy · StateGen',
+  title: 'Privacy Policy',
   description: 'How StateGen collects, uses, and protects data.',
 }
 

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Public_Sans } from "next/font/google";
 import "./globals.css";
 
@@ -8,9 +8,36 @@ const publicSans = Public_Sans({
   weight: ["400", "500", "600", "700", "800"],
 });
 
+const DESCRIPTION =
+  "StateGen is the CRM built for Lebanese real estate agencies — smart property matching, a shared client & deal pipeline, and a WhatsApp assistant.";
+
 export const metadata: Metadata = {
-  title: "StateGen CRM",
-  description: "Lebanese real estate agency CRM",
+  metadataBase: new URL("https://stategenapp.vercel.app"),
+  title: {
+    default: "StateGen — Real estate CRM",
+    template: "%s · StateGen",
+  },
+  description: DESCRIPTION,
+  applicationName: "StateGen",
+  openGraph: {
+    type: "website",
+    siteName: "StateGen",
+    title: "StateGen — Real estate CRM",
+    description: DESCRIPTION,
+    url: "/",
+    images: [{ url: "/logo.png", width: 512, height: 512, alt: "StateGen" }],
+  },
+  twitter: {
+    card: "summary",
+    title: "StateGen — Real estate CRM",
+    description: DESCRIPTION,
+    images: ["/logo.png"],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0E1F3D",
+  colorScheme: "light",
 };
 
 export default function RootLayout({
