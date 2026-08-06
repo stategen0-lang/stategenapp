@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ChevronRight, Plus, Trash2, Check, Download, MessageCircle, ExternalLink } from 'lucide-react'
+import { ChevronRight, Plus, Trash2, Check, Download, MessageCircle, ExternalLink, KeyRound } from 'lucide-react'
 import { AGENTS } from '@/lib/data'
+import { createClient } from '@/lib/supabase/client'
 import { useSession } from '@/hooks/use-session'
 import { isManager } from '@/lib/permissions'
 import { DescriptionTemplate, DEFAULT_TEMPLATES, STORAGE_KEY, loadTemplates } from '@/lib/templates'
@@ -31,6 +32,25 @@ export default function ProfilePage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
   const [newBody, setNewBody] = useState('')
+
+  // Change password (Supabase updates the logged-in user's password — no email).
+  const supabase = createClient()
+  const [pw, setPw] = useState('')
+  const [pwConfirm, setPwConfirm] = useState('')
+  const [pwSaving, setPwSaving] = useState(false)
+  const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  async function changePassword() {
+    setPwMsg(null)
+    if (pw.length < 8) { setPwMsg({ ok: false, text: 'Password must be at least 8 characters.' }); return }
+    if (pw !== pwConfirm) { setPwMsg({ ok: false, text: 'Passwords do not match.' }); return }
+    setPwSaving(true)
+    const { error } = await supabase.auth.updateUser({ password: pw })
+    setPwSaving(false)
+    if (error) { setPwMsg({ ok: false, text: error.message }); return }
+    setPw(''); setPwConfirm('')
+    setPwMsg({ ok: true, text: 'Password updated.' })
+  }
 
   useEffect(() => { setTemplates(loadTemplates()) }, [])
 
@@ -157,6 +177,37 @@ export default function ProfilePage() {
         <div>
           <h1 className="text-2xl font-bold" style={{ color: H, letterSpacing: '-0.3px' }}>{displayName}</h1>
           <p className="text-sm mt-0.5" style={{ color: SUB }}>{roleLabel}</p>
+        </div>
+      </div>
+
+      {/* Change password */}
+      <div className="rounded-2xl bg-white overflow-hidden" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #EEF0F4' }}>
+        <div className="px-5 py-4 flex items-center gap-2.5" style={{ borderBottom: '1px solid #EEF0F4' }}>
+          <KeyRound className="h-5 w-5" style={{ color: '#2E5288' }} />
+          <div>
+            <p className="text-sm font-bold" style={{ color: H }}>Change password</p>
+            <p className="text-xs mt-0.5" style={{ color: SUB }}>Set a new password for signing in.</p>
+          </div>
+        </div>
+        <div className="p-5 space-y-3 max-w-sm">
+          <input
+            type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder="New password (min. 8 characters)"
+            className="w-full rounded-xl px-3 py-2.5 text-sm outline-none" style={{ border: '1.5px solid #D7DCE5', color: '#14223F' }}
+          />
+          <input
+            type="password" value={pwConfirm} onChange={e => setPwConfirm(e.target.value)} placeholder="Confirm new password"
+            className="w-full rounded-xl px-3 py-2.5 text-sm outline-none" style={{ border: '1.5px solid #D7DCE5', color: '#14223F' }}
+          />
+          {pwMsg && (
+            <p className="text-xs px-3 py-2 rounded-lg" style={pwMsg.ok ? { background: '#E3F4EA', color: '#1F7A4D' } : { background: '#FBE7E7', color: '#A23434' }}>{pwMsg.text}</p>
+          )}
+          <button
+            onClick={changePassword} disabled={pwSaving || !pw}
+            className="px-4 py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-50"
+            style={{ background: '#0E1F3D' }}
+          >
+            {pwSaving ? 'Updating…' : 'Update password'}
+          </button>
         </div>
       </div>
 
