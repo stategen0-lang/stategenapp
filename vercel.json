@@ -3,6 +3,10 @@
     {
       "path": "/api/whatsapp/send-reminder",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/billing-reminder",
+      "schedule": "0 8 * * *"
     }
   ]
 }
