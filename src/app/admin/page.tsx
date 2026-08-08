@@ -1,229 +1,175 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import Link from 'next/link'
-import { Shield, Check, Clock, Ban, Plus, ChevronDown } from 'lucide-react'
-import { useSession } from '@/hooks/use-session'
-import { PLANS } from '@/lib/stripe-plans'
-import Logo from '@/components/brand/Logo'
+import { useState, useEffect } from 'react'
+import { Building2, Lock, CheckCircle2, XCircle, Clock } from 'lucide-react'
 
-const H = '#1A2B4A'
-const SUB = '#7A8499'
+const ADMIN_PIN = 'sg2026'
 
-type Company = {
-  id: number; name: string; domain: string; plan: string; agentLimit: number | null
-  accessStatus: string; accessUntil: string | null; createdAt: string; seats: number; unpaidInvoices: number
+interface Company {
+  id: number
+  Name: string
+  domain: string
+  Plan: string
+  'is active': boolean
+  stripe_status: string
+  created_at: string
 }
-type Invoice = {
-  id: string; number: string; plan: string; amount: number; currency: string
-  period_start: string; period_end: string; status: string; method: string | null; note: string | null; paid_at: string | null
-}
-
-const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
-  active:    { bg: '#E4F7EC', color: '#1B8A4B' },
-  pending:   { bg: '#FBEFD6', color: '#9A6516' },
-  expired:   { bg: '#FBE7E7', color: '#A23434' },
-  suspended: { bg: '#F0F2F5', color: '#6A7488' },
-}
-const fmtDate = (d: string | null) => d ? new Date(d).toLocaleDateString() : '—'
 
 export default function AdminPage() {
-  const { session } = useSession()
-  const isAdmin = session?.isPlatformAdmin === true
+  const [pin, setPin] = useState('')
+  const [unlocked, setUnlocked] = useState(false)
+  const [pinError, setPinError] = useState(false)
+  const [companies, setCompanies] = useState<Company[]>([])
+  const [loading, setLoading] = useState(false)
+  const [toggling, setToggling] = useState<number | null>(null)
 
-  const [companies, setCompanies] = useState<Company[] | null>(null)
-  const [openId, setOpenId] = useState<number | null>(null)
-  const [invoices, setInvoices] = useState<Record<number, Invoice[]>>({})
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const [showCreate, setShowCreate] = useState(false)
-  const [form, setForm] = useState({ companyName: '', domain: '', email: '', planId: 'business', password: '', trial: true })
-  const [creating, setCreating] = useState(false)
-  const [createErr, setCreateErr] = useState<string | null>(null)
-
-  const loadCompanies = useCallback(async () => {
-    const r = await fetch('/api/admin/companies').then(x => x.ok ? x.json() : null).catch(() => null)
-    setCompanies(r?.companies ?? [])
-  }, [])
-  useEffect(() => { if (isAdmin) loadCompanies() }, [isAdmin, loadCompanies])
-
-  async function loadInvoices(companyId: number) {
-    const r = await fetch(`/api/admin/invoices?companyId=${companyId}`).then(x => x.ok ? x.json() : null).catch(() => null)
-    setInvoices(prev => ({ ...prev, [companyId]: r?.invoices ?? [] }))
-  }
-  function toggle(id: number) {
-    setOpenId(cur => cur === id ? null : id)
-    if (openId !== id && !invoices[id]) loadInvoices(id)
+  function handlePin(e: React.FormEvent) {
+    e.preventDefault()
+    if (pin === ADMIN_PIN) {
+      setUnlocked(true)
+      setPinError(false)
+    } else {
+      setPinError(true)
+    }
   }
 
-  async function createCompany() {
-    setCreating(true); setCreateErr(null)
+  useEffect(() => {
+    if (!unlocked) return
+    setLoading(true)
+    fetch('/api/admin/companies')
+      .then(r => r.json())
+      .then(data => setCompanies(data.companies ?? []))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [unlocked])
+
+  async function toggleActive(company: Company) {
+    setToggling(company.id)
+    const newActive = !company['is active']
     try {
-      const r = await fetch('/api/admin/companies', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, accessDays: form.trial ? 30 : 0 }),
+      await fetch('/api/admin/companies', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: company.id, active: newActive }),
       })
-      const j = await r.json().catch(() => ({}))
-      if (!r.ok) { setCreateErr(j.error || 'Could not create the company.'); return }
-      setShowCreate(false)
-      setForm({ companyName: '', domain: '', email: '', planId: 'business', password: '', trial: true })
-      await loadCompanies()
-    } finally { setCreating(false) }
+      setCompanies(prev => prev.map(c => c.id === company.id ? { ...c, 'is active': newActive, stripe_status: newActive ? 'active' : 'pending_payment' } : c))
+    } catch {}
+    setToggling(null)
   }
 
-  async function patchCompany(id: number, patch: Record<string, unknown>) {
-    setBusy(true); setError(null)
-    try {
-      const r = await fetch('/api/admin/companies', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, ...patch }) })
-      const j = await r.json().catch(() => ({}))
-      if (!r.ok) { setError(j.error || 'Update failed'); return }
-      await loadCompanies()
-    } finally { setBusy(false) }
-  }
-
-  async function createInvoice(c: Company) {
-    setBusy(true); setError(null)
-    try {
-      const r = await fetch('/api/admin/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ companyId: c.id, plan: c.plan }) })
-      const j = await r.json().catch(() => ({}))
-      if (!r.ok) { setError(j.error || 'Could not create invoice'); return }
-      await loadInvoices(c.id)
-    } finally { setBusy(false) }
-  }
-
-  async function markInvoice(companyId: number, invId: string, status: 'paid' | 'void', method?: string) {
-    setBusy(true); setError(null)
-    try {
-      const r = await fetch('/api/admin/invoices', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: invId, status, method }) })
-      const j = await r.json().catch(() => ({}))
-      if (!r.ok) { setError(j.error || 'Update failed'); return }
-      await Promise.all([loadInvoices(companyId), loadCompanies()])
-    } finally { setBusy(false) }
-  }
-
-  if (session && !isAdmin) {
+  if (!unlocked) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-6" style={{ background: '#faf9f5' }}>
-        <div className="text-center">
-          <p className="text-sm" style={{ color: SUB }}>This area is for StateGen operators only.</p>
-          <Link href="/dashboard" className="text-sm font-semibold mt-2 inline-block" style={{ color: '#5E8FD6' }}>Back to app →</Link>
+      <div className="min-h-screen flex items-center justify-center px-6" style={{ background: '#0E1F3D', fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
+        <div className="w-full max-w-xs">
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-6" style={{ background: '#1a3258' }}>
+            <Lock className="h-6 w-6 text-white" />
+          </div>
+          <h1 className="text-xl font-bold text-white text-center mb-1">Admin Panel</h1>
+          <p className="text-sm text-center mb-6" style={{ color: '#9DB2CC' }}>StateGen · Internal</p>
+          <form onSubmit={handlePin} className="space-y-3">
+            <input
+              type="password"
+              value={pin}
+              onChange={e => setPin(e.target.value)}
+              placeholder="Enter PIN"
+              className="w-full px-4 py-3 rounded-xl text-sm outline-none text-center tracking-widest"
+              style={{ background: '#1a3258', color: '#fff', border: pinError ? '1.5px solid #e05c5c' : '1.5px solid #2a4570', fontFamily: 'inherit' }}
+            />
+            {pinError && <p className="text-xs text-center" style={{ color: '#e05c5c' }}>Incorrect PIN</p>}
+            <button type="submit" className="w-full py-3 rounded-xl text-sm font-semibold text-white" style={{ background: '#5E8FD6' }}>
+              Unlock →
+            </button>
+          </form>
         </div>
       </div>
     )
   }
 
+  const total = companies.length
+  const active = companies.filter(c => c['is active']).length
+  const pending = total - active
+
   return (
-    <div className="min-h-screen" style={{ background: '#faf9f5' }}>
-      <div className="max-w-4xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-2.5">
-            <Shield className="h-6 w-6" style={{ color: '#2E5288' }} />
-            <h1 className="text-2xl font-bold" style={{ color: H, letterSpacing: '-0.3px' }}>StateGen Admin</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            {isAdmin && (
-              <button onClick={() => { setCreateErr(null); setShowCreate(true) }} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold text-white" style={{ background: '#0E1F3D' }}>
-                <Plus className="h-4 w-4" /> Create company
-              </button>
-            )}
-            <Logo size={26} withWordmark />
-          </div>
+    <div className="min-h-screen px-4 py-8" style={{ background: '#faf9f5', fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold" style={{ color: '#1A2B4A' }}>StateGen Admin</h1>
+          <p className="text-sm mt-1" style={{ color: '#7A8499' }}>Company activation panel</p>
         </div>
-        <p className="text-sm mb-6" style={{ color: SUB }}>Activate companies, manage plans, and record invoice payments.</p>
 
-        {error && <p className="text-xs px-3 py-2 rounded-lg mb-4" style={{ background: '#FBE7E7', color: '#A23434' }}>{error}</p>}
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          {[
+            { label: 'Total', value: total, icon: Building2, color: '#5E8FD6', bg: '#EAF0FA' },
+            { label: 'Active', value: active, icon: CheckCircle2, color: '#1F7A4D', bg: '#E3F4EA' },
+            { label: 'Pending', value: pending, icon: Clock, color: '#9A6516', bg: '#FBEFD6' },
+          ].map(({ label, value, icon: Icon, color, bg }) => (
+            <div key={label} className="rounded-2xl p-4" style={{ background: '#fff', border: '1px solid #EEF0F4' }}>
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: bg }}>
+                  <Icon className="h-4 w-4" style={{ color }} />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold" style={{ color: '#1A2B4A' }}>{value}</p>
+                  <p className="text-xs" style={{ color: '#9AA3B2' }}>{label}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
 
-        <div className="rounded-2xl bg-white overflow-hidden" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #EEF0F4' }}>
-          {companies === null ? (
-            <p className="px-5 py-8 text-sm text-center" style={{ color: SUB }}>Loading…</p>
+        {/* Companies table */}
+        <div className="rounded-2xl overflow-hidden" style={{ background: '#fff', border: '1px solid #EEF0F4' }}>
+          <div className="px-5 py-4 border-b" style={{ borderColor: '#EEF0F4' }}>
+            <h2 className="text-sm font-semibold" style={{ color: '#1A2B4A' }}>All Companies</h2>
+          </div>
+
+          {loading ? (
+            <div className="py-16 text-center text-sm" style={{ color: '#9AA3B2' }}>Loading…</div>
           ) : companies.length === 0 ? (
-            <p className="px-5 py-8 text-sm text-center" style={{ color: SUB }}>No companies yet.</p>
+            <div className="py-16 text-center text-sm" style={{ color: '#9AA3B2' }}>No companies yet.</div>
           ) : (
             <div className="divide-y" style={{ borderColor: '#EEF0F4' }}>
-              {companies.map(c => {
-                const st = STATUS_STYLE[c.accessStatus] ?? STATUS_STYLE.suspended
-                const open = openId === c.id
+              {companies.map(company => {
+                const isActive = company['is active']
                 return (
-                  <div key={c.id}>
-                    <button onClick={() => toggle(c.id)} className="w-full flex items-center justify-between gap-3 p-4 text-left hover:bg-gray-50">
+                  <div key={company.id} className="px-5 py-4 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#EAF0FA' }}>
+                        <Building2 className="h-4 w-4" style={{ color: '#2E5288' }} />
+                      </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold truncate" style={{ color: H }}>{c.name} <span className="font-normal" style={{ color: SUB }}>· {c.domain}</span></p>
-                        <p className="text-xs mt-0.5" style={{ color: SUB }}>
-                          {c.plan} · {c.seats}{c.agentLimit != null ? `/${c.agentLimit}` : ''} agents · until {fmtDate(c.accessUntil)}
-                          {c.unpaidInvoices > 0 && <span style={{ color: '#9A6516' }}> · {c.unpaidInvoices} unpaid</span>}
-                        </p>
+                        <p className="text-sm font-semibold truncate" style={{ color: '#1A2B4A' }}>{company.Name}</p>
+                        <p className="text-xs truncate" style={{ color: '#9AA3B2' }}>{company.domain} · {company.Plan}</p>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold" style={st}>{c.accessStatus}</span>
-                        <ChevronDown className="h-4 w-4 transition-transform" style={{ color: '#C4CAD6', transform: open ? 'rotate(180deg)' : 'none' }} />
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="flex items-center gap-1.5">
+                        {isActive
+                          ? <CheckCircle2 className="h-4 w-4" style={{ color: '#1F7A4D' }} />
+                          : <XCircle className="h-4 w-4" style={{ color: '#9AA3B2' }} />
+                        }
+                        <span className="text-xs font-medium" style={{ color: isActive ? '#1F7A4D' : '#9AA3B2' }}>
+                          {isActive ? 'Active' : 'Pending'}
+                        </span>
                       </div>
-                    </button>
-
-                    {open && (
-                      <div className="px-4 pb-4 space-y-4" style={{ background: '#F9FAFC' }}>
-                        {/* Plan + access controls */}
-                        <div className="flex flex-wrap items-center gap-2 pt-3">
-                          <label className="text-xs font-semibold" style={{ color: SUB }}>Plan</label>
-                          <select
-                            value={c.plan}
-                            disabled={busy}
-                            onChange={e => patchCompany(c.id, { plan: e.target.value })}
-                            className="text-xs rounded-lg px-2 py-1.5" style={{ border: '1px solid #D7DCE5', background: '#fff', color: H }}
-                          >
-                            {PLANS.map(p => <option key={p.id} value={p.id}>{p.name} (${p.price}, {p.agentLimit ?? '∞'} agents)</option>)}
-                          </select>
-                          {c.accessStatus === 'suspended'
-                            ? <button disabled={busy} onClick={() => patchCompany(c.id, { access_status: 'active' })} className="text-xs font-bold px-2.5 py-1.5 rounded-lg text-white" style={{ background: '#1B8A4B' }}>Reactivate</button>
-                            : <button disabled={busy} onClick={() => patchCompany(c.id, { access_status: 'suspended', access_until: null })} className="flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg" style={{ border: '1.5px solid #F3D7D7', background: '#FDF5F5', color: '#A23434' }}><Ban className="h-3 w-3" /> Suspend</button>}
-                        </div>
-
-                        {/* Access period — grant/extend without an invoice (free trials, comps) */}
-                        <div className="flex flex-wrap items-center gap-2">
-                          <label className="text-xs font-semibold" style={{ color: SUB }}>Access until</label>
-                          <button disabled={busy}
-                            onClick={() => patchCompany(c.id, { access_status: 'active', access_until: new Date(Date.now() + 30 * 86400000).toISOString() })}
-                            className="text-xs font-bold px-2.5 py-1.5 rounded-lg text-white" style={{ background: '#1B8A4B' }}>Free trial · 30 days</button>
-                          <button disabled={busy}
-                            onClick={() => { const base = c.accessUntil && new Date(c.accessUntil) > new Date() ? new Date(c.accessUntil).getTime() : Date.now(); patchCompany(c.id, { access_status: 'active', access_until: new Date(base + 30 * 86400000).toISOString() }) }}
-                            className="text-xs font-bold px-2.5 py-1.5 rounded-lg" style={{ border: '1.5px solid #D7DCE5', background: '#fff', color: H }}>Extend +1 month</button>
-                          <input type="date" disabled={busy} defaultValue={c.accessUntil ? c.accessUntil.slice(0, 10) : ''}
-                            onChange={e => e.target.value && patchCompany(c.id, { access_status: 'active', access_until: new Date(e.target.value).toISOString() })}
-                            className="text-xs rounded-lg px-2 py-1.5" style={{ border: '1px solid #D7DCE5', background: '#fff', color: H }} />
-                        </div>
-
-                        {/* Invoices */}
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="text-xs font-bold" style={{ color: H }}>Invoices</p>
-                            <button disabled={busy} onClick={() => createInvoice(c)} className="flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg text-white" style={{ background: '#0E1F3D' }}>
-                              <Plus className="h-3 w-3" /> New invoice ({c.plan})
-                            </button>
-                          </div>
-                          <div className="rounded-xl bg-white overflow-hidden" style={{ border: '1px solid #EEF0F4' }}>
-                            {(invoices[c.id] ?? []).length === 0 ? (
-                              <p className="px-4 py-4 text-xs text-center" style={{ color: SUB }}>No invoices yet.</p>
-                            ) : (invoices[c.id] ?? []).map(inv => (
-                              <div key={inv.id} className="flex items-center justify-between gap-3 px-4 py-2.5" style={{ borderBottom: '1px solid #F4F5F8' }}>
-                                <div className="min-w-0">
-                                  <p className="text-xs font-semibold" style={{ color: H }}>{inv.number} · ${Number(inv.amount).toLocaleString()} {inv.currency}</p>
-                                  <p className="text-xs" style={{ color: SUB }}>{inv.period_start} → {inv.period_end}{inv.method ? ` · ${inv.method}` : ''}</p>
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <span className="px-2 py-0.5 rounded-full text-xs font-bold" style={inv.status === 'paid' ? { background: '#E4F7EC', color: '#1B8A4B' } : inv.status === 'void' ? { background: '#F0F2F5', color: '#6A7488' } : { background: '#FBEFD6', color: '#9A6516' }}>
-                                    {inv.status === 'paid' ? <Check className="h-3 w-3 inline" /> : <Clock className="h-3 w-3 inline" />} {inv.status}
-                                  </span>
-                                  {inv.status === 'unpaid' && (
-                                    <button disabled={busy} onClick={() => markInvoice(c.id, inv.id, 'paid')} className="text-xs font-bold px-2.5 py-1 rounded-lg text-white" style={{ background: '#1B8A4B' }}>Mark paid</button>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                          <p className="text-xs mt-1.5" style={{ color: SUB }}>Marking an invoice paid activates the company through its period end.</p>
-                        </div>
-                      </div>
-                    )}
+                      <p className="text-xs hidden sm:block" style={{ color: '#C0C6D4' }}>
+                        {new Date(company.created_at).toLocaleDateString()}
+                      </p>
+                      <button
+                        onClick={() => toggleActive(company)}
+                        disabled={toggling === company.id}
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-opacity disabled:opacity-50"
+                        style={isActive
+                          ? { background: '#FBE7E7', color: '#A23434' }
+                          : { background: '#E3F4EA', color: '#1F7A4D' }
+                        }
+                      >
+                        {toggling === company.id ? '…' : isActive ? 'Deactivate' : 'Activate'}
+                      </button>
+                    </div>
                   </div>
                 )
               })}
@@ -231,52 +177,6 @@ export default function AdminPage() {
           )}
         </div>
       </div>
-
-      {/* Create company modal */}
-      {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(14,31,61,0.45)' }} onClick={e => e.target === e.currentTarget && setShowCreate(false)}>
-          <div className="w-full max-w-md rounded-2xl bg-white p-5" style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
-            <p className="text-base font-bold mb-1" style={{ color: H }}>Create a company</p>
-            <p className="text-xs mb-4" style={{ color: SUB }}>Onboards an agency and its manager directly. Share the temporary password with them; they can change it via &quot;Forgot password&quot;.</p>
-            <div className="space-y-2.5">
-              {([
-                ['companyName', 'Agency name', 'text', 'Meridian Realty'],
-                ['domain', 'Domain', 'text', 'meridian.com'],
-                ['email', 'Manager email', 'email', 'manager@meridian.com'],
-                ['password', 'Temporary password', 'text', 'min. 8 characters'],
-              ] as const).map(([key, label, type, ph]) => (
-                <div key={key}>
-                  <label className="text-xs font-semibold" style={{ color: SUB }}>{label}</label>
-                  <input
-                    type={type} value={form[key]} placeholder={ph}
-                    onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
-                    className="w-full mt-0.5 rounded-xl px-3 py-2 text-sm outline-none"
-                    style={{ border: '1.5px solid #D7DCE5', color: '#14223F' }}
-                  />
-                </div>
-              ))}
-              <div>
-                <label className="text-xs font-semibold" style={{ color: SUB }}>Plan</label>
-                <select value={form.planId} onChange={e => setForm(f => ({ ...f, planId: e.target.value }))}
-                  className="w-full mt-0.5 rounded-xl px-3 py-2 text-sm" style={{ border: '1.5px solid #D7DCE5', color: '#14223F', background: '#fff' }}>
-                  {PLANS.map(p => <option key={p.id} value={p.id}>{p.name} (${p.price}, {p.agentLimit ?? '∞'} agents)</option>)}
-                </select>
-              </div>
-              <label className="flex items-center gap-2 text-xs pt-1" style={{ color: H }}>
-                <input type="checkbox" checked={form.trial} onChange={e => setForm(f => ({ ...f, trial: e.target.checked }))} />
-                Activate now with a 30-day free trial (otherwise created as pending)
-              </label>
-            </div>
-            {createErr && <p className="text-xs px-3 py-2 rounded-lg mt-3" style={{ background: '#FBE7E7', color: '#A23434' }}>{createErr}</p>}
-            <div className="flex gap-2 justify-end mt-4">
-              <button onClick={() => setShowCreate(false)} className="px-4 py-2 rounded-xl text-sm font-semibold" style={{ border: '1.5px solid #D7DCE5', color: H }}>Cancel</button>
-              <button onClick={createCompany} disabled={creating} className="px-4 py-2 rounded-xl text-sm font-bold text-white disabled:opacity-50" style={{ background: '#0E1F3D' }}>
-                {creating ? 'Creating…' : 'Create company'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

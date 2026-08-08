@@ -4,17 +4,13 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { CheckCircle2, Mail, Lock, Eye, EyeOff } from 'lucide-react'
-import Logo from '@/components/brand/Logo'
+import { Building2, CheckCircle2, Mail, Lock } from 'lucide-react'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [resetSent, setResetSent] = useState(false)
-  const [resetting, setResetting] = useState(false)
-  const [showPw, setShowPw] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -23,7 +19,7 @@ export default function LoginPage() {
     setLoading(true)
     setError(null)
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
     if (error) {
       setError(error.message)
@@ -31,26 +27,32 @@ export default function LoginPage() {
       return
     }
 
-    // StateGen operators go to the admin panel, not a company dashboard.
-    const me = await fetch('/api/me').then(r => r.ok ? r.json() : null).catch(() => null)
-    router.push(me?.session?.isPlatformAdmin ? '/admin' : '/dashboard')
-    router.refresh()
-  }
+    // Check if the user's company is active
+    if (data.user) {
+      const { data: profile } = await supabase
+        .from('Profiles')
+        .select('company_id')
+        .eq('id', data.user.id)
+        .single()
 
-  async function handleReset() {
-    setError(null)
-    if (!email.trim()) {
-      setError('Enter your email above first, then tap “Forgot password?”.')
-      return
+      if (profile?.company_id) {
+        const { data: company } = await supabase
+          .from('Companies')
+          .select('"is active"')
+          .eq('id', profile.company_id)
+          .single()
+
+        if (company && !company['is active']) {
+          await supabase.auth.signOut()
+          setError('Your account is pending activation. We will contact you once your subscription is confirmed.')
+          setLoading(false)
+          return
+        }
+      }
     }
-    setResetting(true)
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/reset-password`,
-    })
-    setResetting(false)
-    // Don't reveal whether an email exists — always show the same confirmation.
-    if (error && !/rate/i.test(error.message)) { setError(error.message); return }
-    setResetSent(true)
+
+    router.push('/dashboard')
+    router.refresh()
   }
 
   return (
@@ -60,7 +62,12 @@ export default function LoginPage() {
         className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12"
         style={{ background: '#0E1F3D' }}
       >
-        <Logo variant="white" size={34} withWordmark priority />
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: '#5E8FD6' }}>
+            <Building2 className="h-5 w-5 text-white" />
+          </div>
+          <span className="font-bold text-white text-lg tracking-tight">StateGen</span>
+        </div>
 
         <div>
           <h1 className="text-4xl font-extrabold text-white leading-tight mb-4" style={{ letterSpacing: '-0.5px' }}>
@@ -93,12 +100,6 @@ export default function LoginPage() {
       {/* Right panel */}
       <div className="flex-1 flex items-center justify-center px-8 py-12 bg-white">
         <div className="w-full max-w-sm">
-          {/* The navy panel carrying the logo is desktop-only, so brand the
-              form itself on phones — otherwise sign-in has no logo at all. */}
-          <div className="lg:hidden mb-8">
-            <Logo variant="navy" size={44} withWordmark priority />
-          </div>
-
           <p className="text-xs font-bold tracking-widest mb-2" style={{ color: '#6A7488', letterSpacing: '0.5px' }}>
             AGENT SIGN IN
           </p>
@@ -142,12 +143,12 @@ export default function LoginPage() {
               <div className="relative">
                 <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: '#9AA3B2' }} />
                 <input
-                  type={showPw ? 'text' : 'password'}
+                  type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   placeholder="••••••••"
-                  className="w-full pl-10 pr-10 py-2.5 text-sm outline-none transition-colors"
+                  className="w-full pl-10 pr-4 py-2.5 text-sm outline-none transition-colors"
                   style={{
                     border: '1.5px solid #D7DCE5',
                     borderRadius: '10px',
@@ -157,28 +158,13 @@ export default function LoginPage() {
                   onFocus={(e) => (e.target.style.borderColor = '#5E8FD6')}
                   onBlur={(e) => (e.target.style.borderColor = '#D7DCE5')}
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPw(v => !v)}
-                  aria-label={showPw ? 'Hide password' : 'Show password'}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5"
-                  style={{ color: '#9AA3B2' }}
-                >
-                  {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
               </div>
               <div className="flex justify-end mt-1.5">
-                <button type="button" onClick={handleReset} disabled={resetting} className="text-xs disabled:opacity-50" style={{ color: '#5E8FD6' }}>
-                  {resetting ? 'Sending…' : 'Forgot password?'}
+                <button type="button" className="text-xs" style={{ color: '#5E8FD6' }}>
+                  Forgot password?
                 </button>
               </div>
             </div>
-
-            {resetSent && (
-              <p className="text-xs px-3 py-2 rounded-lg" style={{ background: '#E3F4EA', color: '#1F7A4D' }}>
-                If an account exists for that email, we&apos;ve sent a password reset link. Check your inbox.
-              </p>
-            )}
 
             {error && (
               <p className="text-xs px-3 py-2 rounded-lg" style={{ background: '#FBE7E7', color: '#A23434' }}>
@@ -201,11 +187,6 @@ export default function LoginPage() {
             <Link href="/signup" className="font-semibold" style={{ color: '#5E8FD6' }}>
               Create one
             </Link>
-          </p>
-          <p className="text-center text-xs mt-4" style={{ color: '#9AA3B2' }}>
-            <Link href="/terms" style={{ color: '#9AA3B2', textDecoration: 'underline' }}>Terms</Link>
-            {' · '}
-            <Link href="/privacy" style={{ color: '#9AA3B2', textDecoration: 'underline' }}>Privacy</Link>
           </p>
         </div>
       </div>

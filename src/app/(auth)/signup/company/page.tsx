@@ -1,87 +1,102 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
-import { Building2, Mail, Globe, ChevronLeft, Check, Zap, Lock, Clock } from 'lucide-react'
-import { PLANS, PlanId } from '@/lib/stripe-plans'
-import Logo from '@/components/brand/Logo'
+import { useRouter } from 'next/navigation'
+import { Building2, Mail, Globe, Lock, ChevronLeft } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
-type Step = 'info' | 'plan' | 'done'
-
-function CompanySignupInner() {
-  const params = useSearchParams()
-  const cancelled = params.get('cancelled') === '1'
-
-  const [step, setStep]           = useState<Step>('info')
-  const [loading, setLoading]     = useState(false)
-  const [error, setError]         = useState<string | null>(null)
-  const [selectedPlan, setSelectedPlan] = useState<PlanId>('business')
+export default function CompanySignupPage() {
+  const router = useRouter()
+  const supabase = createClient()
 
   const [companyName, setCompanyName] = useState('')
   const [domain, setDomain]           = useState('')
   const [email, setEmail]             = useState('')
   const [password, setPassword]       = useState('')
   const [confirm, setConfirm]         = useState('')
-
-  function handleInfoSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setError(null)
-    if (!domain.includes('.')) { setError('Please enter a valid domain (e.g. meridian.com).'); return }
-    setStep('plan')
-  }
-
-  async function handleCreate() {
-    setError(null)
-    if (password.length < 8) { setError('Password must be at least 8 characters.'); return }
-    if (password !== confirm) { setError('Passwords do not match.'); return }
-    setLoading(true)
-    try {
-      const res = await fetch('/api/signup/company', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyName, domain, email, planId: selectedPlan, password }),
-      })
-      const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error ?? 'Sign-up failed.')
-      setStep('done')
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Something went wrong.')
-    } finally {
-      setLoading(false)
-    }
-  }
+  const [loading, setLoading]         = useState(false)
+  const [error, setError]             = useState<string | null>(null)
 
   const inp = 'w-full pl-10 pr-4 py-2.5 text-sm outline-none transition-colors'
   const inpStyle = { border: '1.5px solid #D7DCE5', borderRadius: '10px', color: '#14223F', fontFamily: 'inherit', background: '#fff' }
   const labelStyle = { color: '#6A7488', letterSpacing: '0.5px' }
 
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    if (!domain.includes('.')) { setError('Please enter a valid domain (e.g. myagency.com).'); return }
+    if (password !== confirm) { setError('Passwords do not match.'); return }
+    if (password.length < 8) { setError('Password must be at least 8 characters.'); return }
+
+    setLoading(true)
+    try {
+      // 1. Create auth user
+      const { data: authData, error: authErr } = await supabase.auth.signUp({ email, password })
+      if (authErr) throw authErr
+      if (!authData.user) throw new Error('Signup failed — please try again.')
+
+      // 2. Create company (inactive until manually activated)
+      const { data: company, error: companyErr } = await supabase
+        .from('Companies')
+        .insert({
+          Name: companyName,
+          domain: domain.toLowerCase(),
+          Plan: 'pro',
+          'is active': false,
+          stripe_status: 'pending_payment',
+        })
+        .select()
+        .single()
+      if (companyErr) throw companyErr
+
+      // 3. Create manager profile
+      const { error: profileErr } = await supabase
+        .from('Profiles')
+        .insert({
+          id: authData.user.id,
+          company_id: company.id,
+          Full_name: companyName + ' Manager',
+          role: 'owner',
+          approved: true,
+        })
+      if (profileErr) throw profileErr
+
+      router.push('/signup/company/complete')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Something went wrong.')
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="min-h-screen flex" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
       {/* Left panel */}
       <div className="hidden lg:flex lg:w-5/12 flex-col justify-between p-12" style={{ background: '#0E1F3D' }}>
-        <Logo variant="white" size={34} withWordmark priority />
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: '#5E8FD6' }}>
+            <Building2 className="h-5 w-5 text-white" />
+          </div>
+          <span className="font-bold text-white text-lg tracking-tight">StateGen</span>
+        </div>
         <div>
           <h1 className="text-4xl font-bold text-white leading-tight mb-4" style={{ letterSpacing: '-0.3px' }}>
-            {step === 'info' ? <>Register your<br />agency.</> : <>Choose the right<br />plan for you.</>}
+            Register your<br />agency.
           </h1>
           <p className="text-sm mb-8" style={{ color: '#9DB2CC' }}>
-            {step === 'info'
-              ? 'Your domain links your whole team. Choose it carefully — agents sign up under it.'
-              : 'All plans include smart matching, the full CRM, and commission tracking. Upgrade any time.'}
+            Your domain links your whole team. Agents sign up under it and you approve each one.
           </p>
-          <div className="space-y-2">
+          <div className="space-y-3">
             {[
-              { label: 'Company info', done: step === 'plan' },
-              { label: 'Choose plan & pay', done: false },
-              { label: 'Set password & activate', done: false },
-            ].map((s, i) => (
-              <div key={s.label} className="flex items-center gap-3">
-                <div className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-                  style={{ background: s.done ? '#1F8A5B' : i === (step === 'info' ? 0 : 1) ? '#5E8FD6' : 'rgba(255,255,255,0.12)', color: '#fff' }}>
-                  {s.done ? <Check className="h-3 w-3" /> : i + 1}
+              'Register your company',
+              'We activate your account after payment',
+              'Invite agents under your domain',
+            ].map((step, i) => (
+              <div key={step} className="flex items-center gap-3">
+                <div className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0" style={{ background: '#5E8FD6', color: '#fff' }}>
+                  {i + 1}
                 </div>
-                <span className="text-sm" style={{ color: i === (step === 'info' ? 0 : 1) ? '#fff' : '#9DB2CC' }}>{s.label}</span>
+                <span className="text-sm" style={{ color: '#C8D6EA' }}>{step}</span>
               </div>
             ))}
           </div>
@@ -91,199 +106,79 @@ function CompanySignupInner() {
 
       {/* Right panel */}
       <div className="flex-1 flex items-center justify-center px-8 py-12 overflow-y-auto" style={{ background: '#faf9f5' }}>
-        <div className="w-full max-w-lg">
+        <div className="w-full max-w-sm">
           <Link href="/signup" className="inline-flex items-center gap-1.5 text-xs mb-6" style={{ color: '#7A8499' }}>
-            <ChevronLeft className="h-3.5 w-3.5" />
-            {step === 'plan' ? <span onClick={e => { e.preventDefault(); setStep('info') }} className="cursor-pointer">Back</span> : 'Back'}
+            <ChevronLeft className="h-3.5 w-3.5" /> Back
           </Link>
 
-          {cancelled && (
-            <div className="flex items-center gap-2 px-4 py-3 rounded-xl mb-5" style={{ background: '#FBE7E7', border: '1px solid #F5C0C0' }}>
-              <p className="text-xs" style={{ color: '#A23434' }}>Payment was cancelled. You can try again below.</p>
+          <p className="text-xs font-bold tracking-widest mb-2 uppercase" style={labelStyle}>Manager signup</p>
+          <h2 className="text-2xl font-bold mb-1.5" style={{ color: '#1A2B4A', letterSpacing: '-0.3px' }}>
+            Register your company
+          </h2>
+          <p className="text-sm mb-7" style={{ color: '#7A8499' }}>
+            Your account will be activated once we confirm your subscription.
+          </p>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <p className="text-xs font-bold tracking-wider mb-1.5 uppercase" style={labelStyle}>Company name</p>
+              <div className="relative">
+                <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: '#9AA3B2' }} />
+                <input className={inp} style={inpStyle} required value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="My Agency"
+                  onFocus={e => (e.target.style.borderColor = '#5E8FD6')} onBlur={e => (e.target.style.borderColor = '#D7DCE5')} />
+              </div>
             </div>
-          )}
 
-          {/* ── STEP 1: Company info ── */}
-          {step === 'info' && (
-            <>
-              <p className="text-xs font-bold tracking-widest mb-2 uppercase" style={labelStyle}>Manager signup · Step 1 of 3</p>
-              <h2 className="text-2xl font-bold mb-1.5" style={{ color: '#1A2B4A', letterSpacing: '-0.3px' }}>
-                Register your company
-              </h2>
-              <p className="text-sm mb-7" style={{ color: '#7A8499' }}>
-                You&apos;ll set your password after payment.
-              </p>
-
-              <form onSubmit={handleInfoSubmit} className="space-y-4">
-                <div>
-                  <p className="text-xs font-bold tracking-wider mb-1.5 uppercase" style={labelStyle}>Company name</p>
-                  <div className="relative">
-                    <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: '#9AA3B2' }} />
-                    <input className={inp} style={inpStyle} required value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="StateGen"
-                      onFocus={e => (e.target.style.borderColor = '#5E8FD6')} onBlur={e => (e.target.style.borderColor = '#D7DCE5')} />
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-xs font-bold tracking-wider mb-1.5 uppercase" style={labelStyle}>Company domain</p>
-                  <div className="relative">
-                    <Globe className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: '#9AA3B2' }} />
-                    <input className={inp} style={inpStyle} required value={domain} onChange={e => setDomain(e.target.value.toLowerCase())} placeholder="meridian.com"
-                      onFocus={e => (e.target.style.borderColor = '#5E8FD6')} onBlur={e => (e.target.style.borderColor = '#D7DCE5')} />
-                  </div>
-                  <p className="text-xs mt-1" style={{ color: '#9AA3B2' }}>Agents sign up under this domain.</p>
-                </div>
-
-                <div>
-                  <p className="text-xs font-bold tracking-wider mb-1.5 uppercase" style={labelStyle}>Your email</p>
-                  <div className="relative">
-                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: '#9AA3B2' }} />
-                    <input className={inp} style={inpStyle} type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="you@meridian.com"
-                      onFocus={e => (e.target.style.borderColor = '#5E8FD6')} onBlur={e => (e.target.style.borderColor = '#D7DCE5')} />
-                  </div>
-                </div>
-
-                {error && <p className="text-xs px-3 py-2 rounded-lg" style={{ background: '#FBE7E7', color: '#A23434' }}>{error}</p>}
-
-                <button type="submit" className="w-full py-3 rounded-xl text-sm font-semibold text-white" style={{ background: '#0E1F3D' }}>
-                  Choose a plan →
-                </button>
-              </form>
-
-              <p className="text-center text-xs mt-6" style={{ color: '#9AA3B2' }}>
-                Already have an account?{' '}
-                <Link href="/login" className="font-semibold" style={{ color: '#5E8FD6' }}>Sign in</Link>
-              </p>
-            </>
-          )}
-
-          {/* ── STEP 2: Plan selection ── */}
-          {step === 'plan' && (
-            <>
-              <p className="text-xs font-bold tracking-widest mb-2 uppercase" style={labelStyle}>Manager signup · Step 2 of 2</p>
-              <h2 className="text-2xl font-bold mb-1.5" style={{ color: '#1A2B4A', letterSpacing: '-0.3px' }}>
-                Choose your plan
-              </h2>
-              <p className="text-sm mb-7" style={{ color: '#7A8499' }}>
-                Every plan is <span className="font-semibold" style={{ color: '#1A2B4A' }}>full access</span> — they differ only by how many agents you can add. Billing is by <span className="font-semibold" style={{ color: '#1A2B4A' }}>invoice</span>; we activate your account once payment is arranged.
-              </p>
-
-              <div className="space-y-3 mb-6">
-                {PLANS.map(plan => {
-                  const active = selectedPlan === plan.id
-                  return (
-                    <button
-                      key={plan.id}
-                      type="button"
-                      onClick={() => setSelectedPlan(plan.id)}
-                      className="w-full text-left rounded-2xl p-4 transition-all relative"
-                      style={{
-                        border: active ? '2px solid #5E8FD6' : '2px solid #EEF0F4',
-                        background: active ? '#F5F8FE' : '#fff',
-                        boxShadow: active ? '0 0 0 3px rgba(94,143,214,0.12)' : '0 1px 3px rgba(0,0,0,0.05)',
-                      }}
-                    >
-                      {'popular' in plan && plan.popular && (
-                        <div className="absolute -top-2.5 left-4 px-2.5 py-0.5 rounded-full text-xs font-bold text-white flex items-center gap-1" style={{ background: '#5E8FD6' }}>
-                          <Zap className="h-3 w-3" /> Most popular
-                        </div>
-                      )}
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <p className="text-sm font-bold" style={{ color: '#1A2B4A' }}>{plan.name}</p>
-                            <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#EAF0FA', color: '#2E5288' }}>
-                              {plan.agents}
-                            </span>
-                          </div>
-                          <div className="flex flex-wrap gap-1.5 mt-2">
-                            {plan.features.map(f => (
-                              <span key={f} className="flex items-center gap-1 text-xs" style={{ color: '#7A8499' }}>
-                                <Check className="h-3 w-3" style={{ color: '#1F8A5B' }} /> {f}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <p className="text-xl font-bold" style={{ color: '#1A2B4A' }}>${plan.price}</p>
-                          <p className="text-xs" style={{ color: '#9AA3B2' }}>/month</p>
-                        </div>
-                      </div>
-                      {active && (
-                        <div className="absolute top-4 right-4 w-5 h-5 rounded-full flex items-center justify-center" style={{ background: '#5E8FD6' }}>
-                          <Check className="h-3 w-3 text-white" />
-                        </div>
-                      )}
-                    </button>
-                  )
-                })}
+            <div>
+              <p className="text-xs font-bold tracking-wider mb-1.5 uppercase" style={labelStyle}>Company domain</p>
+              <div className="relative">
+                <Globe className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: '#9AA3B2' }} />
+                <input className={inp} style={inpStyle} required value={domain} onChange={e => setDomain(e.target.value.toLowerCase())} placeholder="myagency.com"
+                  onFocus={e => (e.target.style.borderColor = '#5E8FD6')} onBlur={e => (e.target.style.borderColor = '#D7DCE5')} />
               </div>
-
-              {/* Set the manager password now — account is created (pending) on submit */}
-              <div className="space-y-3 mb-4">
-                <div className="relative">
-                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: '#9AA3B2' }} />
-                  <input className={inp} style={inpStyle} type="password" required value={password}
-                    onChange={e => setPassword(e.target.value)} placeholder="Create a password (min. 8 characters)"
-                    onFocus={e => (e.target.style.borderColor = '#5E8FD6')} onBlur={e => (e.target.style.borderColor = '#D7DCE5')} />
-                </div>
-                <div className="relative">
-                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: '#9AA3B2' }} />
-                  <input className={inp} style={inpStyle} type="password" required value={confirm}
-                    onChange={e => setConfirm(e.target.value)} placeholder="Confirm password"
-                    onFocus={e => (e.target.style.borderColor = '#5E8FD6')} onBlur={e => (e.target.style.borderColor = '#D7DCE5')} />
-                </div>
-              </div>
-
-              {error && <p className="text-xs px-3 py-2 rounded-lg mb-4" style={{ background: '#FBE7E7', color: '#A23434' }}>{error}</p>}
-
-              <button
-                onClick={handleCreate}
-                disabled={loading}
-                className="w-full py-3 rounded-xl text-sm font-semibold text-white transition-opacity disabled:opacity-60"
-                style={{ background: '#0E1F3D' }}
-              >
-                {loading ? 'Creating account…' : `Create account · ${PLANS.find(p => p.id === selectedPlan)?.name} ($${PLANS.find(p => p.id === selectedPlan)?.price}/mo)`}
-              </button>
-
-              <p className="text-center text-xs mt-4" style={{ color: '#9AA3B2' }}>
-                By creating an account you agree to our{' '}
-                <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: '#5E8FD6' }}>Terms</a>{' '}and{' '}
-                <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: '#5E8FD6' }}>Privacy Policy</a>.
-              </p>
-              <p className="text-center text-xs mt-2" style={{ color: '#9AA3B2' }}>
-                No card needed — StateGen activates your account once payment is arranged.
-              </p>
-            </>
-          )}
-
-          {/* ── Done: pending activation ── */}
-          {step === 'done' && (
-            <div className="text-center py-6">
-              <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-5" style={{ background: '#FBEFD6' }}>
-                <Clock className="h-7 w-7" style={{ color: '#9A6516' }} />
-              </div>
-              <h2 className="text-2xl font-bold mb-2" style={{ color: '#1A2B4A', letterSpacing: '-0.3px' }}>Account created</h2>
-              <p className="text-sm mb-6" style={{ color: '#7A8499' }}>
-                <span className="font-semibold" style={{ color: '#1A2B4A' }}>{companyName}</span> is set up on the{' '}
-                <span className="font-semibold" style={{ color: '#1A2B4A' }}>{PLANS.find(p => p.id === selectedPlan)?.name}</span> plan.
-                We&apos;ll activate it as soon as payment is arranged — you can sign in now to check status.
-              </p>
-              <Link href="/login" className="inline-block w-full py-3 rounded-xl text-sm font-semibold text-white" style={{ background: '#0E1F3D' }}>
-                Go to sign in →
-              </Link>
+              <p className="text-xs mt-1" style={{ color: '#9AA3B2' }}>Agents sign up under this domain.</p>
             </div>
-          )}
+
+            <div>
+              <p className="text-xs font-bold tracking-wider mb-1.5 uppercase" style={labelStyle}>Your email</p>
+              <div className="relative">
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: '#9AA3B2' }} />
+                <input className={inp} style={inpStyle} type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="you@myagency.com"
+                  onFocus={e => (e.target.style.borderColor = '#5E8FD6')} onBlur={e => (e.target.style.borderColor = '#D7DCE5')} />
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-bold tracking-wider mb-1.5 uppercase" style={labelStyle}>Password</p>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: '#9AA3B2' }} />
+                <input className={inp} style={inpStyle} type="password" required value={password} onChange={e => setPassword(e.target.value)} placeholder="Min. 8 characters"
+                  onFocus={e => (e.target.style.borderColor = '#5E8FD6')} onBlur={e => (e.target.style.borderColor = '#D7DCE5')} />
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-bold tracking-wider mb-1.5 uppercase" style={labelStyle}>Confirm password</p>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: '#9AA3B2' }} />
+                <input className={inp} style={inpStyle} type="password" required value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="••••••••"
+                  onFocus={e => (e.target.style.borderColor = '#5E8FD6')} onBlur={e => (e.target.style.borderColor = '#D7DCE5')} />
+              </div>
+            </div>
+
+            {error && <p className="text-xs px-3 py-2 rounded-lg" style={{ background: '#FBE7E7', color: '#A23434' }}>{error}</p>}
+
+            <button type="submit" disabled={loading} className="w-full py-3 rounded-xl text-sm font-semibold text-white transition-opacity disabled:opacity-60" style={{ background: '#0E1F3D' }}>
+              {loading ? 'Creating account…' : 'Create Account →'}
+            </button>
+          </form>
+
+          <p className="text-center text-xs mt-6" style={{ color: '#9AA3B2' }}>
+            Already have an account?{' '}
+            <Link href="/login" className="font-semibold" style={{ color: '#5E8FD6' }}>Sign in</Link>
+          </p>
         </div>
       </div>
     </div>
-  )
-}
-
-export default function CompanySignupPage() {
-  return (
-    <Suspense fallback={null}>
-      <CompanySignupInner />
-    </Suspense>
   )
 }
