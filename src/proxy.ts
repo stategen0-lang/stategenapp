@@ -37,7 +37,8 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith('/terms') ||
     pathname.startsWith('/privacy') ||
     pathname.startsWith('/api') ||
-    pathname.startsWith('/l/')
+    pathname.startsWith('/l/') ||
+    pathname.startsWith('/admin')
 
   if (!user && !isPublicPath) {
     return NextResponse.redirect(new URL('/login', request.url))
