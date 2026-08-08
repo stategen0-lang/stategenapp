@@ -126,7 +126,7 @@ export default function AdminPage() {
         body: JSON.stringify({ id: company.id, active: false }),
       })
       setCompanies(prev => prev.map(c =>
-        c.id === company.id ? { ...c, 'is active': false, stripe_status: 'pending_payment' } : c
+        c.id === company.id ? { ...c, 'is active': false, access_status: 'pending' } : c
       ))
     } catch {}
   }
