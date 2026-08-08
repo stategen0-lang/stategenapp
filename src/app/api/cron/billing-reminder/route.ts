@@ -5,10 +5,10 @@ import { Resend } from 'resend'
 // Daily cron: find companies expiring in 3 days or today, email the manager.
 // Vercel invokes this with the CRON_SECRET header.
 
-const resend = new Resend(process.env.RESEND_API_KEY)
 const FROM = 'StateGen <billing@stategenapp.vercel.app>'
 
 export async function GET(req: NextRequest) {
+  const resend = new Resend(process.env.RESEND_API_KEY)
   // Verify this is called by Vercel Cron, not a random request
   const secret = req.headers.get('authorization')
   if (secret !== `Bearer ${process.env.CRON_SECRET}`) {
