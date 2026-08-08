@@ -17,13 +17,16 @@ export async function GET() {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const { id, active } = await req.json()
+    const { id, active, access_until } = await req.json()
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
     const supabase = await createClient()
-    const { error } = await supabase
-      .from('Companies')
-      .update({ 'is active': active, stripe_status: active ? 'active' : 'pending_payment' })
-      .eq('id', id)
+    const update: Record<string, unknown> = {
+      'is active': active,
+      stripe_status: active ? 'active' : 'pending_payment',
+      access_status: active ? 'active' : 'pending',
+    }
+    if (access_until !== undefined) update.access_until = access_until
+    const { error } = await supabase.from('Companies').update(update).eq('id', id)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ ok: true })
   } catch (err) {

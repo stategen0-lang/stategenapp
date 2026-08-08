@@ -1,9 +1,27 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Building2, Lock, CheckCircle2, XCircle, Clock, ChevronDown, ChevronRight, User } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Building2, Lock, CheckCircle2, XCircle, Clock, ChevronDown, ChevronRight, User, Calendar } from 'lucide-react'
 
 const ADMIN_PIN = 'sg2026'
+
+const QUICK = [
+  { label: '30 days', days: 30 },
+  { label: '60 days', days: 60 },
+  { label: '90 days', days: 90 },
+  { label: '6 months', days: 180 },
+  { label: '1 year', days: 365 },
+]
+
+function addDays(n: number) {
+  const d = new Date()
+  d.setDate(d.getDate() + n)
+  return d.toISOString().slice(0, 10)
+}
+
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+}
 
 interface Agent {
   id: string
@@ -21,6 +39,7 @@ interface Company {
   Plan: string
   'is active': boolean
   stripe_status: string
+  access_until: string | null
   created_at: string
 }
 
@@ -30,13 +49,29 @@ export default function AdminPage() {
   const [pinError, setPinError] = useState(false)
   const [companies, setCompanies] = useState<Company[]>([])
   const [loading, setLoading] = useState(false)
-  const [toggling, setToggling] = useState<number | null>(null)
+
+  // Activation picker state
+  const [activating, setActivating] = useState<number | null>(null)   // company id being activated
+  const [untilDate, setUntilDate] = useState('')
+  const [saving, setSaving] = useState(false)
+  const pickerRef = useRef<HTMLDivElement>(null)
 
   // Per-company agent list
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [agentsMap, setAgentsMap] = useState<Record<number, Agent[]>>({})
   const [agentsLoading, setAgentsLoading] = useState<number | null>(null)
   const [togglingAgent, setTogglingAgent] = useState<string | null>(null)
+
+  // Close picker on outside click
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setActivating(null)
+      }
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [])
 
   function handlePin(e: React.FormEvent) {
     e.preventDefault()
@@ -54,20 +89,46 @@ export default function AdminPage() {
       .finally(() => setLoading(false))
   }, [unlocked])
 
-  async function toggleCompany(company: Company) {
-    setToggling(company.id)
-    const newActive = !company['is active']
+  function openActivatePicker(company: Company) {
+    // Pre-fill: extend from current access_until if still in future, otherwise from today
+    const base = company.access_until && new Date(company.access_until) > new Date()
+      ? new Date(company.access_until)
+      : new Date()
+    const def = new Date(base)
+    def.setDate(def.getDate() + 30)
+    setUntilDate(def.toISOString().slice(0, 10))
+    setActivating(company.id)
+  }
+
+  async function confirmActivate(company: Company) {
+    setSaving(true)
     try {
       await fetch('/api/admin/companies', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: company.id, active: newActive }),
+        body: JSON.stringify({ id: company.id, active: true, access_until: untilDate }),
       })
       setCompanies(prev => prev.map(c =>
-        c.id === company.id ? { ...c, 'is active': newActive, stripe_status: newActive ? 'active' : 'pending_payment' } : c
+        c.id === company.id
+          ? { ...c, 'is active': true, stripe_status: 'active', access_until: untilDate }
+          : c
+      ))
+      setActivating(null)
+    } catch {}
+    setSaving(false)
+  }
+
+  async function deactivate(company: Company) {
+    try {
+      await fetch('/api/admin/companies', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: company.id, active: false }),
+      })
+      setCompanies(prev => prev.map(c =>
+        c.id === company.id ? { ...c, 'is active': false, stripe_status: 'pending_payment' } : c
       ))
     } catch {}
-    setToggling(null)
   }
 
   async function expandCompany(id: number) {
@@ -168,7 +229,7 @@ export default function AdminPage() {
         <div className="rounded-2xl overflow-hidden" style={{ background: '#fff', border: '1px solid #EEF0F4' }}>
           <div className="px-5 py-4 border-b" style={{ borderColor: '#EEF0F4' }}>
             <h2 className="text-sm font-semibold" style={{ color: '#1A2B4A' }}>All Companies</h2>
-            <p className="text-xs mt-0.5" style={{ color: '#9AA3B2' }}>Click a company to see its agents</p>
+            <p className="text-xs mt-0.5" style={{ color: '#9AA3B2' }}>Click ▶ to see agents · Click Activate to set expiry date</p>
           </div>
 
           {loading ? (
@@ -181,15 +242,15 @@ export default function AdminPage() {
                 const isActive = company['is active']
                 const isExpanded = expandedId === company.id
                 const agents = agentsMap[company.id]
+                const isPickerOpen = activating === company.id
 
                 return (
                   <div key={company.id} style={{ borderBottom: '1px solid #EEF0F4' }}>
                     {/* Company row */}
                     <div className="px-5 py-4 flex items-center gap-3">
-                      {/* Expand toggle */}
                       <button
                         onClick={() => expandCompany(company.id)}
-                        className="shrink-0 w-6 h-6 flex items-center justify-center rounded-lg transition-colors"
+                        className="shrink-0 w-6 h-6 flex items-center justify-center rounded-lg"
                         style={{ background: isExpanded ? '#EAF0FA' : 'transparent', color: '#5E8FD6' }}
                       >
                         {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
@@ -201,7 +262,14 @@ export default function AdminPage() {
 
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold truncate" style={{ color: '#1A2B4A' }}>{company.Name}</p>
-                        <p className="text-xs truncate" style={{ color: '#9AA3B2' }}>{company.domain} · {company.Plan} · {new Date(company.created_at).toLocaleDateString()}</p>
+                        <p className="text-xs truncate" style={{ color: '#9AA3B2' }}>
+                          {company.domain} · {company.Plan}
+                          {company.access_until && (
+                            <span style={{ color: isActive ? '#1F7A4D' : '#9A6516' }}>
+                              {' '}· expires {fmtDate(company.access_until)}
+                            </span>
+                          )}
+                        </p>
                       </div>
 
                       <div className="flex items-center gap-3 shrink-0">
@@ -214,25 +282,104 @@ export default function AdminPage() {
                             {isActive ? 'Active' : 'Pending'}
                           </span>
                         </div>
-                        <button
-                          onClick={() => toggleCompany(company)}
-                          disabled={toggling === company.id}
-                          className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-opacity disabled:opacity-50"
-                          style={isActive
-                            ? { background: '#FBE7E7', color: '#A23434' }
-                            : { background: '#E3F4EA', color: '#1F7A4D' }
-                          }
-                        >
-                          {toggling === company.id ? '…' : isActive ? 'Deactivate' : 'Activate'}
-                        </button>
+
+                        {isActive ? (
+                          <div className="flex gap-2">
+                            {/* Extend button */}
+                            <button
+                              onClick={() => openActivatePicker(company)}
+                              className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+                              style={{ background: '#EAF0FA', color: '#2E5288' }}
+                            >
+                              Extend
+                            </button>
+                            {/* Deactivate button */}
+                            <button
+                              onClick={() => deactivate(company)}
+                              className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+                              style={{ background: '#FBE7E7', color: '#A23434' }}
+                            >
+                              Deactivate
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => openActivatePicker(company)}
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+                            style={{ background: '#E3F4EA', color: '#1F7A4D' }}
+                          >
+                            Activate
+                          </button>
+                        )}
                       </div>
                     </div>
+
+                    {/* Activation date picker */}
+                    {isPickerOpen && (
+                      <div ref={pickerRef} className="mx-5 mb-4 rounded-2xl p-4" style={{ background: '#F0F4FA', border: '1px solid #D8E2F0' }}>
+                        <div className="flex items-center gap-2 mb-3">
+                          <Calendar className="h-4 w-4" style={{ color: '#2E5288' }} />
+                          <p className="text-sm font-semibold" style={{ color: '#1A2B4A' }}>
+                            {isActive ? 'Extend access until' : 'Activate until'}
+                          </p>
+                        </div>
+
+                        {/* Quick options */}
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {QUICK.map(q => (
+                            <button
+                              key={q.days}
+                              onClick={() => setUntilDate(addDays(q.days))}
+                              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+                              style={untilDate === addDays(q.days)
+                                ? { background: '#0E1F3D', color: '#fff' }
+                                : { background: '#fff', color: '#1A2B4A', border: '1px solid #D8E2F0' }
+                              }
+                            >
+                              {q.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Custom date */}
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="date"
+                            value={untilDate}
+                            min={new Date().toISOString().slice(0, 10)}
+                            onChange={e => setUntilDate(e.target.value)}
+                            className="flex-1 px-3 py-2 rounded-xl text-sm outline-none"
+                            style={{ border: '1.5px solid #D8E2F0', color: '#1A2B4A', background: '#fff', fontFamily: 'inherit' }}
+                          />
+                          <button
+                            onClick={() => confirmActivate(company)}
+                            disabled={!untilDate || saving}
+                            className="px-4 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
+                            style={{ background: '#1F7A4D' }}
+                          >
+                            {saving ? '…' : 'Confirm'}
+                          </button>
+                          <button
+                            onClick={() => setActivating(null)}
+                            className="px-3 py-2 rounded-xl text-sm font-semibold"
+                            style={{ background: '#fff', color: '#9AA3B2', border: '1px solid #D8E2F0' }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+
+                        {untilDate && (
+                          <p className="text-xs mt-2" style={{ color: '#5E8FD6' }}>
+                            Access active until {fmtDate(untilDate)}
+                          </p>
+                        )}
+                      </div>
+                    )}
 
                     {/* Agents panel */}
                     {isExpanded && (
                       <div className="px-5 pb-4" style={{ background: '#F7F8FB' }}>
                         <p className="text-xs font-semibold mb-3 pt-3" style={{ color: '#6A7488' }}>AGENTS</p>
-
                         {agentsLoading === company.id ? (
                           <p className="text-xs py-4 text-center" style={{ color: '#9AA3B2' }}>Loading agents…</p>
                         ) : !agents || agents.length === 0 ? (
