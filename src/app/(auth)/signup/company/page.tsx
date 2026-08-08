@@ -64,7 +64,11 @@ export default function CompanySignupPage() {
 
       router.push('/signup/company/complete')
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Something went wrong.')
+      const msg =
+        err instanceof Error
+          ? err.message
+          : (err as { message?: string })?.message || JSON.stringify(err) || 'Something went wrong.'
+      setError(msg)
       setLoading(false)
     }
   }
