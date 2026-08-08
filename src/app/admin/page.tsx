@@ -38,7 +38,7 @@ interface Company {
   domain: string
   Plan: string
   'is active': boolean
-  stripe_status: string
+  access_status: string
   access_until: string | null
   created_at: string
 }
@@ -110,7 +110,7 @@ export default function AdminPage() {
       })
       setCompanies(prev => prev.map(c =>
         c.id === company.id
-          ? { ...c, 'is active': true, stripe_status: 'active', access_until: untilDate }
+          ? { ...c, 'is active': true, access_status: 'active', access_until: untilDate }
           : c
       ))
       setActivating(null)

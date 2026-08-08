@@ -6,7 +6,7 @@ export async function GET() {
     const supabase = createAdminClient()
     const { data, error } = await supabase
       .from('Companies')
-      .select('id, Name, domain, Plan, "is active", stripe_status, created_at')
+      .select('id, Name, domain, Plan, "is active", access_status, access_until, created_at')
       .order('created_at', { ascending: false })
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ companies: data ?? [] })
@@ -22,7 +22,6 @@ export async function PATCH(req: NextRequest) {
     const supabase = createAdminClient()
     const update: Record<string, unknown> = {
       'is active': active,
-      stripe_status: active ? 'active' : 'pending_payment',
       access_status: active ? 'active' : 'pending',
     }
     if (access_until !== undefined) update.access_until = access_until
