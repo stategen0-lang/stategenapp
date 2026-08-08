@@ -4,11 +4,9 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Building2, Mail, Globe, Lock, ChevronLeft } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
 
 export default function CompanySignupPage() {
   const router = useRouter()
-  const supabase = createClient()
 
   const [companyName, setCompanyName] = useState('')
   const [domain, setDomain]           = useState('')
@@ -31,37 +29,13 @@ export default function CompanySignupPage() {
 
     setLoading(true)
     try {
-      // 1. Create auth user
-      const { data: authData, error: authErr } = await supabase.auth.signUp({ email, password })
-      if (authErr) throw authErr
-      if (!authData.user) throw new Error('Signup failed — please try again.')
-
-      // 2. Create company (inactive until manually activated)
-      const { data: company, error: companyErr } = await supabase
-        .from('Companies')
-        .insert({
-          Name: companyName,
-          domain: domain.toLowerCase(),
-          Plan: 'pro',
-          'is active': false,
-          stripe_status: 'pending_payment',
-        })
-        .select()
-        .single()
-      if (companyErr) throw companyErr
-
-      // 3. Create manager profile
-      const { error: profileErr } = await supabase
-        .from('Profiles')
-        .insert({
-          id: authData.user.id,
-          company_id: company.id,
-          Full_name: companyName + ' Manager',
-          role: 'owner',
-          approved: true,
-        })
-      if (profileErr) throw profileErr
-
+      const res = await fetch('/api/signup/company', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyName, domain: domain.toLowerCase(), email, planId: 'business', password }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'Signup failed — please try again.')
       router.push('/signup/company/complete')
     } catch (err: unknown) {
       const msg =
