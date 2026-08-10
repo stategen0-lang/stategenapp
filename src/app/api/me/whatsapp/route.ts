@@ -18,8 +18,9 @@ import { generatePairingCode, connectLink, connectText, PAIRING_TTL_MINUTES } fr
 const SELECT = 'whatsapp_number, whatsapp_enabled, whatsapp_opt_in_at, whatsapp_pending_code, whatsapp_pending_expires'
 
 function botNumber(): string {
-  // The production sender's number; sandbox number works for testing the flow.
-  return normalizePhone(process.env.TWILIO_WHATSAPP_NUMBER ?? '')
+  // The production Cloud API sender's E.164 number, used to build the wa.me
+  // connect deep link. Falls back to the old Twilio var during cutover.
+  return normalizePhone(process.env.WHATSAPP_DISPLAY_NUMBER ?? process.env.TWILIO_WHATSAPP_NUMBER ?? '')
 }
 
 export async function GET() {

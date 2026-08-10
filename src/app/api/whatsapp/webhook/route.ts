@@ -1,6 +1,6 @@
-import { NextRequest } from 'next/server'
+import { NextRequest, after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { verifySignature, twimlMessage } from '@/lib/whatsapp/twilio'
+import { verifyMetaSignature, parseInbound, verifyToken, sendText, type InboundMessage } from '@/lib/whatsapp/cloud'
 import { normalizePhone } from '@/lib/whatsapp/phone'
 import { parseConfirmation, parseReminderReply } from '@/lib/whatsapp/replies'
 import { classifyIntent, Intent } from '@/lib/whatsapp/intent'
@@ -16,28 +16,6 @@ import { parseConnect, isStopMessage, normalizeCode, pairingExpired } from '@/li
 import { handleAgentActivity, handleOverdueReminders } from '@/lib/whatsapp/manager-handlers'
 import { stageCreateEvent, handleQuerySchedule } from '@/lib/whatsapp/calendar-handlers'
 import type { SupabaseClient } from '@supabase/supabase-js'
-
-// Twilio posts form-encoded data and expects TwiML back.
-const XML = { 'Content-Type': 'text/xml; charset=utf-8' }
-
-function reply(body: string) {
-  return new Response(twimlMessage(body), { status: 200, headers: XML })
-}
-
-/**
- * The public URL Twilio signed. Behind Vercel's proxy the internal request URL
- * is http and carries the internal host, so the signature must be checked
- * against the forwarded values instead.
- */
-function originOf(req: NextRequest): string {
-  const proto = req.headers.get('x-forwarded-proto') ?? 'https'
-  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? ''
-  return `${proto}://${host}`
-}
-
-function publicUrl(req: NextRequest): string {
-  return `${originOf(req)}${req.nextUrl.pathname}${req.nextUrl.search}`
-}
 
 interface Profile {
   id: string
@@ -58,13 +36,45 @@ async function log(
     direction: 'inbound' | 'outbound'
     message: string
     intent?: string | null
+    wa_message_id?: string | null
   },
 ): Promise<string | null> {
   try {
     const { data } = await admin.from('whatsapp_logs').insert(row).select('id').maybeSingle()
     return (data?.id as string) ?? null
   } catch {
+    // The wa_message_id column may not exist yet (migration 013). Retry without
+    // it so logging — and therefore replies — never break on a schema lag.
+    if ('wa_message_id' in row) {
+      const { wa_message_id: _omit, ...rest } = row
+      void _omit
+      try {
+        const { data } = await admin.from('whatsapp_logs').insert(rest).select('id').maybeSingle()
+        return (data?.id as string) ?? null
+      } catch { return null }
+    }
     return null   // logging must never break a reply
+  }
+}
+
+/**
+ * Has this exact Meta message id already been processed? Cloud API delivers
+ * at-least-once, so a retried webhook must not re-run a write. Degrades to
+ * "not seen" if the wa_message_id column isn't present yet, in which case the
+ * fast 200 ack (below) already makes retries unlikely.
+ */
+async function alreadyHandled(admin: SupabaseClient, messageId: string): Promise<boolean> {
+  if (!messageId) return false
+  try {
+    const { data } = await admin
+      .from('whatsapp_logs')
+      .select('id')
+      .eq('wa_message_id', messageId)
+      .limit(1)
+      .maybeSingle()
+    return !!data
+  } catch {
+    return false
   }
 }
 
@@ -220,56 +230,59 @@ async function optOut(admin: SupabaseClient, profile: Profile): Promise<string> 
   return "You've been unsubscribed and won't get more messages here. To reconnect, open Settings → WhatsApp in the app and tap Connect."
 }
 
-export async function POST(req: NextRequest) {
-  const authToken = process.env.TWILIO_AUTH_TOKEN
-  if (!authToken) {
-    console.error('[whatsapp] TWILIO_AUTH_TOKEN is not set')
-    return new Response('Not configured', { status: 500 })
-  }
-
-  // ── Read the form body into a plain object (needed for the signature) ──────
-  const form = await req.formData()
-  const params: Record<string, string> = {}
-  for (const [k, v] of form.entries()) params[k] = typeof v === 'string' ? v : ''
-
-  // ── Authenticate the request ──────────────────────────────────────────────
-  // Without this, anyone who learns the URL could forge `From` and impersonate
-  // an agent, gaining full read/write access to that company's data.
-  const signature = req.headers.get('x-twilio-signature')
-  if (!verifySignature(authToken, signature, publicUrl(req), params)) {
-    console.warn('[whatsapp] rejected request with an invalid signature')
-    return new Response('Invalid signature', { status: 403 })
-  }
-
-  const from = params.From ?? ''
-  const body = (params.Body ?? '').trim()
+/**
+ * Resolve the sender, run the router, send the reply, and log both directions.
+ * Runs under `after()` — off the response path — because the Cloud API is
+ * asynchronous: we ack Meta's webhook with a fast 200 (below) and deliver the
+ * answer with a separate Graph call here, so Grok/template latency can't cause a
+ * webhook timeout or retry.
+ */
+async function handleInbound(inbound: InboundMessage, origin: string): Promise<void> {
   const admin = createAdminClient()
+  const phone = normalizePhone(inbound.from)
+  const body = inbound.text.trim()
 
-  // ── Identify the agent by the number they messaged from ───────────────────
-  const phone = normalizePhone(from)
   const { data: profile } = await admin
     .from('Profiles')
     .select('id, company_id, role, agent_code, Full_name, whatsapp_number, whatsapp_enabled')
     .eq('whatsapp_number', phone)
     .maybeSingle<Profile>()
 
+  // Helper: send a reply and log it (outbound rows are keyed by the profile when
+  // we know it; a stranger/connect reply has none).
+  const answerWith = async (text: string, intent: string, p?: Profile) => {
+    const sent = await sendText(inbound.from, text)
+    if (!sent.ok) console.error('[whatsapp] reply send failed', sent.error)
+    await log(admin, {
+      company_id: p?.company_id ?? null,
+      profile_id: p?.id ?? null,
+      from_number: phone,
+      direction: 'outbound',
+      message: text,
+      intent,
+    })
+  }
+
   if (!profile) {
     // An unknown number is either someone connecting ("connect <code>") or a
     // stranger. Everything else gets pointed at the in-app connect flow.
     const paired = await tryPair(admin, phone, body)
-    await log(admin, { from_number: phone, direction: 'inbound', message: body, intent: paired ? 'connect' : 'unregistered' })
-    return reply(paired ?? 'This number isn\'t connected to StateGen. Open the app → Settings → WhatsApp and tap Connect to link it.')
+    await log(admin, { from_number: phone, direction: 'inbound', message: body, intent: paired ? 'connect' : 'unregistered', wa_message_id: inbound.messageId })
+    await answerWith(paired ?? "This number isn't connected to StateGen. Open the app → Settings → WhatsApp and tap Connect to link it.", paired ? 'connect' : 'unregistered')
+    return
   }
 
   // A connected user texting STOP opts out (Meta requires honouring this), and
   // an account whose assistant is paused gets a short notice instead of replies.
   if (isStopMessage(body)) {
-    await log(admin, { company_id: profile.company_id, profile_id: profile.id, from_number: phone, direction: 'inbound', message: body, intent: 'opt_out' })
-    return reply(await optOut(admin, profile))
+    await log(admin, { company_id: profile.company_id, profile_id: profile.id, from_number: phone, direction: 'inbound', message: body, intent: 'opt_out', wa_message_id: inbound.messageId })
+    await answerWith(await optOut(admin, profile), 'opt_out', profile)
+    return
   }
   if (profile.whatsapp_enabled === false) {
-    await log(admin, { company_id: profile.company_id, profile_id: profile.id, from_number: phone, direction: 'inbound', message: body, intent: 'disabled' })
-    return reply('The WhatsApp assistant is turned off for your account. Turn it back on in Settings → WhatsApp.')
+    await log(admin, { company_id: profile.company_id, profile_id: profile.id, from_number: phone, direction: 'inbound', message: body, intent: 'disabled', wa_message_id: inbound.messageId })
+    await answerWith('The WhatsApp assistant is turned off for your account. Turn it back on in Settings → WhatsApp.', 'disabled', profile)
+    return
   }
 
   // Logged before routing so an inbound message survives even if a handler
@@ -280,14 +293,13 @@ export async function POST(req: NextRequest) {
     from_number: phone,
     direction: 'inbound',
     message: body,
+    wa_message_id: inbound.messageId,
   })
 
-  // ── Route ─────────────────────────────────────────────────────────────────
   let answer: string
   let intent: Intent | 'confirm_pending' = 'unknown'
-
   try {
-    const routed = await route(admin, profile, body, originOf(req))
+    const routed = await route(admin, profile, body, origin)
     intent = routed.intent
     answer = routed.answer
   } catch (err) {
@@ -300,19 +312,69 @@ export async function POST(req: NextRequest) {
     try { await admin.from('whatsapp_logs').update({ intent }).eq('id', inboundLogId) } catch { /* never break a reply */ }
   }
 
-  await log(admin, {
-    company_id: profile.company_id,
-    profile_id: profile.id,
-    from_number: phone,
-    direction: 'outbound',
-    message: answer,
-    intent,
-  })
-
-  return reply(answer)
+  await answerWith(answer, intent, profile)
 }
 
-// Twilio pings the URL with GET when you save it in the console.
-export async function GET() {
-  return new Response('StateGen WhatsApp webhook is running.', { status: 200 })
+/**
+ * The public origin, for building absolute links in replies (share_listing).
+ * Behind Vercel's proxy the internal request URL is http on an internal host,
+ * so the forwarded headers are what carry the real values.
+ */
+function originOf(req: NextRequest): string {
+  const proto = req.headers.get('x-forwarded-proto') ?? 'https'
+  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? ''
+  return `${proto}://${host}`
+}
+
+export async function POST(req: NextRequest) {
+  const appSecret = process.env.WHATSAPP_APP_SECRET
+  if (!appSecret) {
+    console.error('[whatsapp] WHATSAPP_APP_SECRET is not set')
+    return new Response('Not configured', { status: 500 })
+  }
+
+  // ── Authenticate the request ──────────────────────────────────────────────
+  // HMAC over the RAW body — read it as text before any JSON parsing, because a
+  // re-serialised payload would not reproduce Meta's digest. Without this check,
+  // anyone who learns the URL could forge a sender and impersonate an agent.
+  const raw = await req.text()
+  const signature = req.headers.get('x-hub-signature-256')
+  if (!verifyMetaSignature(appSecret, signature, raw)) {
+    console.warn('[whatsapp] rejected request with an invalid signature')
+    return new Response('Invalid signature', { status: 403 })
+  }
+
+  let payload: unknown
+  try { payload = JSON.parse(raw) } catch { return new Response('Bad JSON', { status: 400 }) }
+
+  const inbound = parseInbound(payload)
+  // Status callbacks (delivery/read receipts) and anything non-actionable: just
+  // acknowledge so Meta stops retrying.
+  if (!inbound || !inbound.from) return new Response('ok', { status: 200 })
+
+  // Dedupe Meta's at-least-once delivery before doing any work.
+  const admin = createAdminClient()
+  if (await alreadyHandled(admin, inbound.messageId)) {
+    return new Response('ok', { status: 200 })
+  }
+
+  // Ack immediately; do the real work (classification, DB writes, the reply
+  // send) after the response so webhook latency stays flat.
+  after(() => handleInbound(inbound, originOf(req)))
+  return new Response('ok', { status: 200 })
+}
+
+// Meta's webhook verification handshake: it GETs the URL with hub.mode,
+// hub.verify_token and hub.challenge. Echo the challenge back as plain text when
+// the token matches, else 403.
+export async function GET(req: NextRequest) {
+  const params = req.nextUrl.searchParams
+  const mode = params.get('hub.mode')
+  const token = params.get('hub.verify_token')
+  const challenge = params.get('hub.challenge')
+
+  if (mode === 'subscribe' && token && token === verifyToken()) {
+    return new Response(challenge ?? '', { status: 200, headers: { 'Content-Type': 'text/plain' } })
+  }
+  return new Response('Forbidden', { status: 403 })
 }

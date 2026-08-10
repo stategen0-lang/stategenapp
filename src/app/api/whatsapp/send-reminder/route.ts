@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { sendWhatsApp } from '@/lib/whatsapp/twilio'
+import { sendText } from '@/lib/whatsapp/cloud'
 import { dbRowToClient } from '@/lib/db-mappers'
 import {
   isDue, lastContactAt, reminderText, STALE_AFTER_DAYS,
@@ -137,7 +137,12 @@ export async function POST(req: NextRequest) {
     })
     if (dry) continue
 
-    const sent = await sendWhatsApp(`whatsapp:${profile.whatsapp_number}`, message)
+    // NOTE: these run outside the 24-hour window, so once the account is out of
+    // dev/testing they must go via an approved template (sendTemplate) — free
+    // text to a cold contact is silently rejected by Meta. See the migration
+    // plan's Templates section; for now sendText works for the verified test
+    // number and any agent who messaged the bot in the last 24h.
+    const sent = await sendText(profile.whatsapp_number, message)
     if (!sent.ok) {
       console.error('[whatsapp] reminder send failed', sent.error)
       results[results.length - 1].status = `failed: ${sent.error}`
