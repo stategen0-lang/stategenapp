@@ -339,7 +339,20 @@ export async function POST(req: NextRequest) {
   // anyone who learns the URL could forge a sender and impersonate an agent.
   const raw = await req.text()
   const signature = req.headers.get('x-hub-signature-256')
-  if (!verifyMetaSignature(appSecret, signature, raw)) {
+  const sigValid = verifyMetaSignature(appSecret, signature, raw)
+
+  // TEMP DIAGNOSTIC (remove after debugging) — record every webhook hit so we
+  // can tell from the DB whether Meta is calling us and whether the signature
+  // validates. Truncated body, no secrets.
+  try {
+    await createAdminClient().from('whatsapp_logs').insert({
+      direction: 'inbound',
+      intent: 'debug_hit',
+      message: `sigPresent=${!!signature} sigValid=${sigValid} len=${raw.length} body=${raw.slice(0, 300)}`,
+    })
+  } catch { /* diagnostic only */ }
+
+  if (!sigValid) {
     console.warn('[whatsapp] rejected request with an invalid signature')
     return new Response('Invalid signature', { status: 403 })
   }
