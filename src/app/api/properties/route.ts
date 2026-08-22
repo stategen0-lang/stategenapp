@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/session'
@@ -78,14 +78,16 @@ export async function POST(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    // Raise match alerts for clients this new listing fits. Non-fatal: the
-    // listing is already saved, so a failure here must not fail the request.
-    let alerts = 0
-    try {
-      alerts = await createListingAlerts(createAdminClient(), session.companyId, data as Record<string, unknown>)
-    } catch { /* already logged inside */ }
+    // Raise match alerts for clients this new listing fits — deferred with
+    // after() so the save returns instantly; the scan runs off the response path.
+    // Non-fatal: the listing is already saved, so a failure here can't fail it.
+    const companyId = session.companyId
+    const saved = data as Record<string, unknown>
+    after(async () => {
+      try { await createListingAlerts(createAdminClient(), companyId, saved) } catch { /* already logged inside */ }
+    })
 
-    return NextResponse.json({ property: data, alerts })
+    return NextResponse.json({ property: data })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }

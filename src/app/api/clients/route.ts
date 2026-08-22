@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { recalculateScores } from '@/lib/score-engine'
 import { getSession } from '@/lib/session'
@@ -11,9 +11,11 @@ function clientAgent(row: Record<string, unknown>): string | null {
 }
 
 // A client change is a scoring signal — refresh that client's lead score.
-// Non-fatal: a scoring hiccup must never fail the client write itself.
-async function refreshScore(clientId: number, companyId: number) {
-  try { await recalculateScores({ clientId, companyId }) } catch { /* ignore */ }
+// Deferred with after() so the write returns immediately: re-scoring loads the
+// company's clients/properties/deals and was making every save wait on it. The
+// new score lands a moment later and shows on the next read. Non-fatal.
+function refreshScoreAfter(clientId: number, companyId: number) {
+  after(async () => { try { await recalculateScores({ clientId, companyId }) } catch { /* ignore */ } })
 }
 
 export async function GET(req: NextRequest) {
@@ -117,10 +119,8 @@ export async function PATCH(req: NextRequest) {
       .select()
       .single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    await refreshScore(Number(id), session.companyId)
-    const { data: fresh } = await supabase
-      .from('client_requests').select('*').eq('id', id).single()
-    return NextResponse.json({ ok: true, client: fresh ?? data })
+    refreshScoreAfter(Number(id), session.companyId)
+    return NextResponse.json({ ok: true, client: data })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
@@ -172,7 +172,7 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    if (data?.id) await refreshScore(Number(data.id), session.companyId)
+    if (data?.id) refreshScoreAfter(Number(data.id), session.companyId)
     return NextResponse.json({ client: data })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
