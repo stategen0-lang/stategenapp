@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import AppSidebar from '@/components/dashboard/AppSidebar'
 import { createClient } from '@/lib/supabase/server'
-import { getSession } from '@/lib/session'
+import { getSession, getCompanyAccess } from '@/lib/session'
 import { companyHasAccess } from '@/lib/billing'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -12,8 +12,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   // The company must have active (manually-billed) access — unless this is a
   // StateGen operator. /renew lives outside this layout, so no redirect loop.
-  if (session && !session.isPlatformAdmin && !companyHasAccess(session.companyAccessStatus, session.companyAccessUntil)) {
-    redirect('/renew')
+  if (session && !session.isPlatformAdmin) {
+    const access = await getCompanyAccess(session.companyId)
+    if (!companyHasAccess(access.status, access.until)) redirect('/renew')
   }
 
   // Agents wait for a manager to approve them before they can use the app.
