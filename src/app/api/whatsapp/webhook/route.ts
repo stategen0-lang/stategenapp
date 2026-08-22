@@ -58,27 +58,6 @@ async function log(
 }
 
 /**
- * Has this exact Meta message id already been processed? Cloud API delivers
- * at-least-once, so a retried webhook must not re-run a write. Degrades to
- * "not seen" if the wa_message_id column isn't present yet, in which case the
- * fast 200 ack (below) already makes retries unlikely.
- */
-async function alreadyHandled(admin: SupabaseClient, messageId: string): Promise<boolean> {
-  if (!messageId) return false
-  try {
-    const { data } = await admin
-      .from('whatsapp_logs')
-      .select('id')
-      .eq('wa_message_id', messageId)
-      .limit(1)
-      .maybeSingle()
-    return !!data
-  } catch {
-    return false
-  }
-}
-
-/**
  * Decide the reply. Split out from POST so each branch simply returns, rather
  * than assigning into a variable that later branches could still overwrite.
  *
@@ -237,10 +216,14 @@ async function optOut(admin: SupabaseClient, profile: Profile): Promise<string> 
  * answer with a separate Graph call here, so Grok/template latency can't cause a
  * webhook timeout or retry.
  */
-async function handleInbound(inbound: InboundMessage, origin: string): Promise<void> {
+async function handleInbound(
+  inbound: InboundMessage,
+  phone: string,
+  body: string,
+  inboundLogId: string | null,
+  origin: string,
+): Promise<void> {
   const admin = createAdminClient()
-  const phone = normalizePhone(inbound.from)
-  const body = inbound.text.trim()
 
   const { data: profile } = await admin
     .from('Profiles')
@@ -248,8 +231,14 @@ async function handleInbound(inbound: InboundMessage, origin: string): Promise<v
     .eq('whatsapp_number', phone)
     .maybeSingle<Profile>()
 
-  // Helper: send a reply and log it (outbound rows are keyed by the profile when
-  // we know it; a stranger/connect reply has none).
+  // The inbound row was already created (for dedupe) in POST; here we stamp it
+  // with the resolved company/profile/intent. Never breaks a reply.
+  const stamp = async (fields: Record<string, unknown>) => {
+    if (!inboundLogId) return
+    try { await admin.from('whatsapp_logs').update(fields).eq('id', inboundLogId) } catch { /* never break a reply */ }
+  }
+
+  // Helper: send a reply and log the outbound row.
   const answerWith = async (text: string, intent: string, p?: Profile) => {
     const sent = await sendText(inbound.from, text)
     if (!sent.ok) console.error('[whatsapp] reply send failed', sent.error)
@@ -264,37 +253,33 @@ async function handleInbound(inbound: InboundMessage, origin: string): Promise<v
   }
 
   if (!profile) {
-    // An unknown number is either someone connecting ("connect <code>") or a
-    // stranger. Everything else gets pointed at the in-app connect flow.
+    // Unknown number. The ONLY message we answer from an unregistered number is a
+    // genuine "connect <code>" pairing attempt — every other message is ignored
+    // silently, so the bot never replies to strangers, wrong numbers, or spam.
     const paired = await tryPair(admin, phone, body)
-    await log(admin, { from_number: phone, direction: 'inbound', message: body, intent: paired ? 'connect' : 'unregistered', wa_message_id: inbound.messageId })
-    await answerWith(paired ?? "This number isn't connected to StateGen. Open the app → Settings → WhatsApp and tap Connect to link it.", paired ? 'connect' : 'unregistered')
+    if (paired === null) {
+      await stamp({ intent: 'ignored_unregistered' })
+      return
+    }
+    await stamp({ intent: 'connect' })
+    await answerWith(paired, 'connect')
     return
   }
+
+  await stamp({ company_id: profile.company_id, profile_id: profile.id })
 
   // A connected user texting STOP opts out (Meta requires honouring this), and
   // an account whose assistant is paused gets a short notice instead of replies.
   if (isStopMessage(body)) {
-    await log(admin, { company_id: profile.company_id, profile_id: profile.id, from_number: phone, direction: 'inbound', message: body, intent: 'opt_out', wa_message_id: inbound.messageId })
+    await stamp({ intent: 'opt_out' })
     await answerWith(await optOut(admin, profile), 'opt_out', profile)
     return
   }
   if (profile.whatsapp_enabled === false) {
-    await log(admin, { company_id: profile.company_id, profile_id: profile.id, from_number: phone, direction: 'inbound', message: body, intent: 'disabled', wa_message_id: inbound.messageId })
+    await stamp({ intent: 'disabled' })
     await answerWith('The WhatsApp assistant is turned off for your account. Turn it back on in Settings → WhatsApp.', 'disabled', profile)
     return
   }
-
-  // Logged before routing so an inbound message survives even if a handler
-  // throws; the resolved intent is written back onto this row afterwards.
-  const inboundLogId = await log(admin, {
-    company_id: profile.company_id,
-    profile_id: profile.id,
-    from_number: phone,
-    direction: 'inbound',
-    message: body,
-    wa_message_id: inbound.messageId,
-  })
 
   let answer: string
   let intent: Intent | 'confirm_pending' = 'unknown'
@@ -308,10 +293,7 @@ async function handleInbound(inbound: InboundMessage, origin: string): Promise<v
     answer = 'Something went wrong on my side. Please try again in a moment.'
   }
 
-  if (inboundLogId) {
-    try { await admin.from('whatsapp_logs').update({ intent }).eq('id', inboundLogId) } catch { /* never break a reply */ }
-  }
-
+  await stamp({ intent })
   await answerWith(answer, intent, profile)
 }
 
@@ -339,20 +321,7 @@ export async function POST(req: NextRequest) {
   // anyone who learns the URL could forge a sender and impersonate an agent.
   const raw = await req.text()
   const signature = req.headers.get('x-hub-signature-256')
-  const sigValid = verifyMetaSignature(appSecret, signature, raw)
-
-  // TEMP DIAGNOSTIC (remove after debugging) — record every webhook hit so we
-  // can tell from the DB whether Meta is calling us and whether the signature
-  // validates. Truncated body, no secrets.
-  try {
-    await createAdminClient().from('whatsapp_logs').insert({
-      direction: 'inbound',
-      intent: 'debug_hit',
-      message: `sigPresent=${!!signature} sigValid=${sigValid} len=${raw.length} body=${raw.slice(0, 300)}`,
-    })
-  } catch { /* diagnostic only */ }
-
-  if (!sigValid) {
+  if (!verifyMetaSignature(appSecret, signature, raw)) {
     console.warn('[whatsapp] rejected request with an invalid signature')
     return new Response('Invalid signature', { status: 403 })
   }
@@ -365,15 +334,37 @@ export async function POST(req: NextRequest) {
   // acknowledge so Meta stops retrying.
   if (!inbound || !inbound.from) return new Response('ok', { status: 200 })
 
-  // Dedupe Meta's at-least-once delivery before doing any work.
+  const phone = normalizePhone(inbound.from)
+  const body = inbound.text.trim()
   const admin = createAdminClient()
-  if (await alreadyHandled(admin, inbound.messageId)) {
-    return new Response('ok', { status: 200 })
+
+  // Atomic dedupe + inbound log in one insert. Meta delivers at-least-once, so
+  // the same message id can arrive several times (and did, badly, while the
+  // signature was misconfigured). The UNIQUE index on wa_message_id (migration
+  // 013) makes a repeat delivery fail this insert with 23505, so we ack and skip
+  // it — each message is processed exactly once. If the column isn't there yet,
+  // we fall back to a plain insert (no dedupe) so the bot still works.
+  let inboundLogId: string | null = null
+  const claim = await admin
+    .from('whatsapp_logs')
+    .insert({ direction: 'inbound', message: body, from_number: phone, wa_message_id: inbound.messageId })
+    .select('id')
+    .maybeSingle()
+  if (claim.error) {
+    if (claim.error.code === '23505') return new Response('ok', { status: 200 }) // duplicate delivery
+    const retry = await admin
+      .from('whatsapp_logs')
+      .insert({ direction: 'inbound', message: body, from_number: phone })
+      .select('id')
+      .maybeSingle()
+    inboundLogId = (retry.data?.id as string) ?? null
+  } else {
+    inboundLogId = (claim.data?.id as string) ?? null
   }
 
   // Ack immediately; do the real work (classification, DB writes, the reply
   // send) after the response so webhook latency stays flat.
-  after(() => handleInbound(inbound, originOf(req)))
+  after(() => handleInbound(inbound, phone, body, inboundLogId, originOf(req)))
   return new Response('ok', { status: 200 })
 }
 
