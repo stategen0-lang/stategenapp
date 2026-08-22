@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { requireAdmin } from '@/lib/admin-guard'
 
 export async function GET() {
+  const gate = await requireAdmin()
+  if ('error' in gate) return NextResponse.json({ error: gate.error }, { status: gate.status })
   try {
     const supabase = createAdminClient()
     const { data, error } = await supabase
@@ -16,6 +19,8 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
+  const gate = await requireAdmin()
+  if ('error' in gate) return NextResponse.json({ error: gate.error }, { status: gate.status })
   try {
     const { id, active, access_until } = await req.json()
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })

@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generateDescription, type DescriptionInput } from '@/lib/ai/property-description'
+import { getSession } from '@/lib/session'
 
 export async function POST(req: NextRequest) {
+  // Require a signed-in user: this calls a paid model, so an open endpoint would
+  // let anyone burn the xAI credits.
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   try {
     const body = await req.json() as DescriptionInput & { template?: string }
     const { template, ...data } = body

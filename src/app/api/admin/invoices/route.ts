@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSession } from '@/lib/session'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { requireAdmin } from '@/lib/admin-guard'
 import { planFor } from '@/lib/stripe-plans'
 import { DEFAULT_PERIOD_DAYS } from '@/lib/billing'
 
@@ -12,13 +12,6 @@ import { DEFAULT_PERIOD_DAYS } from '@/lib/billing'
 //   PATCH { id, status:'paid'|'void', method? }
 //           marking paid stamps paid_at AND activates the company through the
 //           invoice's period_end — this is how access is granted/renewed.
-
-async function requireAdmin() {
-  const session = await getSession()
-  if (!session) return { error: 'Unauthorized', status: 401 as const }
-  if (!session.isPlatformAdmin) return { error: 'Forbidden', status: 403 as const }
-  return { session }
-}
 
 const iso = (d: Date) => d.toISOString().slice(0, 10)
 
