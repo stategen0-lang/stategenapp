@@ -38,7 +38,12 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith('/privacy') ||
     pathname.startsWith('/api') ||
     pathname.startsWith('/l/') ||
-    pathname.startsWith('/admin')
+    pathname.startsWith('/admin') ||
+    // PWA assets must be reachable without a session, or install + offline break.
+    pathname === '/manifest.webmanifest' ||
+    pathname === '/sw.js' ||
+    pathname === '/offline.html' ||
+    pathname.startsWith('/icons/')
 
   if (!user && !isPublicPath) {
     return NextResponse.redirect(new URL('/login', request.url))

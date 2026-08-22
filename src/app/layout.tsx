@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Public_Sans } from "next/font/google";
 import "./globals.css";
+import ServiceWorkerRegister from "@/components/pwa/ServiceWorkerRegister";
 
 const publicSans = Public_Sans({
   variable: "--font-public-sans",
@@ -33,6 +34,17 @@ export const metadata: Metadata = {
     description: DESCRIPTION,
     images: ["/logo.png"],
   },
+  // PWA: home-screen icon + iOS standalone behaviour. The web manifest is served
+  // automatically from src/app/manifest.ts.
+  icons: {
+    icon: "/icon.png",
+    apple: "/icons/apple-touch-icon.png",
+  },
+  appleWebApp: {
+    capable: true,
+    title: "StateGen",
+    statusBarStyle: "default",
+  },
 };
 
 export const viewport: Viewport = {
@@ -51,7 +63,10 @@ export default function RootLayout({
       className={`${publicSans.variable} h-full antialiased`}
       style={{ fontFamily: 'var(--font-public-sans), -apple-system, BlinkMacSystemFont, sans-serif' }}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <ServiceWorkerRegister />
+        {children}
+      </body>
     </html>
   );
 }

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Offline · StateGen</title>
+    <style>
+      html, body { height: 100%; margin: 0; }
+      body {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 16px; text-align: center; padding: 24px;
+        background: #0E1F3D; color: #fff;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      img { width: 96px; height: 96px; }
+      h1 { font-size: 20px; font-weight: 800; margin: 0; letter-spacing: -0.3px; }
+      p { font-size: 14px; color: #AEB8CC; margin: 0; max-width: 300px; line-height: 1.5; }
+      button {
+        margin-top: 8px; padding: 10px 20px; border: none; border-radius: 12px;
+        background: #fff; color: #0E1F3D; font-weight: 700; font-size: 14px; cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <img src="/icons/icon-192.png" alt="StateGen" />
+    <h1>You're offline</h1>
+    <p>StateGen needs an internet connection. Check your network and try again.</p>
+    <button onclick="location.reload()">Retry</button>
+  </body>
+</html>
