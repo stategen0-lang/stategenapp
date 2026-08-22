@@ -1,20 +1,34 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { sendText } from '@/lib/whatsapp/cloud'
+import { sendTemplate } from '@/lib/whatsapp/cloud'
 import { dbRowToClient } from '@/lib/db-mappers'
 import {
   isDue, lastContactAt, reminderText, STALE_AFTER_DAYS,
   type ReminderClient,
 } from '@/lib/whatsapp/reminders'
 import { todaysAgenda } from '@/lib/whatsapp/calendar-handlers'
+import { wallClock } from '@/lib/whatsapp/timezone'
 
-// Runs from Vercel Cron (see vercel.json). The spec uses Supabase pg_cron; this
-// app is deployed on Vercel, so the schedule lives there and calls this route.
+// Runs from Vercel Cron (see vercel.json), now **hourly**. Each agent picks the
+// local hour they want their digest (Profiles.reminder_hour, Asia/Beirut); this
+// job fires every hour and messages only the agents whose chosen hour equals the
+// current local hour. Cron is UTC, but we compare against the agency's wall clock
+// via wallClock(), so DST is handled automatically — no October edit needed.
 //
-// Scheduled at 06:00 UTC. Vercel Cron only understands UTC, so that is 9am in
-// Beirut during summer time (UTC+3) and 8am in winter (UTC+2). If the winter
-// hour matters, the cron expression needs changing in October — there is no way
-// to express "9am local" in vercel.json.
+// The daily digest goes out as an APPROVED TEMPLATE (sendTemplate), because it is
+// sent outside WhatsApp's 24-hour service window — free text there is silently
+// dropped by Meta. Template name defaults to 'daily_agenda' (override with
+// WHATSAPP_REMINDER_TEMPLATE). Its body has three {{n}} params, all single-line:
+//   {{1}} agent first name   {{2}} today's agenda   {{3}} the follow-up nudge
+const TEMPLATE_NAME = process.env.WHATSAPP_REMINDER_TEMPLATE || 'daily_agenda'
+const TEMPLATE_LANG = process.env.WHATSAPP_REMINDER_TEMPLATE_LANG || 'en'
+
+// Template variables can't contain newlines, tabs, or >4 spaces (Meta rejects
+// them), so every param is squashed to a single clean line.
+function oneLine(s: string, max = 500): string {
+  const t = s.replace(/\s+/g, ' ').trim()
+  return (t.length > max ? t.slice(0, max - 1).trimEnd() + '…' : t) || '—'
+}
 
 /**
  * Only the scheduler may run this. Without the check, anyone who found the URL
@@ -59,17 +73,40 @@ export async function POST(req: NextRequest) {
     .from('conversation_state').delete().lt('updated_at', dayAgo).select('id')
   cleanup.staleFlows = stale?.length ?? 0
 
-  // ── Agents who can actually receive a message ─────────────────────────────
-  const { data: profiles } = await admin
+  // ── Agents due a digest THIS hour ─────────────────────────────────────────
+  // Each agent's chosen hour is in the agency's local time; compare against the
+  // wall clock, not UTC.
+  const nowHour = wallClock(now).hour
+  let profiles: { id: string; company_id: number; role: string; agent_code: string | null; Full_name: string | null; whatsapp_number: string | null }[] | null = null
+
+  const res = await admin
     .from('Profiles')
     .select('id, company_id, role, agent_code, Full_name, whatsapp_number')
     .not('whatsapp_number', 'is', null)
+    .eq('reminder_hour', nowHour)
 
-  if (!profiles?.length) return Response.json({ sent: 0, cleanup, note: 'No agents have a WhatsApp number registered.' })
+  if (res.error?.code === '42703') {
+    // Migration 015 not applied yet: fall back to the old fixed schedule (9am
+    // local) so hourly cron doesn't spam everyone 24×/day in the meantime.
+    if (nowHour !== 9) {
+      return Response.json({ sent: 0, cleanup, hour: nowHour, note: 'reminder_hour column missing (run migration 015); only sending at 9am until then.' })
+    }
+    const fallback = await admin
+      .from('Profiles')
+      .select('id, company_id, role, agent_code, Full_name, whatsapp_number')
+      .not('whatsapp_number', 'is', null)
+    profiles = fallback.data
+  } else {
+    profiles = res.data
+  }
+
+  if (!profiles?.length) return Response.json({ sent: 0, cleanup, hour: nowHour, note: 'No agents scheduled for this hour.' })
 
   const results: { agent: string; client: string; events: number; status: string }[] = []
 
   for (const profile of profiles) {
+    if (!profile.whatsapp_number) continue   // selected as non-null, but narrow the type
+
     // ── Reminders already scheduled and due ─────────────────────────────────
     const { data: due } = await admin
       .from('reminder_schedule')
@@ -137,12 +174,26 @@ export async function POST(req: NextRequest) {
     })
     if (dry) continue
 
-    // NOTE: these run outside the 24-hour window, so once the account is out of
-    // dev/testing they must go via an approved template (sendTemplate) — free
-    // text to a cold contact is silently rejected by Meta. See the migration
-    // plan's Templates section; for now sendText works for the verified test
-    // number and any agent who messaged the bot in the last 24h.
-    const sent = await sendText(profile.whatsapp_number, message)
+    // Fill the three single-line template params. Because we skip when there's
+    // neither an agenda nor a follow-up, at least one is real; the other shows a
+    // friendly "nothing" line so no param is ever empty (Meta rejects empties).
+    const firstName = (profile.Full_name ?? '').trim().split(/\s+/)[0] || 'there'
+    const agendaParam = agenda ? oneLine(agenda.replace(/\n/g, ' · ').replace(/•\s*/g, '')) : 'Nothing scheduled today.'
+    const followParam = top
+      ? oneLine(reminderText(top.client, now).split('\n').slice(0, 3).join(' '))
+      : 'No follow-ups due today.'
+    const components = [{
+      type: 'body',
+      parameters: [
+        { type: 'text', text: firstName },
+        { type: 'text', text: agendaParam },
+        { type: 'text', text: followParam },
+      ],
+    }]
+
+    // Sent as an approved template — this fires outside the 24h window, where
+    // free text is silently dropped by Meta.
+    const sent = await sendTemplate(profile.whatsapp_number, TEMPLATE_NAME, TEMPLATE_LANG, components)
     if (!sent.ok) {
       console.error('[whatsapp] reminder send failed', sent.error)
       results[results.length - 1].status = `failed: ${sent.error}`

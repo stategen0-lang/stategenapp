@@ -28,13 +28,20 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const admin = createAdminClient()
-  const { data } = await admin.from('Profiles').select(SELECT).eq('id', session.userId).maybeSingle()
+  // Try to include reminder_hour; fall back to the base columns if migration 015
+  // hasn't been applied yet, defaulting the hour to 9.
+  let res = await admin.from('Profiles').select(`${SELECT}, reminder_hour`).eq('id', session.userId).maybeSingle()
+  if (res.error?.code === '42703') {
+    res = await admin.from('Profiles').select(SELECT).eq('id', session.userId).maybeSingle()
+  }
+  const data = res.data as Record<string, unknown> | null
 
   return NextResponse.json({
     connected: !!data?.whatsapp_number,
     number: (data?.whatsapp_number as string | null) ?? null,
     enabled: data?.whatsapp_enabled !== false,
     optInAt: (data?.whatsapp_opt_in_at as string | null) ?? null,
+    reminderHour: (data?.reminder_hour as number | null) ?? 9,
   })
 }
 
@@ -68,17 +75,28 @@ export async function PATCH(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  let enabled: boolean
+  let body: { enabled?: unknown; reminderHour?: unknown }
   try {
-    enabled = !!(await req.json()).enabled
+    body = await req.json()
   } catch {
     return NextResponse.json({ error: 'Invalid body' }, { status: 400 })
   }
 
+  const update: Record<string, unknown> = {}
+  if ('enabled' in body) update.whatsapp_enabled = !!body.enabled
+  if ('reminderHour' in body) {
+    const h = Number(body.reminderHour)
+    if (!Number.isInteger(h) || h < 0 || h > 23) {
+      return NextResponse.json({ error: 'reminderHour must be an integer 0–23' }, { status: 400 })
+    }
+    update.reminder_hour = h
+  }
+  if (!Object.keys(update).length) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
+
   const admin = createAdminClient()
-  const { error } = await admin.from('Profiles').update({ whatsapp_enabled: enabled }).eq('id', session.userId)
+  const { error } = await admin.from('Profiles').update(update).eq('id', session.userId)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true, enabled })
+  return NextResponse.json({ ok: true, ...update })
 }
 
 export async function DELETE() {

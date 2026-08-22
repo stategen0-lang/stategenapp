@@ -95,7 +95,7 @@ export default function ProfilePage() {
 
 
   // ── WhatsApp connection ──
-  type WaStatus = { connected: boolean; number: string | null; enabled: boolean; optInAt: string | null }
+  type WaStatus = { connected: boolean; number: string | null; enabled: boolean; optInAt: string | null; reminderHour?: number }
   type WaConnect = { code: string; link: string; message: string; expiresInMinutes: number }
   const [wa, setWa] = useState<WaStatus | null>(null)
   const [waConnect, setWaConnect] = useState<WaConnect | null>(null)
@@ -125,6 +125,10 @@ export default function ProfilePage() {
   async function waToggle(enabled: boolean) {
     const r = await fetch('/api/me/whatsapp', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }) })
     if (r.ok) setWa(w => w ? { ...w, enabled } : w)
+  }
+  async function waSetHour(reminderHour: number) {
+    setWa(w => w ? { ...w, reminderHour } : w)   // optimistic
+    await fetch('/api/me/whatsapp', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reminderHour }) })
   }
   async function waDisconnect() {
     const r = await fetch('/api/me/whatsapp', { method: 'DELETE' })
@@ -300,6 +304,25 @@ export default function ProfilePage() {
                 >
                   Disconnect
                 </button>
+              </div>
+
+              {/* Daily reminder time — the hour the agent gets their WhatsApp digest */}
+              <div className="pt-3" style={{ borderTop: '1px solid #EEF0F4' }}>
+                <label className="text-xs font-bold" style={{ color: H }}>Daily reminder time</label>
+                <p className="text-xs mt-0.5 mb-2" style={{ color: SUB }}>
+                  When you get your morning agenda &amp; follow-up nudge (Beirut time).
+                </p>
+                <select
+                  value={wa.reminderHour ?? 9}
+                  onChange={e => waSetHour(Number(e.target.value))}
+                  className="rounded-xl px-3 py-2 text-sm font-semibold"
+                  style={{ border: '1.5px solid #EEF0F4', background: '#F7F8FB', color: H }}
+                >
+                  {Array.from({ length: 24 }, (_, h) => {
+                    const label = new Date(2020, 0, 1, h).toLocaleTimeString('en-US', { hour: 'numeric', hour12: true })
+                    return <option key={h} value={h}>{label}</option>
+                  })}
+                </select>
               </div>
             </div>
           ) : waConnect ? (
