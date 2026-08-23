@@ -40,9 +40,14 @@ export function dbRowToClient(row: Record<string, unknown>, idx: number): Client
   let extras: Record<string, unknown> = {}
   try { extras = JSON.parse(row.notes as string || '{}') } catch {}
   const reqExtras = (extras.req as Record<string, unknown>) ?? {}
+  // req.type must be a PROPERTY type (Appartement/Villa/…). Older imports wrongly
+  // stored a transaction ("For Sale"/"For Rent") here, which then hard-excluded
+  // every match on the type filter — so ignore anything that isn't a real type.
+  const VALID_REQ_TYPES = new Set(['Appartement', 'Shop', 'Office', 'Building', 'Villa', 'Land', 'Showroom', 'Restaurant'])
+  const reqType = VALID_REQ_TYPES.has(String(reqExtras.type)) ? (reqExtras.type as ClientReq['type']) : ''
   const req: ClientReq = {
     transaction: (row['payment_terms'] as ClientReq['transaction']) ?? '',
-    type: (reqExtras.type as ClientReq['type']) ?? '',
+    type: reqType,
     location: (row['prefered-location'] as string) ?? '',
     priceMin: (row['budget_min'] as number) ?? 0,
     priceMax: (row['budget_max'] as number) ?? 0,
