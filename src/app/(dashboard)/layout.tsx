@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import AppSidebar from '@/components/dashboard/AppSidebar'
+import SwipeNav from '@/components/dashboard/SwipeNav'
 import { createClient } from '@/lib/supabase/server'
 import { getSession, getCompanyAccess } from '@/lib/session'
 import { companyHasAccess } from '@/lib/billing'
@@ -30,6 +31,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="flex h-screen" style={{ background: '#faf9f5' }}>
+      <SwipeNav />
       <AppSidebar profile={profile} user={user} />
       {/* pt-14 = mobile top bar height, pb-16 = mobile bottom tab bar height */}
       <main className="flex-1 overflow-y-auto pt-14 pb-16 md:pt-0 md:pb-0">
