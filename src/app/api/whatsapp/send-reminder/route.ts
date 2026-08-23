@@ -73,34 +73,33 @@ export async function POST(req: NextRequest) {
     .from('conversation_state').delete().lt('updated_at', dayAgo).select('id')
   cleanup.staleFlows = stale?.length ?? 0
 
-  // ── Agents due a digest THIS hour ─────────────────────────────────────────
-  // Each agent's chosen hour is in the agency's local time; compare against the
-  // wall clock, not UTC.
+  // ── Agents due a digest ────────────────────────────────────────────────────
+  // Per-agent reminder times need an HOURLY cron so each hour we can message the
+  // agents who picked that hour. But hourly cron is a **Vercel Pro** feature —
+  // Hobby only allows once-per-day and rejects a more frequent schedule at
+  // deploy time. So this is opt-in via WHATSAPP_REMINDER_HOURLY:
+  //   • Pro:   set the cron to "0 * * * *" AND WHATSAPP_REMINDER_HOURLY=true →
+  //            each hour, message agents whose reminder_hour == the local hour.
+  //   • Hobby: leave it unset. The daily cron fires once and everyone due gets
+  //            their digest (reminder_hour is ignored). Agents can still set a
+  //            preferred hour in Settings; it takes effect once you're on Pro.
+  const hourly = process.env.WHATSAPP_REMINDER_HOURLY === 'true'
   const nowHour = wallClock(now).hour
-  let profiles: { id: string; company_id: number; role: string; agent_code: string | null; Full_name: string | null; whatsapp_number: string | null }[] | null = null
+  const COLS = 'id, company_id, role, agent_code, Full_name, whatsapp_number'
+  type ProfileRow = { id: string; company_id: number; role: string; agent_code: string | null; Full_name: string | null; whatsapp_number: string | null }
+  let profiles: ProfileRow[] | null
 
-  const res = await admin
-    .from('Profiles')
-    .select('id, company_id, role, agent_code, Full_name, whatsapp_number')
-    .not('whatsapp_number', 'is', null)
-    .eq('reminder_hour', nowHour)
-
-  if (res.error?.code === '42703') {
-    // Migration 015 not applied yet: fall back to the old fixed schedule (9am
-    // local) so hourly cron doesn't spam everyone 24×/day in the meantime.
-    if (nowHour !== 9) {
-      return Response.json({ sent: 0, cleanup, hour: nowHour, note: 'reminder_hour column missing (run migration 015); only sending at 9am until then.' })
-    }
-    const fallback = await admin
-      .from('Profiles')
-      .select('id, company_id, role, agent_code, Full_name, whatsapp_number')
-      .not('whatsapp_number', 'is', null)
-    profiles = fallback.data
+  if (hourly) {
+    const res = await admin.from('Profiles').select(COLS).not('whatsapp_number', 'is', null).eq('reminder_hour', nowHour)
+    // Migration 015 not applied yet → no reminder_hour column; send to all.
+    profiles = res.error?.code === '42703'
+      ? (await admin.from('Profiles').select(COLS).not('whatsapp_number', 'is', null)).data
+      : res.data
   } else {
-    profiles = res.data
+    profiles = (await admin.from('Profiles').select(COLS).not('whatsapp_number', 'is', null)).data
   }
 
-  if (!profiles?.length) return Response.json({ sent: 0, cleanup, hour: nowHour, note: 'No agents scheduled for this hour.' })
+  if (!profiles?.length) return Response.json({ sent: 0, cleanup, hour: nowHour, hourly, note: 'No agents due a digest.' })
 
   const results: { agent: string; client: string; events: number; status: string }[] = []
 
