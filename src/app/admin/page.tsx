@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Building2, Lock, CheckCircle2, XCircle, Clock, ChevronDown, ChevronRight, User, Calendar } from 'lucide-react'
+import { Building2, Lock, CheckCircle2, XCircle, Clock, ChevronDown, ChevronRight, User, Calendar, Plus, X } from 'lucide-react'
+import { PLANS } from '@/lib/stripe-plans'
 
 const ADMIN_PIN = 'sg2026'
 
@@ -55,6 +56,28 @@ export default function AdminPage() {
   const [untilDate, setUntilDate] = useState('')
   const [saving, setSaving] = useState(false)
   const pickerRef = useRef<HTMLDivElement>(null)
+
+  // Create-company modal
+  const [createOpen, setCreateOpen] = useState(false)
+  const [form, setForm] = useState({ companyName: '', domain: '', email: '', password: '', planId: 'team', activate: true })
+  const [createBusy, setCreateBusy] = useState(false)
+  const [createErr, setCreateErr] = useState('')
+
+  async function createCompany() {
+    setCreateBusy(true); setCreateErr('')
+    try {
+      const r = await fetch('/api/admin/companies', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, accessDays: form.activate ? 30 : 0 }),
+      })
+      const j = await r.json()
+      if (!r.ok) { setCreateErr(j.error || 'Could not create the company.'); setCreateBusy(false); return }
+      setCompanies(prev => [j.company, ...prev])
+      setCreateOpen(false)
+      setForm({ companyName: '', domain: '', email: '', password: '', planId: 'team', activate: true })
+    } catch { setCreateErr('Could not create the company.') }
+    setCreateBusy(false)
+  }
 
   // Per-company agent list
   const [expandedId, setExpandedId] = useState<number | null>(null)
@@ -199,9 +222,18 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen px-4 py-8" style={{ background: '#faf9f5', fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
       <div className="max-w-3xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold" style={{ color: '#1A2B4A' }}>StateGen Admin</h1>
-          <p className="text-sm mt-1" style={{ color: '#7A8499' }}>Company & agent activation panel</p>
+        <div className="mb-8 flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold" style={{ color: '#1A2B4A' }}>StateGen Admin</h1>
+            <p className="text-sm mt-1" style={{ color: '#7A8499' }}>Company & agent activation panel</p>
+          </div>
+          <button
+            onClick={() => { setCreateErr(''); setCreateOpen(true) }}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold text-white shrink-0"
+            style={{ background: '#0E1F3D' }}
+          >
+            <Plus className="h-4 w-4" /> New company
+          </button>
         </div>
 
         {/* Stats */}
@@ -426,6 +458,65 @@ export default function AdminPage() {
           )}
         </div>
       </div>
+
+      {/* Create-company modal */}
+      {createOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(10,20,40,0.55)' }} onClick={() => setCreateOpen(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-md" onClick={e => e.stopPropagation()} style={{ boxShadow: '0 12px 48px rgba(0,0,0,0.25)' }}>
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid #EEF0F4' }}>
+              <h2 className="text-base font-bold" style={{ color: '#1A2B4A' }}>New company</h2>
+              <button onClick={() => setCreateOpen(false)} style={{ color: '#9AA3B2' }}><X className="h-5 w-5" /></button>
+            </div>
+            <div className="p-5 space-y-3">
+              {createErr && <div className="text-sm rounded-xl px-3 py-2" style={{ background: '#FDF5F5', color: '#A23434' }}>{createErr}</div>}
+              {([
+                ['companyName', 'Company name', 'text', 'Cedars Realty'],
+                ['domain', 'Domain', 'text', 'cedarsrealty.com'],
+                ['email', 'Manager email', 'email', 'manager@cedarsrealty.com'],
+                ['password', 'Temporary password', 'text', 'at least 8 characters'],
+              ] as const).map(([key, label, type, ph]) => (
+                <div key={key}>
+                  <label className="text-xs font-semibold" style={{ color: '#6A7488' }}>{label}</label>
+                  <input
+                    type={type}
+                    value={form[key]}
+                    onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+                    placeholder={ph}
+                    className="w-full mt-1 px-3 py-2 rounded-xl text-sm outline-none"
+                    style={{ border: '1.5px solid #EEF0F4', color: '#1A2B4A', background: '#fff' }}
+                  />
+                </div>
+              ))}
+              <div>
+                <label className="text-xs font-semibold" style={{ color: '#6A7488' }}>Plan</label>
+                <select
+                  value={form.planId}
+                  onChange={e => setForm(f => ({ ...f, planId: e.target.value }))}
+                  className="w-full mt-1 px-3 py-2 rounded-xl text-sm outline-none"
+                  style={{ border: '1.5px solid #EEF0F4', color: '#1A2B4A', background: '#fff' }}
+                >
+                  {PLANS.map(p => <option key={p.id} value={p.id}>{p.name} — ${p.price}/mo</option>)}
+                </select>
+              </div>
+              <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: '#1A2B4A' }}>
+                <input type="checkbox" checked={form.activate} onChange={e => setForm(f => ({ ...f, activate: e.target.checked }))} />
+                Activate now with a 30-day trial
+              </label>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-4" style={{ borderTop: '1px solid #EEF0F4' }}>
+              <button onClick={() => setCreateOpen(false)} className="px-4 py-2 rounded-xl text-sm font-semibold" style={{ color: '#6A7488' }}>Cancel</button>
+              <button
+                onClick={createCompany}
+                disabled={createBusy || !form.companyName || !form.domain || !form.email || form.password.length < 8}
+                className="px-4 py-2 rounded-xl text-sm font-bold text-white disabled:opacity-50"
+                style={{ background: '#0E1F3D' }}
+              >
+                {createBusy ? 'Creating…' : 'Create company'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
