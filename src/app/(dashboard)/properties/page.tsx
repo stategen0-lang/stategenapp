@@ -5,8 +5,10 @@ import { getAgent, Property, Agent } from '@/lib/data'
 import PropertyCard from '@/components/properties/MeridianPropertyCard'
 import PropertyDetailModal from '@/components/modals/PropertyDetailModal'
 import NewPropertyModal from '@/components/modals/NewPropertyModal'
+import ImportModal from '@/components/import/ImportModal'
 import { dbRowToProperty } from '@/lib/db-mappers'
 import { useSession } from '@/hooks/use-session'
+import { isManager } from '@/lib/permissions'
 
 export default function PropertiesPage() {
   const [scope, setScope] = useState<'me' | 'company'>('company')
@@ -41,8 +43,14 @@ export default function PropertiesPage() {
   }
   const [detailId, setDetailId] = useState<number | null>(null)
   const [addOpen, setAddOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const [editProp, setEditProp] = useState<Property | null>(null)
   const [toast, setToast] = useState('')
+
+  async function reloadProperties() {
+    const r = await fetch('/api/properties')
+    if (r.ok) { const d = await r.json(); if (d.properties) setList(d.properties.map(dbRowToProperty)) }
+  }
 
   function upsert(p: Property) {
     setList(prev => prev.some(x => x.id === p.id) ? prev.map(x => x.id === p.id ? p : x) : [p, ...prev])
@@ -82,6 +90,15 @@ export default function PropertiesPage() {
               </button>
             ))}
           </div>
+          {isManager(session?.role) && (
+            <button
+              onClick={() => setImportOpen(true)}
+              className="px-3 py-1.5 rounded-xl text-xs md:text-sm font-bold"
+              style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: '#0E1F3D' }}
+            >
+              Import
+            </button>
+          )}
           <button
             onClick={() => setAddOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs md:text-sm font-bold text-white"
@@ -151,6 +168,13 @@ export default function PropertiesPage() {
             setEditProp(null)
             showToast('Changes saved!')
           }}
+        />
+      )}
+      {importOpen && (
+        <ImportModal
+          kind="properties"
+          onClose={() => setImportOpen(false)}
+          onDone={n => { setImportOpen(false); showToast(`Imported ${n} listing${n === 1 ? '' : 's'}!`); reloadProperties() }}
         />
       )}
     </div>

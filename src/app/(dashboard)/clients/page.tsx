@@ -3,9 +3,11 @@
 import { useState, useEffect } from 'react'
 import { getAgent, statusStyle, CLIENT_TYPE_STYLE, formatPrice, Client, Agent } from '@/lib/data'
 import { useSession } from '@/hooks/use-session'
+import { isManager } from '@/lib/permissions'
 import { sortOwnFirst } from '@/lib/client-order'
 import ClientDetailModal from '@/components/modals/ClientDetailModal'
 import NewClientModal from '@/components/modals/NewClientModal'
+import ImportModal from '@/components/import/ImportModal'
 import { dbRowToClient } from '@/lib/db-mappers'
 
 export default function ClientsPage() {
@@ -38,8 +40,14 @@ export default function ClientsPage() {
   }
   const [detailId, setDetailId] = useState<number | null>(null)
   const [addOpen, setAddOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const [editClient, setEditClient] = useState<Client | null>(null)
   const [toast, setToast] = useState('')
+
+  async function reloadClients() {
+    const r = await fetch('/api/clients')
+    if (r.ok) { const d = await r.json(); if (d.clients) setList(d.clients.map(dbRowToClient)) }
+  }
 
   function upsert(c: Client) {
     setList(prev => prev.some(x => x.id === c.id) ? prev.map(x => x.id === c.id ? c : x) : [c, ...prev])
@@ -81,6 +89,15 @@ export default function ClientsPage() {
               </button>
             ))}
           </div>
+          {isManager(session?.role) && (
+            <button
+              onClick={() => setImportOpen(true)}
+              className="px-3 py-1.5 rounded-xl text-xs md:text-sm font-bold"
+              style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: '#0E1F3D' }}
+            >
+              Import
+            </button>
+          )}
           <button
             onClick={() => setAddOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs md:text-sm font-bold text-white"
@@ -192,6 +209,13 @@ export default function ClientsPage() {
         <NewClientModal
           onClose={() => setAddOpen(false)}
           onSaved={c => { upsert(c); setAddOpen(false); showToast('Client saved!') }}
+        />
+      )}
+      {importOpen && (
+        <ImportModal
+          kind="clients"
+          onClose={() => setImportOpen(false)}
+          onDone={n => { setImportOpen(false); showToast(`Imported ${n} client${n === 1 ? '' : 's'}!`); reloadClients() }}
         />
       )}
       {editClient && (
