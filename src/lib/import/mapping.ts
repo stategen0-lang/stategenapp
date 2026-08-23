@@ -41,10 +41,14 @@ export type Mapping = Record<string, string | null>
 
 export function toNumber(v: string | undefined | null): number | null {
   if (v == null) return null
-  const cleaned = String(v).replace(/[^0-9.]/g, '')
+  const s = String(v).trim().toLowerCase()
+  // "800k" / "1.2m" shorthand, common in listings. Only when the suffix follows
+  // a digit, so "320 sqm" (ends in "m") is NOT read as 320 million.
+  const mult = /\dk$/.test(s) ? 1_000 : /\dm$/.test(s) ? 1_000_000 : 1
+  const cleaned = s.replace(/[^0-9.]/g, '')
   if (!cleaned) return null
   const n = parseFloat(cleaned)
-  return Number.isFinite(n) ? n : null
+  return Number.isFinite(n) ? n * mult : null
 }
 
 export function normTransaction(v: string | undefined): 'sale' | 'rent' | null {

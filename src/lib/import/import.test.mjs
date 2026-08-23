@@ -39,6 +39,13 @@ test('toNumber: strips currency/commas', () => {
   assert.equal(toNumber('n/a'), null)
 })
 
+test('toNumber: k/m shorthand, but not "320 sqm"', () => {
+  assert.equal(toNumber('800k'), 800000)
+  assert.equal(toNumber('1.2m'), 1200000)
+  assert.equal(toNumber('320 sqm'), 320)   // trailing m after non-digit → not millions
+  assert.equal(toNumber('600/month'), 600)
+})
+
 test('normTransaction / normClientType: keyword detection', () => {
   assert.equal(normTransaction('For Sale'), 'sale')
   assert.equal(normTransaction('Rent'), 'rent')
