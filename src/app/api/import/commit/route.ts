@@ -27,20 +27,25 @@ export async function POST(req: NextRequest) {
 
   let inserts: Record<string, unknown>[]
   if (kind === 'properties') {
-    inserts = (normalized as NormProperty[]).map(p => ({
-      company_id: companyId,
-      Title: p.title || 'Untitled listing',
-      Location: p.city || null,
-      Neighborhood: p.district || null,
-      Price: p.price ?? 0,
-      Currency: 'USD',
-      Bedrooms: p.bedrooms,
-      bathrooms: p.bathrooms,
-      size: p.size,
-      Payment_terms: p.transaction === 'rent' ? 'For Rent' : 'For Sale',
-      Amenities: JSON.stringify({ transaction: p.transaction ?? 'sale', agentId: null, imported: true }),
-      Status: p.status || 'Available',
-    }))
+    inserts = (normalized as NormProperty[]).map(p => {
+      const isRent = p.transaction === 'rent'
+      return {
+        company_id: companyId,
+        Title: p.title || 'Untitled listing',
+        Location: p.city || null,
+        Neighborhood: p.district || null,
+        Price: p.price ?? 0,
+        Currency: 'USD',
+        Bedrooms: p.bedrooms,
+        bathrooms: p.bathrooms,
+        size: p.size,
+        Payment_terms: isRent ? 'For Rent' : 'For Sale',
+        // Store the app's enum ('For Sale'/'For Rent') and, for rentals, the
+        // amount in `rent` (the field the UI reads for /mo pricing).
+        Amenities: JSON.stringify({ type: 'Appartement', transaction: isRent ? 'For Rent' : 'For Sale', rent: isRent ? (p.price ?? 0) : 0, agentId: null, imported: true }),
+        Status: p.status || 'Available',
+      }
+    })
   } else {
     // Match the app's enums exactly: ClientType is 'Buyer' | 'Renter' (capitalised),
     // ClientStatus is a fixed set — unknown sheet statuses fall back to 'Searching'.

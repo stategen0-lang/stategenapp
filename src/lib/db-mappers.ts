@@ -11,7 +11,9 @@ export function dbRowToProperty(row: Record<string, unknown>, idx: number): Prop
     id: (row.id as number) ?? idx,
     title: (row.Title as string) ?? '',
     type: (extras.type as Property['type']) ?? 'Appartement',
-    transaction: (extras.transaction as Property['transaction']) ?? 'For Sale',
+    // Normalise to the app's transaction enum so 'sale'/'rent' (e.g. imported
+    // rows) are recognised, not just the exact 'For Sale'/'For Rent'.
+    transaction: (/rent/i.test(String(extras.transaction ?? '')) ? 'For Rent' : 'For Sale') as Property['transaction'],
     price: (row.Price as number) ?? 0,
     rent: (extras.rent as number) ?? 0,
     district: (row.Neighborhood as string) ?? '',
