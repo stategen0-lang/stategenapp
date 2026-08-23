@@ -131,7 +131,7 @@ export default function ClientsPage() {
             {filtered.map(c => {
               const agent = agentFor(c.agentId)
               const sc = statusStyle(c.status)
-              const tc = CLIENT_TYPE_STYLE[c.type]
+              const tc = CLIENT_TYPE_STYLE[c.type] ?? { bg: '#F0F2F5', color: '#6A7488' }
               const initials = c.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
               return (
                 <tr key={c.id} onClick={() => setDetailId(c.id)} className="cursor-pointer transition-colors"

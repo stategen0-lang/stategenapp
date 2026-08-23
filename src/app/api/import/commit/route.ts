@@ -42,8 +42,12 @@ export async function POST(req: NextRequest) {
       Status: p.status || 'Available',
     }))
   } else {
+    // Match the app's enums exactly: ClientType is 'Buyer' | 'Renter' (capitalised),
+    // ClientStatus is a fixed set — unknown sheet statuses fall back to 'Searching'.
+    const VALID_STATUS = new Set(['Searching', 'Negotiation', 'Signed', 'Viewing'])
     inserts = (normalized as NormClient[]).map(c => {
       const isRenter = c.type === 'renter'
+      const status = VALID_STATUS.has((c.status || '').trim()) ? c.status.trim() : 'Searching'
       return {
         company_id: companyId,
         Agent_id: null,
@@ -56,12 +60,12 @@ export async function POST(req: NextRequest) {
         payment_terms: isRenter ? 'For Rent' : 'For Sale',
         notes: JSON.stringify({
           email: c.email || undefined,
-          type: isRenter ? 'renter' : 'buyer',
+          type: isRenter ? 'Renter' : 'Buyer',
           agentId: null,   // unassigned; the manager can reassign later
-          req: { type: isRenter ? 'For Rent' : 'For Sale', location: c.location || undefined, beds: c.bedrooms ?? undefined, priceMax: c.budget ?? undefined },
+          req: { location: c.location || undefined, beds: c.bedrooms ?? undefined, priceMax: c.budget ?? undefined },
           imported: true,
         }),
-        status: c.status || 'Searching',
+        status,
       }
     })
   }

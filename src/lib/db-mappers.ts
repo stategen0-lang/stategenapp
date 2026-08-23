@@ -55,7 +55,9 @@ export function dbRowToClient(row: Record<string, unknown>, idx: number): Client
   return {
     id: (row.id as number) ?? idx,
     name: (row['Client Name'] as string) ?? '',
-    type: (extras.type as Client['type']) ?? 'Buyer',
+    // Normalise casing/synonyms → the app's ClientType ('Buyer' | 'Renter'), so
+    // imported or externally-written rows never break the UI's style lookup.
+    type: (String(extras.type ?? '').toLowerCase().startsWith('rent') ? 'Renter' : 'Buyer') as Client['type'],
     email: (extras.email as string) ?? '',
     phone: (row['client phone'] as string) ?? '',
     budget: (row['budget_max'] as number) ?? 0,
