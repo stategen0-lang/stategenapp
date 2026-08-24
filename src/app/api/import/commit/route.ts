@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/session'
 import { isManager } from '@/lib/permissions'
+import { recalculateScores } from '@/lib/score-engine'
 import { applyMapping, isValidRow, type ImportKind, type Mapping, type NormProperty, type NormClient } from '@/lib/import/mapping'
 
 // Step 2 of import: take the reviewed headers/rows/mapping and bulk-insert the
@@ -85,6 +86,10 @@ export async function POST(req: NextRequest) {
     if (error) return NextResponse.json({ error: error.message, inserted }, { status: 500 })
     inserted += data?.length ?? 0
   }
+
+  // Re-score the company after the response so imported clients get lead scores
+  // (used by matching + reminder relevance). Deferred so the import returns fast.
+  after(async () => { try { await recalculateScores({ companyId }) } catch { /* non-fatal */ } })
 
   return NextResponse.json({ inserted, skipped: rows.length - inserted, kind })
 }

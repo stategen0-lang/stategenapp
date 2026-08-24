@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { sendTemplate } from '@/lib/whatsapp/cloud'
 import { dbRowToClient } from '@/lib/db-mappers'
 import {
-  isDue, lastContactAt, reminderText, STALE_AFTER_DAYS,
+  isDue, lastContactAt, reminderText, reminderPriority, STALE_AFTER_DAYS,
   type ReminderClient,
 } from '@/lib/whatsapp/reminders'
 import { todaysAgenda } from '@/lib/whatsapp/calendar-handlers'
@@ -139,6 +139,7 @@ export async function POST(req: NextRequest) {
         location: c.req.location || '',
         lastContactAt: lastContactAt(row.notes, row.created_at as string),
         createdAt: row.created_at as string,
+        leadScore: Number(row.lead_score) || 0,
       }
       const scheduled = scheduledClientIds.has(c.id)
       if (scheduled || isDue(rc, now)) {
@@ -156,9 +157,10 @@ export async function POST(req: NextRequest) {
     const agenda = await todaysAgenda(admin, profile.id, now)
 
     // At most one client nudge — a morning of eight separate pings gets the
-    // bot muted.
+    // bot muted. Pick the most RELEVANT one (hottest lead / most urgent stage),
+    // not merely the oldest untouched record.
     const top = candidates
-      .sort((a, b) => (a.client.lastContactAt ?? '').localeCompare(b.client.lastContactAt ?? ''))[0]
+      .sort((a, b) => reminderPriority(b.client, now) - reminderPriority(a.client, now))[0]
 
     const sections = [agenda, top ? reminderText(top.client, now) : ''].filter(Boolean)
     // An agent with an empty calendar and nobody to chase hears nothing.

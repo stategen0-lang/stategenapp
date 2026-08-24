@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   daysSince, lastContactAt, isDue, reminderText, reminderOutcome, extraDetail,
-  STALE_AFTER_DAYS,
+  STALE_AFTER_DAYS, cadenceFor, reminderPriority,
 } from './reminders.ts'
 
 const NOW = new Date('2026-07-21T09:00:00Z')
@@ -75,6 +75,28 @@ test('isDue: a never-contacted old client is due', () => {
   assert.equal(isDue(client({ lastContactAt: null, createdAt: daysAgo(20) }), NOW), true)
 })
 
+// ── stage-aware cadence + relevance priority ────────────────────────────────
+test('cadenceFor: hot stages are chased sooner than browsing ones', () => {
+  assert.equal(cadenceFor('Negotiation'), 2)
+  assert.equal(cadenceFor('Viewing'), 3)
+  assert.equal(cadenceFor('Searching'), STALE_AFTER_DAYS)
+  assert.equal(cadenceFor('anything-else'), STALE_AFTER_DAYS)
+})
+test('isDue: a negotiating client is due at 2 days; a searching one is not', () => {
+  assert.equal(isDue(client({ status: 'Negotiation', lastContactAt: daysAgo(2) }), NOW), true)
+  assert.equal(isDue(client({ status: 'Searching', lastContactAt: daysAgo(2) }), NOW), false)
+})
+test('reminderPriority: a hot, freshly-due lead outranks a cold, months-stale one', () => {
+  const hot  = client({ status: 'Negotiation', leadScore: 80, lastContactAt: daysAgo(3) })
+  const cold = client({ status: 'Searching',   leadScore: 20, lastContactAt: daysAgo(60) })
+  assert.ok(reminderPriority(hot, NOW) > reminderPriority(cold, NOW))
+})
+test('reminderPriority: overdue bump is capped so age cannot dominate score', () => {
+  const highScoreFreshlyDue = client({ status: 'Searching', leadScore: 90, lastContactAt: daysAgo(6) })
+  const lowScoreAncient      = client({ status: 'Searching', leadScore: 10, lastContactAt: daysAgo(400) })
+  assert.ok(reminderPriority(highScoreFreshlyDue, NOW) > reminderPriority(lowScoreAncient, NOW))
+})
+
 // ── reminderText ────────────────────────────────────────────────────────────
 test('reminderText: follows the spec wording', () => {
   const t = reminderText(client({ lastContactAt: daysAgo(5) }), NOW)
@@ -86,6 +108,11 @@ test('reminderText: follows the spec wording', () => {
 test('reminderText: singular and same-day phrasing', () => {
   assert.match(reminderText(client({ lastContactAt: daysAgo(1) }), NOW), /Last contact: 1 day ago\./)
   assert.match(reminderText(client({ lastContactAt: daysAgo(0) }), NOW), /Last contact: today\./)
+})
+test('reminderText: shows the lead score and flags hot leads', () => {
+  assert.match(reminderText(client({ leadScore: 82 }), NOW), /Lead score: 82\/100 — hot/)
+  assert.match(reminderText(client({ leadScore: 40 }), NOW), /Lead score: 40\/100\./)
+  assert.equal(/Lead score/.test(reminderText(client(), NOW)), false)   // absent when unknown
 })
 test('reminderText: omits the interest line when nothing is known', () => {
   const t = reminderText(client({ budget: 0, propertyType: '', location: '' }), NOW)

@@ -18,13 +18,50 @@ export interface ReminderClient {
   /** ISO timestamp of the most recent contact, or null if never. */
   lastContactAt: string | null
   createdAt: string
+  /** 0–100 lead score (fit + behaviour + engagement), when available. */
+  leadScore?: number
 }
 
-/** Clients this far past their last contact are due a nudge. */
+/** Default follow-up cadence (days) — used for Searching and unknown stages. */
 export const STALE_AFTER_DAYS = 5
 
 /** Statuses that mean the client is no longer worth chasing. */
 const CLOSED_STATUSES = ['Closed', 'Inactive']
+
+// Stage-aware cadence: a hot lead (negotiating, viewings booked) should be
+// chased within a couple of days; a browsing "Searching" client can wait longer.
+// This is what makes a reminder *relevant* instead of "oldest untouched record".
+const CADENCE: Record<string, number> = {
+  Negotiation: 2,
+  Viewing: 3,
+  Signed: 3,
+}
+export function cadenceFor(status: string): number {
+  return CADENCE[status] ?? STALE_AFTER_DAYS
+}
+
+// How much each stage lifts a client up the "call this one first" ranking.
+const STAGE_BOOST: Record<string, number> = {
+  Negotiation: 40,
+  Viewing: 30,
+  Signed: 20,
+  Searching: 10,
+}
+
+/**
+ * Priority for picking THE client to nudge today — higher = call first. Driven
+ * by the lead score (already blends fit/behaviour/engagement), lifted by an
+ * active stage, with a small, capped bump for being overdue. The cap stops a
+ * cold client who's been stale for months from outranking a hot, freshly-due
+ * lead — which was the whole complaint about the old "just pick the oldest".
+ */
+export function reminderPriority(client: ReminderClient, now: Date = new Date()): number {
+  const days = daysSince(client.lastContactAt ?? client.createdAt, now)
+  const overdue = Number.isFinite(days) ? Math.max(0, days - cadenceFor(client.status)) : 14
+  const stage = STAGE_BOOST[client.status] ?? 0
+  const score = client.leadScore ?? 0
+  return score + stage + Math.min(overdue, 14) * 0.5
+}
 
 export function daysSince(iso: string | null | undefined, now: Date = new Date()): number {
   if (!iso) return Infinity
@@ -55,10 +92,12 @@ export function lastContactAt(notesJson: unknown, createdAt: string): string | n
   return createdAt ?? null
 }
 
-/** Should this client be chased today? */
-export function isDue(client: ReminderClient, now: Date = new Date(), staleDays = STALE_AFTER_DAYS): boolean {
+/** Should this client be chased today? Uses the stage-aware cadence unless an
+ *  explicit staleDays is given. */
+export function isDue(client: ReminderClient, now: Date = new Date(), staleDays?: number): boolean {
   if (CLOSED_STATUSES.includes(client.status)) return false
-  return daysSince(client.lastContactAt ?? client.createdAt, now) >= staleDays
+  const cadence = staleDays ?? cadenceFor(client.status)
+  return daysSince(client.lastContactAt ?? client.createdAt, now) >= cadence
 }
 
 /**
@@ -77,9 +116,15 @@ export function reminderText(client: ReminderClient, now: Date = new Date()): st
     client.location || null,
   ].filter(Boolean).join(' · ')
 
+  // Lead score tells the agent why this one is worth the call (and flags hot leads).
+  const scoreLine = client.leadScore
+    ? `Lead score: ${client.leadScore}/100${client.leadScore >= 70 ? ' — hot 🔥' : ''}.`
+    : null
+
   return [
     `Reminder: Call ${client.name} today.`,
     last,
+    scoreLine,
     interest ? `Interest: ${interest}.` : null,
     '',
     'Reply: done, snooze 3d, or not interested',
