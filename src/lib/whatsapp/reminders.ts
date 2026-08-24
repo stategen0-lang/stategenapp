@@ -131,6 +131,27 @@ export function reminderText(client: ReminderClient, now: Date = new Date()): st
   ].filter(v => v !== null).join('\n')
 }
 
+/**
+ * A single-line summary of the top follow-ups for the daily digest. The first is
+ * the primary (the one a "done"/"snooze" reply acts on); the rest are a heads-up
+ * so the agent sees their whole hot list, not just one name.
+ */
+export function followupSummary(clients: ReminderClient[], now: Date = new Date()): string {
+  if (!clients.length) return 'No follow-ups due today.'
+  const label = (c: ReminderClient) => {
+    const d = daysSince(c.lastContactAt ?? c.createdAt, now)
+    const meta = [
+      c.leadScore ? `score ${c.leadScore}` : null,
+      Number.isFinite(d) ? `${d}d` : null,
+    ].filter(Boolean).join(', ')
+    return `${c.name}${meta ? ` (${meta})` : ''}`
+  }
+  const [first, ...rest] = clients.slice(0, 3)
+  let out = `Call ${label(first)} first`
+  if (rest.length) out += ` — also today: ${rest.map(label).join(', ')}`
+  return out + '.'
+}
+
 // ── What a reply does ───────────────────────────────────────────────────────
 
 export interface ReminderOutcome {

@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   daysSince, lastContactAt, isDue, reminderText, reminderOutcome, extraDetail,
-  STALE_AFTER_DAYS, cadenceFor, reminderPriority,
+  STALE_AFTER_DAYS, cadenceFor, reminderPriority, followupSummary,
 } from './reminders.ts'
 
 const NOW = new Date('2026-07-21T09:00:00Z')
@@ -95,6 +95,23 @@ test('reminderPriority: overdue bump is capped so age cannot dominate score', ()
   const highScoreFreshlyDue = client({ status: 'Searching', leadScore: 90, lastContactAt: daysAgo(6) })
   const lowScoreAncient      = client({ status: 'Searching', leadScore: 10, lastContactAt: daysAgo(400) })
   assert.ok(reminderPriority(highScoreFreshlyDue, NOW) > reminderPriority(lowScoreAncient, NOW))
+})
+
+test('followupSummary: first is primary, up to two more listed as heads-up', () => {
+  const a = client({ name: 'Nour', leadScore: 82, lastContactAt: daysAgo(3) })
+  const b = client({ name: 'Joe',  leadScore: 75, lastContactAt: daysAgo(4) })
+  const c = client({ name: 'Maya', leadScore: 68, lastContactAt: daysAgo(6) })
+  const s = followupSummary([a, b, c], NOW)
+  assert.match(s, /Call Nour \(score 82, 3d\) first/)
+  assert.match(s, /also today: Joe \(score 75, 4d\), Maya \(score 68, 6d\)/)
+})
+test('followupSummary: a single client has no "also today" clause', () => {
+  const s = followupSummary([client({ name: 'Nour', leadScore: 82, lastContactAt: daysAgo(3) })], NOW)
+  assert.match(s, /Call Nour \(score 82, 3d\) first\./)
+  assert.equal(/also today/.test(s), false)
+})
+test('followupSummary: empty list → nothing-due line', () => {
+  assert.match(followupSummary([], NOW), /No follow-ups due today/)
 })
 
 // ── reminderText ────────────────────────────────────────────────────────────

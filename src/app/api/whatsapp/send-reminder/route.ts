@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { sendTemplate } from '@/lib/whatsapp/cloud'
 import { dbRowToClient } from '@/lib/db-mappers'
 import {
-  isDue, lastContactAt, reminderText, reminderPriority, STALE_AFTER_DAYS,
+  isDue, lastContactAt, followupSummary, reminderPriority, STALE_AFTER_DAYS,
   type ReminderClient,
 } from '@/lib/whatsapp/reminders'
 import { todaysAgenda } from '@/lib/whatsapp/calendar-handlers'
@@ -156,13 +156,15 @@ export async function POST(req: NextRequest) {
     // agent per day is the rule, and the Twilio account is metered.
     const agenda = await todaysAgenda(admin, profile.id, now)
 
-    // At most one client nudge — a morning of eight separate pings gets the
-    // bot muted. Pick the most RELEVANT one (hottest lead / most urgent stage),
-    // not merely the oldest untouched record.
-    const top = candidates
-      .sort((a, b) => reminderPriority(b.client, now) - reminderPriority(a.client, now))[0]
+    // Surface the top ~3 by RELEVANCE (hottest lead / most urgent stage), not
+    // merely the oldest. The first is the primary — a "done"/"snooze" reply acts
+    // on it — and the rest are a heads-up so the agent sees their whole hot list.
+    const ranked = candidates.sort((a, b) => reminderPriority(b.client, now) - reminderPriority(a.client, now))
+    const picks = ranked.slice(0, 3)
+    const top = picks[0]
+    const followText = picks.length ? followupSummary(picks.map(p => p.client), now) : ''
 
-    const sections = [agenda, top ? reminderText(top.client, now) : ''].filter(Boolean)
+    const sections = [agenda, followText].filter(Boolean)
     // An agent with an empty calendar and nobody to chase hears nothing.
     if (!sections.length) continue
 
@@ -180,9 +182,7 @@ export async function POST(req: NextRequest) {
     // friendly "nothing" line so no param is ever empty (Meta rejects empties).
     const firstName = (profile.Full_name ?? '').trim().split(/\s+/)[0] || 'there'
     const agendaParam = agenda ? oneLine(agenda.replace(/\n/g, ' · ').replace(/•\s*/g, '')) : 'Nothing scheduled today.'
-    const followParam = top
-      ? oneLine(reminderText(top.client, now).split('\n').slice(0, 3).join(' '))
-      : 'No follow-ups due today.'
+    const followParam = oneLine(followText || 'No follow-ups due today.')
     const components = [{
       type: 'body',
       parameters: [
