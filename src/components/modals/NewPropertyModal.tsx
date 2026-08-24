@@ -47,6 +47,8 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
   const [photoError, setPhotoError] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
   const [templates, setTemplates] = useState<DescriptionTemplate[]>(loadTemplates())
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('none')
   const [templateOpen, setTemplateOpen] = useState(false)
@@ -118,7 +120,9 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
   }
 
   async function handleSave() {
-    if (!form.title || !form.district || !form.city) return
+    // District (neighborhood) is optional — land plots and some areas have none.
+    if (!form.title || !form.city) { setSaveError('Title and city are required.'); return }
+    setSaveError(''); setSaving(true)
     // Own code when signed in; the server re-stamps this for agents anyway.
     const agentId = (initial?.agentId ?? session?.agentCode ?? CURRENT_AGENT_ID) as AgentId
     const payload = {
@@ -152,9 +156,12 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editing ? { id: initial!.id, ...payload } : payload),
       })
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { setSaveError(data.error || 'Could not save. Please try again.'); setSaving(false); return }
       if (data.property?.id) savedId = data.property.id
-    } catch {}
+    } catch {
+      setSaveError('Network error. Please try again.'); setSaving(false); return
+    }
     const p: Property = { id: savedId, ...payload, agentId, advancedPayment: payload.advancedPayment as AdvancedPayment | undefined }
     onSaved(p)
   }
@@ -428,18 +435,21 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
           </div>
         </div>
 
-        <div className="px-5 py-4 flex gap-3" style={{ borderTop: '1px solid #EEF0F4' }}>
-          <button onClick={onClose} className="flex-1 rounded-xl py-2 text-sm font-semibold" style={{ border: '1.5px solid #EEF0F4', color: '#6A7488' }}>
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!form.title || !form.district || !form.city || uploading}
-            className="flex-1 rounded-xl py-2 text-sm font-bold text-white disabled:opacity-50"
-            style={{ background: '#0E1F3D' }}
-          >
-            {uploading ? 'Uploading…' : editing ? 'Save changes' : 'Save listing'}
-          </button>
+        <div className="px-5 py-4" style={{ borderTop: '1px solid #EEF0F4' }}>
+          {saveError && <p className="text-xs mb-2" style={{ color: '#A23434' }}>{saveError}</p>}
+          <div className="flex gap-3">
+            <button onClick={onClose} className="flex-1 rounded-xl py-2 text-sm font-semibold" style={{ border: '1.5px solid #EEF0F4', color: '#6A7488' }}>
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={!form.title || !form.city || uploading || saving}
+              className="flex-1 rounded-xl py-2 text-sm font-bold text-white disabled:opacity-50"
+              style={{ background: '#0E1F3D' }}
+            >
+              {uploading ? 'Uploading…' : saving ? 'Saving…' : editing ? 'Save changes' : 'Save listing'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

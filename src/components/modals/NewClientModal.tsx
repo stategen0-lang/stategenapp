@@ -38,6 +38,8 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
   const [type, setType] = useState<ClientType>(initial?.type ?? 'Buyer')
   const [budget, setBudget] = useState<string>(initial?.budget ? String(initial.budget) : '')
   const [req, setReq] = useState<ClientReq>(initial?.req ? { ...emptyReq(), ...initial.req } : emptyReq())
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   function setR(k: keyof ClientReq, v: string | number | boolean) {
     setReq(r => ({ ...r, [k]: v }))
@@ -60,6 +62,8 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
   }
 
   async function handleSave() {
+    if (!name.trim()) { setSaveError('Client name is required.'); return }
+    setSaveError(''); setSaving(true)
     // Own code when signed in; the server re-stamps this for agents anyway.
     const agentId = initial?.agentId ?? (session?.agentCode as typeof CURRENT_AGENT_ID) ?? CURRENT_AGENT_ID
     const status: ClientStatus = initial?.status ?? 'Searching'
@@ -78,9 +82,12 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editing ? { id: initial!.id, ...payload } : payload),
       })
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { setSaveError(data.error || 'Could not save. Please try again.'); setSaving(false); return }
       if (data.client?.id) savedId = data.client.id
-    } catch {}
+    } catch {
+      setSaveError('Network error. Please try again.'); setSaving(false); return
+    }
     const c: Client = { id: savedId, ...payload, agentId, status }
     onSaved(c)
   }
@@ -199,6 +206,7 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
               </div>
             </div>
 
+            {saveError && <p className="px-5 pt-3 text-xs" style={{ color: '#A23434' }}>{saveError}</p>}
             <div className="px-5 py-4 flex gap-3" style={{ borderTop: '1px solid #EEF0F4' }}>
               <button onClick={onClose} className="flex-1 rounded-xl py-2 text-sm font-semibold" style={{ border: '1.5px solid #EEF0F4', color: '#6A7488' }}>
                 Cancel
@@ -206,11 +214,11 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
               {editing ? (
                 <button
                   onClick={handleSave}
-                  disabled={!name}
+                  disabled={!name || saving}
                   className="flex-1 rounded-xl py-2 text-sm font-bold text-white disabled:opacity-50"
                   style={{ background: '#0E1F3D' }}
                 >
-                  Save changes
+                  {saving ? 'Saving…' : 'Save changes'}
                 </button>
               ) : (
                 <button
@@ -293,16 +301,18 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
               )}
             </div>
 
+            {saveError && <p className="px-5 pt-3 text-xs" style={{ color: '#A23434' }}>{saveError}</p>}
             <div className="px-5 py-4 flex gap-3" style={{ borderTop: '1px solid #EEF0F4' }}>
               <button onClick={() => setStep(1)} className="flex-1 rounded-xl py-2 text-sm font-semibold" style={{ border: '1.5px solid #EEF0F4', color: '#6A7488' }}>
                 ← Back
               </button>
               <button
                 onClick={handleSave}
-                className="flex-1 rounded-xl py-2 text-sm font-bold text-white"
+                disabled={saving}
+                className="flex-1 rounded-xl py-2 text-sm font-bold text-white disabled:opacity-50"
                 style={{ background: '#0E1F3D' }}
               >
-                Save client
+                {saving ? 'Saving…' : 'Save client'}
               </button>
             </div>
           </>
