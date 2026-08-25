@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Bell, Check } from 'lucide-react'
+import { Bell, Check, MessageCircle } from 'lucide-react'
 import type { AlertView } from '@/lib/alerts'
 import { useSession } from '@/hooks/use-session'
 import { isManager } from '@/lib/permissions'
@@ -57,6 +57,22 @@ export default function AlertsPage() {
     setAlerts(prev => prev.map(a => a.id === id ? { ...a, seen: true } : a))
     try { await fetch('/api/alerts', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }) }
     catch { load() }
+  }
+
+  // Forward the matched listing to the client from the agent's own WhatsApp: mint
+  // the public share link, then open wa.me to the client with a ready message.
+  async function sendToClient(a: AlertView, e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!a.clientPhone || !a.propertyId) return
+    let link = ''
+    try {
+      const r = await fetch(`/api/share?id=${a.propertyId}`)
+      if (r.ok) link = (await r.json()).url ?? ''
+    } catch { /* send without the link rather than block */ }
+    const first = a.clientName.split(' ')[0]
+    const msg = `Hi ${first}, I found a listing that might suit you — ${a.propertyTitle}${a.propertyLabel ? ` (${a.propertyLabel})` : ''}.${link ? `\n${link}` : ''}`
+    window.open(`https://wa.me/${a.clientPhone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank')
+    if (!a.seen) markOne(a.id)
   }
 
   return (
@@ -122,6 +138,15 @@ export default function AlertsPage() {
                 </p>
                 {manager && a.agentName && (
                   <p className="text-[11px] mt-1 font-semibold" style={{ color: '#2E5288' }}>{a.agentName}&apos;s client</p>
+                )}
+                {a.clientPhone && a.propertyId && (
+                  <button
+                    onClick={e => sendToClient(a, e)}
+                    className="mt-2 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold"
+                    style={{ background: '#E4F7EC', color: '#1B8A4B' }}
+                  >
+                    <MessageCircle className="h-3.5 w-3.5" /> Send to {a.clientName.split(' ')[0]}
+                  </button>
                 )}
               </div>
 
