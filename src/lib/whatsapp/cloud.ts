@@ -146,6 +146,34 @@ export async function sendText(to: string, body: string): Promise<SendResult> {
   })
 }
 
+// A reply is either plain text, or text with up to 3 tap buttons. The bot's
+// handlers return this so a step that's really a choice (buyer/renter, sale/rent)
+// can be tapped instead of typed. A tapped button arrives back as its title text
+// (parseInbound reads interactive.button_reply.title), so the receiving side
+// needs no special handling.
+export type BotReply = string | { text: string; buttons: { id: string; title: string }[] }
+
+export function replyText(reply: BotReply): string {
+  return typeof reply === 'string' ? reply : reply.text
+}
+
+/** Send a BotReply — plain text, or an interactive button message. */
+export async function sendReply(to: string, reply: BotReply): Promise<SendResult> {
+  if (typeof reply === 'string') return sendText(to, reply)
+  return post({
+    to: toCloudAddress(to),
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      body: { text: reply.text },
+      action: {
+        // Meta allows at most 3 reply buttons; titles are capped at 20 chars.
+        buttons: reply.buttons.slice(0, 3).map(b => ({ type: 'reply', reply: { id: b.id, title: b.title.slice(0, 20) } })),
+      },
+    },
+  })
+}
+
 /**
  * Send an approved message template. Required for proactive messages OUTSIDE the
  * 24-hour window (the daily reminder, new-listing alerts) — free text there is

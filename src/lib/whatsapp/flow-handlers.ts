@@ -14,6 +14,7 @@ import {
 import { buildUpdate, confirmationText, PROPERTY_FIELDS } from '@/lib/whatsapp/writes'
 import { stage, type Profile } from '@/lib/whatsapp/write-handlers'
 import type { IntentResult } from '@/lib/whatsapp/intent'
+import type { BotReply } from '@/lib/whatsapp/cloud'
 
 type FlowName = 'create_property' | 'create_client'
 
@@ -28,15 +29,23 @@ async function clearFlow(admin: SupabaseClient, profileId: string) {
   await admin.from('conversation_state').delete().eq('profile_id', profileId)
 }
 
-async function saveFlow(admin: SupabaseClient, profile: Profile, flow: FlowName, context: FlowContext) {
+async function saveFlow(admin: SupabaseClient, profile: Profile, flow: FlowName, context: FlowContext, step = 'form') {
   await admin.from('conversation_state').upsert({
     company_id: profile.company_id,
     profile_id: profile.id,
     current_flow: flow,
-    step: 'form',
+    step,
     context,
     updated_at: new Date().toISOString(),
   }, { onConflict: 'profile_id' })
+}
+
+// The one field per flow we ask as tap-buttons instead of typed text — the most
+// common binary choice. Its value still lives in the same step/context, so the
+// rest of the flow (the fill-in form, confirm-before-write) is unchanged.
+const CHOICE: Record<FlowName, { key: string; prompt: string; buttons: { id: string; title: string }[] }> = {
+  create_client:   { key: 'clientType',  prompt: "Adding a client — buyer or renter? Tap one and I'll ask for the rest.", buttons: [{ id: 'buyer', title: 'Buyer' }, { id: 'renter', title: 'Renter' }] },
+  create_property: { key: 'transaction', prompt: "Adding a listing — for sale or for rent? Tap one and I'll ask for the rest.", buttons: [{ id: 'sale', title: 'For Sale' }, { id: 'rent', title: 'For Rent' }] },
 }
 
 // ── Finishing each flow: stage a confirm-before-write ─────────────────────────
@@ -114,19 +123,29 @@ const FLOWS: Record<FlowName, FlowConfig> = {
 
 async function start(
   admin: SupabaseClient, profile: Profile, flow: FlowName, context: FlowContext,
-): Promise<string> {
+): Promise<BotReply> {
   const cfg = FLOWS[flow]
   // If the opening message already gave everything required, skip to confirm.
   if (missingMandatory(context, cfg.steps).length === 0) return cfg.finish(admin, profile, context)
+
+  // Ask the binary choice as buttons first — unless the opening message already
+  // told us (e.g. "add a buyer" → clientType known).
+  const choice = CHOICE[flow]
+  const val = context[choice.key]
+  if (val == null || val === '') {
+    await saveFlow(admin, profile, flow, context, 'await_choice')
+    return { text: choice.prompt, buttons: choice.buttons }
+  }
+
   await saveFlow(admin, profile, flow, context)
   return renderForm(cfg.intro, cfg.steps, context)
 }
 
-export function startCreatePropertyFlow(admin: SupabaseClient, profile: Profile, intent: IntentResult) {
+export function startCreatePropertyFlow(admin: SupabaseClient, profile: Profile, intent: IntentResult): Promise<BotReply> {
   return start(admin, profile, 'create_property', seedContext(intent.fields))
 }
 
-export function startCreateClientFlow(admin: SupabaseClient, profile: Profile, intent: IntentResult) {
+export function startCreateClientFlow(admin: SupabaseClient, profile: Profile, intent: IntentResult): Promise<BotReply> {
   return start(admin, profile, 'create_client', seedForm(intent.fields, CREATE_CLIENT_STEPS))
 }
 
@@ -134,10 +153,10 @@ export function startCreateClientFlow(admin: SupabaseClient, profile: Profile, i
 
 export async function continueFlow(
   admin: SupabaseClient, profile: Profile, body: string,
-): Promise<string | null> {
+): Promise<BotReply | null> {
   const { data: state } = await admin
     .from('conversation_state')
-    .select('current_flow, context, updated_at')
+    .select('current_flow, step, context, updated_at')
     .eq('profile_id', profile.id)
     .maybeSingle()
 
@@ -161,6 +180,24 @@ export async function continueFlow(
   }
 
   const prev = (state.context ?? {}) as FlowContext
+
+  // Waiting on the tap-buttons choice (buyer/renter, sale/rent). Accept a tapped
+  // button (its title arrives as the body) OR a typed value; if it still can't be
+  // read, re-show the buttons.
+  if (state.step === 'await_choice') {
+    const choice = CHOICE[flow]
+    const field = cfg.steps.find(s => s.key === choice.key)!
+    const tapped = field.coerce(body)
+    const ctx: FlowContext = (tapped != null && tapped !== '')
+      ? { ...prev, [choice.key]: tapped }
+      : parseForm(body, cfg.steps, prev).context   // maybe they typed a form line instead
+    if (ctx[choice.key] == null || ctx[choice.key] === '') {
+      return { text: `Please tap ${choice.buttons.map(b => b.title).join(' or ')}.`, buttons: choice.buttons }
+    }
+    if (missingMandatory(ctx, cfg.steps).length === 0) return cfg.finish(admin, profile, ctx)
+    await saveFlow(admin, profile, flow, ctx)
+    return renderForm(cfg.intro, cfg.steps, ctx)
+  }
 
   if (/^help\b\??$/i.test(body.trim())) {
     const missing = missingMandatory(prev, cfg.steps).map(s => s.label)

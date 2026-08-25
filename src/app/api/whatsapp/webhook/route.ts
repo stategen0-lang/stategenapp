@@ -1,6 +1,6 @@
 import { NextRequest, after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { verifyMetaSignature, parseInbound, verifyToken, sendText, type InboundMessage } from '@/lib/whatsapp/cloud'
+import { verifyMetaSignature, parseInbound, verifyToken, sendReply, replyText, type BotReply, type InboundMessage } from '@/lib/whatsapp/cloud'
 import { normalizePhone } from '@/lib/whatsapp/phone'
 import { parseConfirmation, parseReminderReply } from '@/lib/whatsapp/replies'
 import { classifyIntent, Intent } from '@/lib/whatsapp/intent'
@@ -70,7 +70,7 @@ async function route(
   profile: Profile,
   body: string,
   origin: string,
-): Promise<{ intent: Intent | 'confirm_pending'; answer: string }> {
+): Promise<{ intent: Intent | 'confirm_pending'; answer: BotReply }> {
   // A write waiting on "yes" outranks anything a model might infer.
   const { data: pending } = await admin
     .from('pending_actions')
@@ -238,16 +238,16 @@ async function handleInbound(
     try { await admin.from('whatsapp_logs').update(fields).eq('id', inboundLogId) } catch { /* never break a reply */ }
   }
 
-  // Helper: send a reply and log the outbound row.
-  const answerWith = async (text: string, intent: string, p?: Profile) => {
-    const sent = await sendText(inbound.from, text)
+  // Helper: send a reply (text or interactive buttons) and log the outbound row.
+  const answerWith = async (reply: BotReply, intent: string, p?: Profile) => {
+    const sent = await sendReply(inbound.from, reply)
     if (!sent.ok) console.error('[whatsapp] reply send failed', sent.error)
     await log(admin, {
       company_id: p?.company_id ?? null,
       profile_id: p?.id ?? null,
       from_number: phone,
       direction: 'outbound',
-      message: text,
+      message: replyText(reply),
       intent,
     })
   }
@@ -281,7 +281,7 @@ async function handleInbound(
     return
   }
 
-  let answer: string
+  let answer: BotReply
   let intent: Intent | 'confirm_pending' = 'unknown'
   try {
     const routed = await route(admin, profile, body, origin)
