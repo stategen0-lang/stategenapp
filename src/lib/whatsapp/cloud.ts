@@ -146,29 +146,46 @@ export async function sendText(to: string, body: string): Promise<SendResult> {
   })
 }
 
-// A reply is either plain text, or text with up to 3 tap buttons. The bot's
-// handlers return this so a step that's really a choice (buyer/renter, sale/rent)
-// can be tapped instead of typed. A tapped button arrives back as its title text
-// (parseInbound reads interactive.button_reply.title), so the receiving side
-// needs no special handling.
-export type BotReply = string | { text: string; buttons: { id: string; title: string }[] }
+// A reply is plain text, text with up to 3 tap buttons, or text with a tap list
+// (≤10 rows). The bot's handlers return this so a step that's really a choice
+// (buyer/renter, sale/rent, property type) can be tapped instead of typed. A tap
+// arrives back as its title text (parseInbound reads button_reply.title /
+// list_reply.title), so the receiving side needs no special handling.
+export type BotReply =
+  | string
+  | { text: string; buttons: { id: string; title: string }[] }
+  | { text: string; list: { button: string; rows: { id: string; title: string }[] } }
 
 export function replyText(reply: BotReply): string {
   return typeof reply === 'string' ? reply : reply.text
 }
 
-/** Send a BotReply — plain text, or an interactive button message. */
+/** Send a BotReply — plain text, interactive buttons, or an interactive list. */
 export async function sendReply(to: string, reply: BotReply): Promise<SendResult> {
   if (typeof reply === 'string') return sendText(to, reply)
+  const cloudTo = toCloudAddress(to)
+  if ('buttons' in reply) {
+    return post({
+      to: cloudTo,
+      type: 'interactive',
+      interactive: {
+        type: 'button',
+        body: { text: reply.text },
+        // Meta allows at most 3 reply buttons; titles are capped at 20 chars.
+        action: { buttons: reply.buttons.slice(0, 3).map(b => ({ type: 'reply', reply: { id: b.id, title: b.title.slice(0, 20) } })) },
+      },
+    })
+  }
   return post({
-    to: toCloudAddress(to),
+    to: cloudTo,
     type: 'interactive',
     interactive: {
-      type: 'button',
+      type: 'list',
       body: { text: reply.text },
+      // Button label ≤20 chars, ≤10 rows total, row titles ≤24 chars.
       action: {
-        // Meta allows at most 3 reply buttons; titles are capped at 20 chars.
-        buttons: reply.buttons.slice(0, 3).map(b => ({ type: 'reply', reply: { id: b.id, title: b.title.slice(0, 20) } })),
+        button: reply.list.button.slice(0, 20),
+        sections: [{ rows: reply.list.rows.slice(0, 10).map(r => ({ id: r.id, title: r.title.slice(0, 24) })) }],
       },
     },
   })
