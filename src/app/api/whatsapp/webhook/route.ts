@@ -9,7 +9,7 @@ import {
   stageClientUpdate, stagePropertyUpdate, stageFeedback, stageDescribeProperty,
   applyPendingAction, handleReminderReply,
 } from '@/lib/whatsapp/write-handlers'
-import { startCreatePropertyFlow, startCreateClientFlow, continueFlow } from '@/lib/whatsapp/flow-handlers'
+import { startCreatePropertyFlow, startCreateClientFlow, continueFlow, handleFlowSubmission } from '@/lib/whatsapp/flow-handlers'
 import { stageDealMove, handleQueryPipeline } from '@/lib/whatsapp/pipeline-handlers'
 import { isStartListing, isStartClient } from '@/lib/whatsapp/flows'
 import { parseConnect, isStopMessage, normalizeCode, pairingExpired } from '@/lib/whatsapp/pairing'
@@ -278,6 +278,17 @@ async function handleInbound(
   if (profile.whatsapp_enabled === false) {
     await stamp({ intent: 'disabled' })
     await answerWith('The WhatsApp assistant is turned off for your account. Turn it back on in Settings → WhatsApp.', 'disabled', profile)
+    return
+  }
+
+  // A submitted WhatsApp Flow form (native add-listing / add-client) — handled
+  // apart from text routing; it goes straight to confirm-before-write.
+  if (inbound.flow) {
+    let reply: BotReply
+    try { reply = await handleFlowSubmission(admin, profile, inbound.flow.data) }
+    catch (err) { console.error('[whatsapp] flow submission error', err); reply = 'Something went wrong saving the form. Please try again.' }
+    await stamp({ intent: 'flow_submit' })
+    await answerWith(reply, 'flow_submit', profile)
     return
   }
 

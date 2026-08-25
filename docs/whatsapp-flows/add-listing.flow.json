@@ -1,0 +1,78 @@
+{
+  "version": "5.1",
+  "screens": [
+    {
+      "id": "FORM",
+      "title": "Add a listing",
+      "terminal": true,
+      "data": {},
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form",
+            "children": [
+              {
+                "type": "Dropdown",
+                "name": "type",
+                "label": "Property type",
+                "required": true,
+                "data-source": [
+                  { "id": "Appartement", "title": "Appartement" },
+                  { "id": "Villa", "title": "Villa" },
+                  { "id": "Office", "title": "Office" },
+                  { "id": "Shop", "title": "Shop" },
+                  { "id": "Building", "title": "Building" },
+                  { "id": "Land", "title": "Land" },
+                  { "id": "Showroom", "title": "Showroom" },
+                  { "id": "Restaurant", "title": "Restaurant" }
+                ]
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "transaction",
+                "label": "Sale or rent",
+                "required": true,
+                "data-source": [
+                  { "id": "For Sale", "title": "For Sale" },
+                  { "id": "For Rent", "title": "For Rent" }
+                ]
+              },
+              { "type": "TextInput", "name": "location", "label": "City", "required": true },
+              { "type": "TextInput", "name": "neighborhood", "label": "Area / neighborhood", "required": true },
+              { "type": "TextInput", "name": "price", "label": "Price (USD)", "input-type": "number", "required": true },
+              { "type": "TextInput", "name": "beds", "label": "Bedrooms", "input-type": "number", "required": false },
+              { "type": "TextInput", "name": "baths", "label": "Bathrooms", "input-type": "number", "required": false },
+              { "type": "TextInput", "name": "size", "label": "Size (m2)", "input-type": "number", "required": false },
+              { "type": "TextInput", "name": "parkings", "label": "Parking spaces", "input-type": "number", "required": false },
+              { "type": "TextInput", "name": "ownerName", "label": "Owner name", "required": true },
+              { "type": "TextInput", "name": "ownerContact", "label": "Owner phone", "input-type": "phone", "required": true },
+              {
+                "type": "Footer",
+                "label": "Add listing",
+                "on-click-action": {
+                  "name": "complete",
+                  "payload": {
+                    "__flow": "create_property",
+                    "type": "${form.type}",
+                    "transaction": "${form.transaction}",
+                    "location": "${form.location}",
+                    "neighborhood": "${form.neighborhood}",
+                    "price": "${form.price}",
+                    "beds": "${form.beds}",
+                    "baths": "${form.baths}",
+                    "size": "${form.size}",
+                    "parkings": "${form.parkings}",
+                    "ownerName": "${form.ownerName}",
+                    "ownerContact": "${form.ownerContact}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

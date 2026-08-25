@@ -1,0 +1,70 @@
+{
+  "version": "5.1",
+  "screens": [
+    {
+      "id": "FORM",
+      "title": "Add a client",
+      "terminal": true,
+      "data": {},
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form",
+            "children": [
+              { "type": "TextInput", "name": "name", "label": "Client name", "required": true },
+              { "type": "TextInput", "name": "phone", "label": "Phone", "input-type": "phone", "required": true },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "clientType",
+                "label": "Buyer or renter",
+                "required": true,
+                "data-source": [
+                  { "id": "Buyer", "title": "Buyer" },
+                  { "id": "Renter", "title": "Renter" }
+                ]
+              },
+              {
+                "type": "Dropdown",
+                "name": "propertyType",
+                "label": "Looking for",
+                "required": true,
+                "data-source": [
+                  { "id": "Appartement", "title": "Appartement" },
+                  { "id": "Villa", "title": "Villa" },
+                  { "id": "Office", "title": "Office" },
+                  { "id": "Shop", "title": "Shop" },
+                  { "id": "Building", "title": "Building" },
+                  { "id": "Land", "title": "Land" },
+                  { "id": "Showroom", "title": "Showroom" },
+                  { "id": "Restaurant", "title": "Restaurant" }
+                ]
+              },
+              { "type": "TextInput", "name": "location", "label": "Preferred area", "required": true },
+              { "type": "TextInput", "name": "budget", "label": "Budget (USD)", "input-type": "number", "required": true },
+              { "type": "TextInput", "name": "beds", "label": "Bedrooms wanted", "input-type": "number", "required": false },
+              {
+                "type": "Footer",
+                "label": "Add client",
+                "on-click-action": {
+                  "name": "complete",
+                  "payload": {
+                    "__flow": "create_client",
+                    "name": "${form.name}",
+                    "phone": "${form.phone}",
+                    "clientType": "${form.clientType}",
+                    "propertyType": "${form.propertyType}",
+                    "location": "${form.location}",
+                    "budget": "${form.budget}",
+                    "beds": "${form.beds}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

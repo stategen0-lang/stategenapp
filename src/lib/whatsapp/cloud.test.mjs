@@ -103,6 +103,18 @@ test('parseInbound: reads a template quick-reply button', () => {
   assert.equal(parseInbound(payload).text, 'done')
 })
 
+test('parseInbound: reads a submitted WhatsApp Flow form (nfm_reply)', () => {
+  const payload = inboundPayload({
+    messages: [{
+      from: '9613870377', id: 'wamid.FLOW', type: 'interactive',
+      interactive: { type: 'nfm_reply', nfm_reply: { name: 'flow', body: 'Sent', response_json: JSON.stringify({ __flow: 'create_client', name: 'Joe', phone: '03123456', clientType: 'Buyer' }) } },
+    }],
+  })
+  const m = parseInbound(payload)
+  assert.equal(m.type, 'flow')
+  assert.deepEqual(m.flow.data, { __flow: 'create_client', name: 'Joe', phone: '03123456', clientType: 'Buyer' })
+})
+
 test('parseInbound: non-text media message yields empty text but still parses', () => {
   const payload = inboundPayload({
     messages: [{ from: '9613870377', id: 'wamid.IMG', type: 'image', image: { id: 'media123' } }],

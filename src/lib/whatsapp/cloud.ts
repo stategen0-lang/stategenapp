@@ -58,7 +58,9 @@ export interface InboundMessage {
   text: string        // message text, or the title of a tapped button/list row
   name: string        // WhatsApp profile display name, if provided
   messageId: string   // wamid... — used to dedupe Meta's at-least-once delivery
-  type: string        // 'text' | 'interactive' | 'button' | 'image' | ...
+  type: string        // 'text' | 'interactive' | 'button' | 'flow' | 'image' | ...
+  /** Present when the agent submitted a WhatsApp Flow form (the parsed fields). */
+  flow?: { data: Record<string, unknown> }
 }
 
 /**
@@ -86,10 +88,20 @@ export function parseInbound(payload: unknown): InboundMessage | null {
     // and template quick-reply buttons carry their label elsewhere — read it so
     // a future tap-to-fill UI routes through the same intent logic as typing.
     let text = ''
+    let flow: { data: Record<string, unknown> } | undefined
     if (type === 'text') {
       text = String((msg.text as { body?: string } | undefined)?.body ?? '')
     } else if (type === 'interactive') {
-      const inter = msg.interactive as { button_reply?: { title?: string }; list_reply?: { title?: string } } | undefined
+      const inter = msg.interactive as {
+        button_reply?: { title?: string }
+        list_reply?: { title?: string }
+        nfm_reply?: { response_json?: string }
+      } | undefined
+      // A submitted WhatsApp Flow form arrives as an nfm_reply with the field
+      // values in response_json.
+      if (inter?.nfm_reply?.response_json) {
+        try { flow = { data: JSON.parse(inter.nfm_reply.response_json) as Record<string, unknown> } } catch { /* ignore */ }
+      }
       text = String(inter?.button_reply?.title ?? inter?.list_reply?.title ?? '')
     } else if (type === 'button') {
       text = String((msg.button as { text?: string } | undefined)?.text ?? '')
@@ -98,7 +110,8 @@ export function parseInbound(payload: unknown): InboundMessage | null {
     const contacts = value.contacts as { profile?: { name?: string } }[] | undefined
     const name = String(contacts?.[0]?.profile?.name ?? '')
 
-    return { from, text, name, messageId, type }
+    const base: InboundMessage = { from, text, name, messageId, type: flow ? 'flow' : type }
+    return flow ? { ...base, flow } : base
   } catch {
     return null
   }
@@ -155,15 +168,39 @@ export type BotReply =
   | string
   | { text: string; buttons: { id: string; title: string }[] }
   | { text: string; list: { button: string; rows: { id: string; title: string }[] } }
+  | { flow: { flowId: string; flowToken: string; cta: string; body: string; screen: string } }
 
 export function replyText(reply: BotReply): string {
-  return typeof reply === 'string' ? reply : reply.text
+  if (typeof reply === 'string') return reply
+  return 'flow' in reply ? reply.flow.body : reply.text
 }
 
 /** Send a BotReply — plain text, interactive buttons, or an interactive list. */
 export async function sendReply(to: string, reply: BotReply): Promise<SendResult> {
   if (typeof reply === 'string') return sendText(to, reply)
   const cloudTo = toCloudAddress(to)
+  if ('flow' in reply) {
+    const f = reply.flow
+    return post({
+      to: cloudTo,
+      type: 'interactive',
+      interactive: {
+        type: 'flow',
+        body: { text: f.body },
+        action: {
+          name: 'flow',
+          parameters: {
+            flow_message_version: '3',
+            flow_token: f.flowToken,
+            flow_id: f.flowId,
+            flow_cta: f.cta,
+            flow_action: 'navigate',
+            flow_action_payload: { screen: f.screen },
+          },
+        },
+      },
+    })
+  }
   if ('buttons' in reply) {
     return post({
       to: cloudTo,

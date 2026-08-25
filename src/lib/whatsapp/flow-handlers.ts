@@ -14,6 +14,7 @@ import {
 import { buildUpdate, confirmationText, PROPERTY_FIELDS } from '@/lib/whatsapp/writes'
 import { stage, type Profile } from '@/lib/whatsapp/write-handlers'
 import type { IntentResult } from '@/lib/whatsapp/intent'
+import type { BotReply } from '@/lib/whatsapp/cloud'
 
 type FlowName = 'create_property' | 'create_client'
 
@@ -113,14 +114,64 @@ const FLOWS: Record<FlowName, FlowConfig> = {
 
 // ── Starting each flow ────────────────────────────────────────────────────────
 
+// Native WhatsApp Flow forms — a pop-up with fields + a Submit button. Enabled
+// per flow via env (the Flow's ID from WhatsApp Manager). Until it's published
+// and the ID is set, the bot falls back to the copy-paste text form. The Flow's
+// screen id must be 'FORM' and its complete-action payload must carry
+// "__flow":"<flow name>" and the step keys, matching the JSON we publish.
+const FLOW_FORM: Record<FlowName, { envId: string; cta: string; body: string }> = {
+  create_property: { envId: 'WHATSAPP_FLOW_LISTING', cta: 'Add listing', body: '📋 Tap to add a listing — fill the form and submit.' },
+  create_client:   { envId: 'WHATSAPP_FLOW_CLIENT',  cta: 'Add client',  body: '📋 Tap to add a client — fill the form and submit.' },
+}
+const FLOW_SCREEN = 'FORM'
+
 async function start(
   admin: SupabaseClient, profile: Profile, flow: FlowName, context: FlowContext,
-): Promise<string> {
+): Promise<BotReply> {
   const cfg = FLOWS[flow]
   // If the opening message already gave everything required, skip to confirm.
   if (missingMandatory(context, cfg.steps).length === 0) return cfg.finish(admin, profile, context)
+
+  // Prefer the native Flow form when its ID is configured.
+  const form = FLOW_FORM[flow]
+  const flowId = process.env[form.envId]
+  if (flowId) {
+    // No conversation_state: the submission returns as a Flow reply (handled by
+    // handleFlowSubmission), not as continueFlow text.
+    await clearFlow(admin, profile.id)
+    return { flow: { flowId, flowToken: flow, cta: form.cta, body: form.body, screen: FLOW_SCREEN } }
+  }
+
   await saveFlow(admin, profile, flow, context)
   return renderForm(cfg.intro, cfg.steps, context)
+}
+
+/**
+ * A submitted WhatsApp Flow form: coerce its fields into a flow context and run
+ * the same finish (confirm-before-write) as the text form. The payload carries a
+ * "__flow" discriminator so we know which record to build.
+ */
+export async function handleFlowSubmission(
+  admin: SupabaseClient, profile: Profile, data: Record<string, unknown>,
+): Promise<string> {
+  const flow = String(data.__flow ?? '') as FlowName
+  const cfg = FLOWS[flow]
+  if (!cfg) return "Sorry, I couldn't read that form. Please try again."
+  await clearFlow(admin, profile.id)
+
+  const context: FlowContext = {}
+  for (const step of cfg.steps) {
+    const raw = data[step.key]
+    if (raw == null || raw === '') continue
+    const value = step.coerce(raw)
+    if (value != null) context[step.key] = value
+  }
+
+  const missing = missingMandatory(context, cfg.steps)
+  if (missing.length) {
+    return `The form is missing: ${missing.map(s => s.label).join(', ')}. Send "add a ${cfg.noun}" and try again.`
+  }
+  return cfg.finish(admin, profile, context)
 }
 
 export function startCreatePropertyFlow(admin: SupabaseClient, profile: Profile, intent: IntentResult) {
