@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { MessageCircle } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { MessageCircle, Link2 } from 'lucide-react'
 import { Property, Agent, Client, TYPE_GRADIENTS, statusStyle, formatPrice, buildDesc, getAgent } from '@/lib/data'
 import MatchCards from '@/components/matching/MatchCards'
 import ClientDetailModal from './ClientDetailModal'
@@ -22,31 +22,58 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
   const photos = p.photos ?? []
   const [activePhoto, setActivePhoto] = useState(0)
   const [stackedClient, setStackedClient] = useState<Client | null>(null)
-  const [shareLabel, setShareLabel] = useState('Share')
+  const [shareOpen, setShareOpen] = useState(false)
+  const [shareBusy, setShareBusy] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const shareUrlRef = useRef<string | null>(null)
 
-  // Ask the server to mint a signed public link, then copy it. The token can't
-  // be built client-side — it's signed with a server secret — so this is a
-  // fetch, not a string build.
-  async function sharePropertyLink() {
-    setShareLabel('…')
+  // Mint the signed public link once (the token is signed with a server secret,
+  // so it can't be built client-side) and cache it for this session.
+  async function getShareUrl(): Promise<string | null> {
+    if (shareUrlRef.current) return shareUrlRef.current
+    setShareBusy(true)
     try {
       const res = await fetch(`/api/share?id=${p.id}`)
-      if (!res.ok) { setShareLabel('Failed'); setTimeout(() => setShareLabel('Share'), 2000); return }
+      if (!res.ok) return null
       const { url } = await res.json()
-      try {
-        await navigator.clipboard.writeText(url)
-        setShareLabel('Copied ✓')
-      } catch {
-        // Clipboard blocked (older browser / insecure context): show the link
-        // so the agent can copy it by hand rather than losing it.
-        window.prompt('Share this listing link:', url)
-        setShareLabel('Share')
-      }
-      setTimeout(() => setShareLabel('Share'), 2500)
+      shareUrlRef.current = url as string
+      return url as string
     } catch {
-      setShareLabel('Failed')
-      setTimeout(() => setShareLabel('Share'), 2000)
+      return null
+    } finally {
+      setShareBusy(false)
     }
+  }
+
+  const shareText = () => {
+    const price = p.transaction === 'For Rent' ? `${formatPrice(p.rent)}/mo` : formatPrice(p.price)
+    const where = [p.district, p.city].filter(Boolean).join(', ')
+    return `${p.title}${where ? ` — ${where}` : ''} · ${price}`
+  }
+
+  async function onShareClick() {
+    const url = await getShareUrl()
+    if (!url) { setCopied(false); return }
+    // Mobile: the native share sheet already includes WhatsApp, Copy, etc.
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try { await navigator.share({ title: p.title, text: shareText(), url }); return } catch { /* cancelled → fall to menu */ }
+    }
+    setShareOpen(o => !o)
+  }
+
+  async function shareWhatsApp() {
+    const url = await getShareUrl()
+    if (!url) return
+    window.open(`https://wa.me/?text=${encodeURIComponent(`${shareText()}\n${url}`)}`, '_blank')
+    setShareOpen(false)
+  }
+
+  async function copyLink() {
+    const url = await getShareUrl()
+    if (!url) return
+    try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 2000) }
+    catch { window.prompt('Copy this listing link:', url) }
+    setShareOpen(false)
   }
 
   return (
@@ -77,13 +104,29 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
                 {p.type} · {p.transaction}
               </span>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={sharePropertyLink}
-                  className="h-7 px-3 rounded-full flex items-center justify-center text-white text-xs font-semibold leading-none"
-                  style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)' }}
-                >
-                  {shareLabel}
-                </button>
+                <div className="relative">
+                  <button
+                    onClick={onShareClick}
+                    className="h-7 px-3 rounded-full flex items-center justify-center text-white text-xs font-semibold leading-none"
+                    style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)' }}
+                  >
+                    {shareBusy ? '…' : copied ? 'Copied ✓' : 'Share'}
+                  </button>
+                  {shareOpen && (
+                    <>
+                      {/* click-away to close */}
+                      <div className="fixed inset-0 z-10" onClick={() => setShareOpen(false)} />
+                      <div className="absolute right-0 mt-1 z-20 rounded-xl overflow-hidden" style={{ background: '#fff', boxShadow: '0 6px 24px rgba(0,0,0,0.22)', minWidth: 180 }}>
+                        <button onClick={shareWhatsApp} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-medium hover:bg-gray-50" style={{ color: '#14223F' }}>
+                          <MessageCircle className="h-4 w-4" style={{ color: '#25D366' }} /> Share on WhatsApp
+                        </button>
+                        <button onClick={copyLink} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-medium hover:bg-gray-50" style={{ color: '#14223F', borderTop: '1px solid #EEF0F4' }}>
+                          <Link2 className="h-4 w-4" style={{ color: '#5E8FD6' }} /> Copy link
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
                 {onEdit && (
                   <button
                     onClick={() => onEdit(p)}
