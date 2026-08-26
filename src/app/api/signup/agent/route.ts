@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { agentLimitFor } from '@/lib/stripe-plans'
+import { seatsUsed } from '@/lib/seats'
 
 // Agent signup — server-authoritative.
 //
@@ -37,19 +38,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No agency found for that domain.' }, { status: 404 })
     }
 
-    // Enforce the plan's agent cap against approved agents — if every seat is
-    // already taken, a new signup could never be approved anyway.
+    // Enforce the plan's seat cap (all users count: managers + approved agents)
+    // — if every seat is taken, a new signup could never be approved anyway.
     const limit = agentLimitFor(company.Plan as string)
-    const { count } = await admin
-      .from('Profiles')
-      .select('id', { count: 'exact', head: true })
-      .eq('company_id', company.id)
-      .eq('role', 'agent')
-      .eq('approved', true)
-    const used = count ?? 0
+    const used = await seatsUsed(admin, company.id)
     if (limit !== null && used >= limit) {
       return NextResponse.json(
-        { error: `${company.Name} has reached its plan's limit of ${limit} agents. Ask your manager to upgrade to add more seats.` },
+        { error: `${company.Name} has reached its plan's limit of ${limit} users. Ask your manager to upgrade to add more seats.` },
         { status: 409 },
       )
     }

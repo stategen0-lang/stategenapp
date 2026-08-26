@@ -31,7 +31,7 @@ export default function TermsPage() {
         <li>A manager creates the company account and may invite agents to join under the agency&apos;s domain. New agents require manager approval before they can access the account.</li>
         <li>You are responsible for keeping login credentials secure and for all activity under your account and your agents&apos; accounts.</li>
         <li>You must provide accurate information and are responsible for the accuracy of the listing, client, and deal data you enter.</li>
-        <li>Each subscription tier permits a maximum number of active agents. Removing an agent frees a seat.</li>
+        <li>Each subscription tier permits a maximum number of active users (managers and agents). Removing a user frees a seat.</li>
       </UL>
 
       <H2>3. Subscriptions, trial, and billing</H2>

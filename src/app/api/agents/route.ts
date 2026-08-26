@@ -3,6 +3,7 @@ import { getSession } from '@/lib/session'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { isManager } from '@/lib/permissions'
 import { agentLimitFor } from '@/lib/stripe-plans'
+import { seatsUsed } from '@/lib/seats'
 
 // Managers: agent approvals + team management.
 //
@@ -64,23 +65,13 @@ export async function POST(req: NextRequest) {
   // managers for demote), so we fetch the role and branch on it below.
   const { data: target } = await admin
     .from('Profiles')
-    .select('id, role, company_id, agent_code')
+    .select('id, role, company_id, agent_code, approved')
     .eq('id', id)
     .maybeSingle()
   if (!target || target.company_id !== session.companyId) {
     return NextResponse.json({ error: 'That person is not in your company.' }, { status: 404 })
   }
 
-  // Counts the plan's agent cap uses; head:true fetches only the count.
-  async function approvedAgentCount() {
-    const { count } = await admin
-      .from('Profiles')
-      .select('id', { count: 'exact', head: true })
-      .eq('company_id', session!.companyId)
-      .eq('role', 'agent')
-      .eq('approved', true)
-    return count ?? 0
-  }
   async function planLimit() {
     const { data: company } = await admin.from('Companies').select('Plan').eq('id', session!.companyId).maybeSingle()
     return agentLimitFor(company?.Plan as string)
@@ -93,7 +84,12 @@ export async function POST(req: NextRequest) {
     if (target.role !== 'agent') {
       return NextResponse.json({ error: 'Only an agent can be made a manager.' }, { status: 400 })
     }
-    const { error } = await admin.from('Profiles').update({ role: 'owner', approved: true }).eq('id', id)
+    // Approve first, then promote — so promotion is always seat-neutral (an
+    // approved agent already holds a seat) and never sneaks past the cap.
+    if (target.approved !== true) {
+      return NextResponse.json({ error: 'Approve this agent before making them a manager.' }, { status: 409 })
+    }
+    const { error } = await admin.from('Profiles').update({ role: 'owner' }).eq('id', id)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ ok: true, action })
   }
@@ -112,16 +108,10 @@ export async function POST(req: NextRequest) {
     if ((managerCount ?? 0) <= 1) {
       return NextResponse.json({ error: 'You need at least one manager. Promote someone else first.' }, { status: 409 })
     }
-    // They become an agent, so they need an agent code and a free seat.
+    // They become an agent, so they need an agent code to return to. No seat
+    // check: a manager already held a seat, so demoting to agent is seat-neutral.
     if (!target.agent_code) {
       return NextResponse.json({ error: 'This manager has no agent profile, so they can’t become an agent.' }, { status: 409 })
-    }
-    const limit = await planLimit()
-    if (limit !== null && (await approvedAgentCount()) >= limit) {
-      return NextResponse.json(
-        { error: `Your plan allows ${limit} agents and they're all in use. Upgrade before adding another.` },
-        { status: 409 },
-      )
     }
     const { error } = await admin.from('Profiles').update({ role: 'agent', approved: true }).eq('id', id)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -141,11 +131,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, action })
   }
 
-  // approve — re-check the plan's cap against approved agents.
+  // approve — re-check the plan's seat cap (all users count: managers + agents).
   const limit = await planLimit()
-  if (limit !== null && (await approvedAgentCount()) >= limit) {
+  if (limit !== null && (await seatsUsed(admin, session.companyId)) >= limit) {
     return NextResponse.json(
-      { error: `Your plan allows ${limit} agents and they're all in use. Upgrade to approve more.` },
+      { error: `Your plan allows ${limit} users and they're all in use. Upgrade to approve more.` },
       { status: 409 },
     )
   }

@@ -251,7 +251,7 @@ export default function AgentSignupPage() {
                 )}
                 {!domainChecking && domainValid === true && slots?.full && (
                   <p className="text-xs mt-1" style={{ color: '#A23434' }}>
-                    This agency has reached its plan&apos;s agent limit. Ask your manager to upgrade to add more seats.
+                    This agency has reached its plan&apos;s seat limit. Ask your manager to upgrade to add more seats.
                   </p>
                 )}
                 {!domainChecking && domainValid === false && (

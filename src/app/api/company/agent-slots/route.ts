@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { agentLimitFor } from '@/lib/stripe-plans'
+import { seatsUsed } from '@/lib/seats'
 
 // How many agent seats a company has used vs its plan cap. Used by the agent
 // signup page to show availability before the form is filled. (Authoritative
@@ -15,15 +16,9 @@ export async function GET(req: NextRequest) {
   if (!company) return NextResponse.json({ error: 'Company not found' }, { status: 404 })
 
   const limit = agentLimitFor(company.Plan as string)
-  // A seat is used by an *approved* agent; pending signups don't count until a
-  // manager approves them.
-  const { count } = await admin
-    .from('Profiles')
-    .select('id', { count: 'exact', head: true })
-    .eq('company_id', company.id)
-    .eq('role', 'agent')
-    .eq('approved', true)
-  const used = count ?? 0
+  // A seat is used by every active user: managers + approved agents. Pending
+  // agent signups don't count until a manager approves them.
+  const used = await seatsUsed(admin, company.id)
 
   return NextResponse.json({ used, limit, full: limit !== null && used >= limit })
 }
