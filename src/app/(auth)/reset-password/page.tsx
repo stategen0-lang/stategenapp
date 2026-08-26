@@ -22,6 +22,24 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
 
+  // Code fallback: when the emailed link doesn't establish a session (this
+  // project's link-verify format is broken), the user can enter the reset code
+  // directly. verifyOtp exchanges it for a recovery session.
+  const [email, setEmail] = useState('')
+  const [code, setCode] = useState('')
+  const [otpBusy, setOtpBusy] = useState(false)
+  const [otpError, setOtpError] = useState<string | null>(null)
+
+  async function verifyCode() {
+    setOtpError(null)
+    if (!email.trim() || !code.trim()) { setOtpError('Enter your email and the code.'); return }
+    setOtpBusy(true)
+    const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token: code.trim(), type: 'recovery' })
+    setOtpBusy(false)
+    if (error) { setOtpError(error.message || 'That code is invalid or has expired — request a new one.'); return }
+    setReady(true) // session established → show the set-a-new-password form
+  }
+
   useEffect(() => {
     // The recovery link fires PASSWORD_RECOVERY once the token is processed.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -63,15 +81,39 @@ export default function ResetPasswordPage() {
             <p className="text-sm" style={{ color: '#7A8499' }}>Signing you in…</p>
           </div>
         ) : ready === false ? (
-          <div className="text-center">
-            <h2 className="text-xl font-bold mb-2" style={{ color: '#1A2B4A' }}>Link expired</h2>
-            <p className="text-sm mb-6" style={{ color: '#7A8499' }}>
-              This reset link is invalid or has expired. Request a new one from the sign-in page.
+          <>
+            <h2 className="text-2xl font-extrabold mb-1.5" style={{ color: '#14223F', letterSpacing: '-0.5px' }}>Reset your password</h2>
+            <p className="text-sm mb-7" style={{ color: '#6A7488' }}>
+              Enter your email and the reset code you were given to set a new password.
             </p>
-            <Link href="/login" className="inline-block px-4 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: '#0E1F3D' }}>
-              Back to sign in
-            </Link>
-          </div>
+            <div className="space-y-4">
+              <div>
+                <p className="text-xs font-bold tracking-wider mb-1.5 uppercase" style={{ color: '#6A7488', letterSpacing: '0.5px' }}>Email</p>
+                <input
+                  type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@email.com"
+                  className="w-full px-4 py-2.5 text-sm outline-none"
+                  style={{ border: '1.5px solid #D7DCE5', borderRadius: '10px', color: '#14223F' }}
+                  onFocus={e => (e.target.style.borderColor = '#5E8FD6')} onBlur={e => (e.target.style.borderColor = '#D7DCE5')}
+                />
+              </div>
+              <div>
+                <p className="text-xs font-bold tracking-wider mb-1.5 uppercase" style={{ color: '#6A7488', letterSpacing: '0.5px' }}>Reset code</p>
+                <input
+                  value={code} onChange={e => setCode(e.target.value)} placeholder="6–8 digit code" inputMode="numeric"
+                  className="w-full px-4 py-2.5 text-sm outline-none tracking-widest"
+                  style={{ border: '1.5px solid #D7DCE5', borderRadius: '10px', color: '#14223F' }}
+                  onFocus={e => (e.target.style.borderColor = '#5E8FD6')} onBlur={e => (e.target.style.borderColor = '#D7DCE5')}
+                />
+              </div>
+              {otpError && <p className="text-xs px-3 py-2 rounded-lg" style={{ background: '#FBE7E7', color: '#A23434' }}>{otpError}</p>}
+              <button onClick={verifyCode} disabled={otpBusy} className="w-full py-3 rounded-xl text-sm font-semibold text-white disabled:opacity-60" style={{ background: '#0E1F3D' }}>
+                {otpBusy ? 'Verifying…' : 'Continue'}
+              </button>
+              <p className="text-center text-xs" style={{ color: '#9AA3B2' }}>
+                <Link href="/login" className="font-semibold" style={{ color: '#5E8FD6' }}>Back to sign in</Link>
+              </p>
+            </div>
+          </>
         ) : ready === null ? (
           <p className="text-sm text-center" style={{ color: '#7A8499' }}>Verifying your link…</p>
         ) : (
