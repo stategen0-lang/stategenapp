@@ -7,6 +7,14 @@ import Link from 'next/link'
 import { CheckCircle2, Mail, Lock, Eye, EyeOff } from 'lucide-react'
 import Logo from '@/components/brand/Logo'
 
+// Supabase sometimes hands back an empty or object-shaped error; never surface a
+// bare "{}" — fall back to a human message.
+function cleanMsg(m: unknown, fallback: string): string {
+  const s = typeof m === 'string' ? m.trim() : ''
+  if (!s || s === '{}' || s === '[object Object]') return fallback
+  return s
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -25,51 +33,62 @@ export default function LoginPage() {
     if (!email.trim()) { setError('Enter your email above first, then tap "Forgot password?".'); return }
     setResetting(true)
     const redirectTo = `${window.location.origin}/reset-password`
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo })
-    setResetting(false)
-    if (error) { setError(error.message); return }
-    setResetMsg(`If an account exists for ${email.trim()}, a reset link is on its way. Check your email.`)
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo })
+      if (error) { setError(cleanMsg(error.message, 'Could not send the reset email. Please try again.')); return }
+      setResetMsg(`If an account exists for ${email.trim()}, a reset link is on its way. Check your email.`)
+    } catch {
+      setError('Could not reach the server. Check your connection and try again.')
+    } finally {
+      setResetting(false)
+    }
   }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError(null)
+    setResetMsg(null)
 
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
 
-    if (error) {
-      setError(error.message)
-      setLoading(false)
-      return
-    }
+      if (error) {
+        setError(cleanMsg(error.message, 'Invalid email or password.'))
+        setLoading(false)
+        return
+      }
 
-    // Check if the user's company is active
-    if (data.user) {
-      const { data: profile } = await supabase
-        .from('Profiles')
-        .select('company_id')
-        .eq('id', data.user.id)
-        .single()
-
-      if (profile?.company_id) {
-        const { data: company } = await supabase
-          .from('Companies')
-          .select('"is active"')
-          .eq('id', profile.company_id)
+      // Check if the user's company is active
+      if (data.user) {
+        const { data: profile } = await supabase
+          .from('Profiles')
+          .select('company_id')
+          .eq('id', data.user.id)
           .single()
 
-        if (company && !company['is active']) {
-          await supabase.auth.signOut()
-          setError('Your account is pending activation. We will contact you once your subscription is confirmed.')
-          setLoading(false)
-          return
+        if (profile?.company_id) {
+          const { data: company } = await supabase
+            .from('Companies')
+            .select('"is active"')
+            .eq('id', profile.company_id)
+            .single()
+
+          if (company && !company['is active']) {
+            await supabase.auth.signOut()
+            setError('Your account is pending activation. We will contact you once your subscription is confirmed.')
+            setLoading(false)
+            return
+          }
         }
       }
-    }
 
-    router.push('/dashboard')
-    router.refresh()
+      router.push('/dashboard')
+      router.refresh()
+    } catch {
+      setError('Could not reach the server. Check your connection and try again.')
+      setLoading(false)
+    }
   }
 
   return (
