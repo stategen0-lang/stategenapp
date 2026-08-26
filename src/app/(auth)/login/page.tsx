@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -25,6 +25,17 @@ export default function LoginPage() {
   const [resetting, setResetting] = useState(false)
   const router = useRouter()
   const supabase = createClient()
+
+  // A password-reset link redirects to the site origin (Supabase forces the
+  // Site URL), so it can land here rather than on /reset-password. Once the
+  // recovery session is established, hand off to the reset screen.
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') router.replace('/reset-password')
+    })
+    return () => subscription.unsubscribe()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Email a password-reset link to whatever's in the email field. Lands on
   // /reset-password, which completes the recovery flow.
