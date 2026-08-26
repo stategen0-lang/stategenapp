@@ -4,15 +4,32 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Building2, CheckCircle2, Mail, Lock } from 'lucide-react'
+import { CheckCircle2, Mail, Lock, Eye, EyeOff } from 'lucide-react'
+import Logo from '@/components/brand/Logo'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPw, setShowPw] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [resetMsg, setResetMsg] = useState<string | null>(null)
+  const [resetting, setResetting] = useState(false)
   const router = useRouter()
   const supabase = createClient()
+
+  // Email a password-reset link to whatever's in the email field. Lands on
+  // /reset-password, which completes the recovery flow.
+  async function handleForgot() {
+    setError(null); setResetMsg(null)
+    if (!email.trim()) { setError('Enter your email above first, then tap "Forgot password?".'); return }
+    setResetting(true)
+    const redirectTo = `${window.location.origin}/reset-password`
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo })
+    setResetting(false)
+    if (error) { setError(error.message); return }
+    setResetMsg(`If an account exists for ${email.trim()}, a reset link is on its way. Check your email.`)
+  }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -62,12 +79,7 @@ export default function LoginPage() {
         className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12"
         style={{ background: '#0E1F3D' }}
       >
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: '#5E8FD6' }}>
-            <Building2 className="h-5 w-5 text-white" />
-          </div>
-          <span className="font-bold text-white text-lg tracking-tight">StateGen</span>
-        </div>
+        <Logo variant="white" size={40} withWordmark priority />
 
         <div>
           <h1 className="text-4xl font-extrabold text-white leading-tight mb-4" style={{ letterSpacing: '-0.5px' }}>
@@ -143,12 +155,12 @@ export default function LoginPage() {
               <div className="relative">
                 <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: '#9AA3B2' }} />
                 <input
-                  type="password"
+                  type={showPw ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   placeholder="••••••••"
-                  className="w-full pl-10 pr-4 py-2.5 text-sm outline-none transition-colors"
+                  className="w-full pl-10 pr-11 py-2.5 text-sm outline-none transition-colors"
                   style={{
                     border: '1.5px solid #D7DCE5',
                     borderRadius: '10px',
@@ -158,10 +170,19 @@ export default function LoginPage() {
                   onFocus={(e) => (e.target.style.borderColor = '#5E8FD6')}
                   onBlur={(e) => (e.target.style.borderColor = '#D7DCE5')}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPw(v => !v)}
+                  aria-label={showPw ? 'Hide password' : 'Show password'}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md hover:bg-gray-100 transition-colors"
+                  style={{ color: '#9AA3B2' }}
+                >
+                  {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
               <div className="flex justify-end mt-1.5">
-                <button type="button" className="text-xs" style={{ color: '#5E8FD6' }}>
-                  Forgot password?
+                <button type="button" onClick={handleForgot} disabled={resetting} className="text-xs disabled:opacity-60" style={{ color: '#5E8FD6' }}>
+                  {resetting ? 'Sending…' : 'Forgot password?'}
                 </button>
               </div>
             </div>
@@ -169,6 +190,11 @@ export default function LoginPage() {
             {error && (
               <p className="text-xs px-3 py-2 rounded-lg" style={{ background: '#FBE7E7', color: '#A23434' }}>
                 {error}
+              </p>
+            )}
+            {resetMsg && (
+              <p className="text-xs px-3 py-2 rounded-lg" style={{ background: '#E3F4EA', color: '#1F7A4D' }}>
+                {resetMsg}
               </p>
             )}
 
