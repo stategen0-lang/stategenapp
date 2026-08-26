@@ -44,6 +44,28 @@ function budgetAndLocation(text: string): { budget?: number; location?: string }
   return out
 }
 
+/**
+ * A forwarded / first-person buyer enquiry — a person to register as a client,
+ * not an agent searching existing listings. Keyed on a contact number or on
+ * first-person "I'm looking to buy/rent" / "my name is", which an agent's own
+ * property search never carries. When true we DON'T let the property-search
+ * fast-path claim the message — it falls through to Grok, which extracts the
+ * client's fields and classifies it create_client.
+ */
+function looksLikeClientEnquiry(text: string): boolean {
+  // A Lebanese phone: +961…, a mobile/landline prefix + two 3-digit groups
+  // ("03 445 210", "71 998 877", "01 234 567"). Deliberately not a bare 6-digit
+  // run, so a plain budget like "350000" isn't mistaken for a number.
+  const hasPhone =
+    /\+?\b961\d{6,}/.test(text.replace(/[^\d+]/g, ''))
+    || /\b(0?3|0?[789]\d|0[1-9])[\s-]?\d{3}[\s-]?\d{3}\b/.test(text)
+  return hasPhone
+    || /\bmy name is\b/i.test(text)
+    || /\bi['’]?\s*a?m\s+looking\b/i.test(text)
+    || /\blooking to (?:buy|rent|lease)\b/i.test(text)
+    || /\bi (?:want|need|would like|wanna)\s+to\s+(?:buy|rent|lease)\b/i.test(text)
+}
+
 const CLIENT_STATUS_WORDS: Record<string, string> = {
   searching: 'Searching', viewing: 'Viewing', negotiating: 'Negotiating',
   closed: 'Closed', inactive: 'Inactive',
@@ -202,8 +224,12 @@ export function quickIntent(raw: string | null | undefined): IntentResult | null
   }
 
   // ── "what matches 500k in Beirut" / "properties in Hamra" ─────────────────
+  // A forwarded client enquiry ("looking to buy an apartment… 03 445 210") also
+  // names a property type + budget + area, so it's excluded here — otherwise it
+  // reads as a search and never reaches the create_client classifier.
   if (/\b(match(es|ing)?|properties|propertys|listings?|apartments?|flats?|villas?|houses?|offices?|shops?|studios?|chalets?)\b/i.test(text)
-      && !/^(add|create|list|post|register)\b/i.test(text)) {
+      && !/^(add|create|list|post|register)\b/i.test(text)
+      && !looksLikeClientEnquiry(text)) {
     const { budget, location } = budgetAndLocation(text)
     if (budget || location) return { intent: 'query_property', budget, location }
     // A bare "show me the listings" still routes to the property handler, which

@@ -249,6 +249,22 @@ test('a create-listing message is not misread as a query', () => {
     assert.notEqual(r?.intent, 'query_property', s)
   }
 })
+test('a forwarded client enquiry is not claimed as a property search', () => {
+  // Names a type + budget + area like a search, but it's a person to register.
+  // Must return null so Grok classifies it create_client, not query_property.
+  for (const s of [
+    "Hi, I'm looking to buy a 3 bedroom apartment in Achrafieh, budget around 350k. My name is Joe Khoury, 03 445 210.",
+    'Client: Rana Haddad, 71 998 877. Wants to rent an office in Hamra, budget 2000/month.',
+    'Good morning, I need a villa with a garden in Broumana, up to 1.2M. Reach me on 76 330 918.',
+  ]) {
+    assert.equal(quickIntent(s), null, s)
+  }
+})
+test('a genuine agent search (no person/phone) is still a fast query_property', () => {
+  // The guard must not swallow real searches — no phone, no first-person buyer.
+  assert.equal(quickIntent('what matches a 500k budget in Beirut')?.intent, 'query_property')
+  assert.equal(quickIntent('any apartments in Hamra under 400k')?.intent, 'query_property')
+})
 test('reminder replies are not claimed here', () => {
   // These are matched earlier by parseReminderReply against a live reminder.
   for (const s of ['done', 'snooze 3d', 'not interested', 'yes', 'no']) {
