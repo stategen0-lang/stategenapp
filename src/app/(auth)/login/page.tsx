@@ -27,9 +27,14 @@ export default function LoginPage() {
   const supabase = createClient()
 
   // A password-reset link redirects to the site origin (Supabase forces the
-  // Site URL), so it can land here rather than on /reset-password. Once the
-  // recovery session is established, hand off to the reset screen.
+  // Site URL), so it can land here rather than on /reset-password. Forward the
+  // recovery token — hash intact — to the reset screen, which completes it. The
+  // event listener is a fallback if the client consumed the token before we ran.
   useEffect(() => {
+    if (typeof window !== 'undefined' && /type=recovery|error=/.test(window.location.hash)) {
+      window.location.replace('/reset-password' + window.location.hash)
+      return
+    }
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') router.replace('/reset-password')
     })
