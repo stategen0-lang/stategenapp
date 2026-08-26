@@ -14,7 +14,12 @@ const H = '#14223F'
 const SUB = '#6A7488'
 const LINE = '#EEF0F4'
 
-async function loadListing(token: string): Promise<PublicListing | null> {
+// The owning agency's public branding — shown instead of the generic StateGen
+// footer so a shared link carries the agent's company.
+interface Brand { name: string | null; logoUrl: string | null; color: string | null }
+interface PageData { listing: PublicListing; brand: Brand | null }
+
+async function loadPage(token: string): Promise<PageData | null> {
   const id = parseShareToken(token, shareSecret())
   if (id === null) return null
 
@@ -22,9 +27,37 @@ async function loadListing(token: string): Promise<PublicListing | null> {
   const { data } = await admin.from('Properties').select('*').eq('id', id).maybeSingle()
   if (!data) return null
 
-  const p = dbRowToProperty(data as Record<string, unknown>, 0)
+  const row = data as Record<string, unknown>
+  const p = dbRowToProperty(row, 0)
   const description = p.aiDescription?.trim() || fallbackDescription(p)
-  return publicListing(p, description)
+  const listing = publicListing(p, description)
+
+  let brand: Brand | null = null
+  const companyId = row.company_id
+  if (companyId != null) {
+    // select('*') so a missing migration 016 (logo_url/brand_color) degrades to
+    // name-only rather than throwing on the public page.
+    const { data: c } = await admin.from('Companies').select('*').eq('id', companyId).maybeSingle()
+    if (c) {
+      const cr = c as Record<string, unknown>
+      brand = {
+        name: (cr.Name as string) || null,
+        logoUrl: (cr.logo_url as string) || null,
+        color: (cr.brand_color as string) || null,
+      }
+    }
+  }
+  return { listing, brand }
+}
+
+// Dark or light text for a given accent background, so the agency name stays
+// legible whatever colour they pick.
+function readableOn(hex: string | null): string {
+  const m = hex ? /^#?([0-9a-f]{6})$/i.exec(hex) : null
+  if (!m) return '#ffffff'
+  const n = parseInt(m[1], 16)
+  const lum = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255
+  return lum > 0.6 ? '#14223F' : '#ffffff'
 }
 
 // A clean fallback when no marketing description was written. Deliberately omits
@@ -39,15 +72,18 @@ function fallbackDescription(p: ReturnType<typeof dbRowToProperty>): string {
 
 export async function generateMetadata({ params }: { params: Promise<{ token: string }> }): Promise<Metadata> {
   const { token } = await params
-  const listing = await loadListing(token)
-  if (!listing) return { title: 'Listing — StateGen' }
+  const page = await loadPage(token)
+  if (!page) return { title: 'Listing — StateGen' }
+  const { listing, brand } = page
+  const agency = brand?.name ?? 'StateGen'
   const price = listing.transaction === 'For Rent' ? `${formatPrice(listing.rent)}/mo` : formatPrice(listing.price)
   return {
-    title: `${listing.title} — ${price}`,
+    title: `${listing.title} — ${price} · ${agency}`,
     description: `${listing.type} ${listing.transaction.toLowerCase()} in ${listing.district}, ${listing.city}.`,
     openGraph: {
       title: `${listing.title} — ${price}`,
       description: `${listing.type} in ${listing.district}, ${listing.city}`,
+      siteName: agency,
       images: listing.photos.length ? [listing.photos[0]] : [],
     },
   }
@@ -78,8 +114,11 @@ function Fact({ label, value }: { label: string; value: string }) {
 
 export default async function ListingPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
-  const listing = await loadListing(token)
-  if (!listing) return <NotFound />
+  const page = await loadPage(token)
+  if (!page) return <NotFound />
+  const { listing, brand } = page
+  const agency = brand?.name ?? 'StateGen'
+  const branded = !!(brand && (brand.name || brand.logoUrl))
 
   const price = listing.transaction === 'For Rent' ? `${formatPrice(listing.rent)}/mo` : formatPrice(listing.price)
   const facts: { label: string; value: string }[] = [
@@ -96,6 +135,19 @@ export default async function ListingPage({ params }: { params: Promise<{ token:
   return (
     <main className="min-h-screen pb-10" style={{ background: '#F7F8FB', fontFamily: 'var(--font-public-sans), -apple-system, BlinkMacSystemFont, sans-serif' }}>
       <div className="max-w-2xl mx-auto">
+        {/* Agency branding bar */}
+        {branded && (
+          <div className="flex items-center gap-3 px-5 py-3" style={{ background: brand!.color ?? '#14223F' }}>
+            {brand!.logoUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={brand!.logoUrl} alt={agency} className="h-8 w-auto max-w-[170px] object-contain" style={{ borderRadius: 4 }} />
+            )}
+            {brand!.name && (
+              <span className="text-sm font-bold tracking-tight" style={{ color: readableOn(brand!.color) }}>{brand!.name}</span>
+            )}
+          </div>
+        )}
+
         {/* Hero photo */}
         <div className="relative w-full" style={{ aspectRatio: '16 / 10', background: '#E3E7EE' }}>
           {listing.photos[0]
@@ -161,7 +213,9 @@ export default async function ListingPage({ params }: { params: Promise<{ token:
         <div className="px-5 py-6 text-center">
           <p className="text-sm font-bold" style={{ color: H }}>Interested in this property?</p>
           <p className="text-xs mt-1" style={{ color: SUB }}>Reply to the agent who sent you this link to arrange a viewing.</p>
-          <p className="text-xs mt-4 font-semibold" style={{ color: '#9AA3B2' }}>Presented by StateGen</p>
+          <p className="text-xs mt-4 font-semibold" style={{ color: '#9AA3B2' }}>
+            Presented by {agency}
+          </p>
         </div>
       </div>
     </main>

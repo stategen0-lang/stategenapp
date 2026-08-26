@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ChevronRight, Plus, Trash2, Check, Download, MessageCircle, ExternalLink, KeyRound } from 'lucide-react'
+import { ChevronRight, Plus, Trash2, Check, Download, MessageCircle, ExternalLink, KeyRound, Palette } from 'lucide-react'
 import { AGENTS } from '@/lib/data'
 import { createClient } from '@/lib/supabase/client'
 import { useSession } from '@/hooks/use-session'
@@ -13,8 +13,20 @@ const COMMISSION_RATE = 2.5
 const H   = '#1A2B4A'
 const SUB = '#7A8499'
 
+// Preset accents for the public-listing branding; the picker also allows any custom colour.
+const BRAND_SWATCHES = ['#14223F', '#0E1F3D', '#2E5288', '#1F7A4D', '#8A5A12', '#A23434', '#5E3B76']
+
 function initialsOf(name: string) {
   return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
+}
+
+// Dark or light text over an accent colour, so the agency name stays legible.
+function readableOn(hex: string | null): string {
+  const m = hex ? /^#?([0-9a-f]{6})$/i.exec(hex) : null
+  if (!m) return '#ffffff'
+  const n = parseInt(m[1], 16)
+  const lum = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255
+  return lum > 0.6 ? '#14223F' : '#ffffff'
 }
 
 export default function ProfilePage() {
@@ -169,6 +181,39 @@ export default function ProfilePage() {
     }
   }
 
+  // ── Public listing branding (managers only) ──
+  type Brand = { name: string | null; logoUrl: string | null; brandColor: string | null }
+  const [brand, setBrand] = useState<Brand>({ name: null, logoUrl: null, brandColor: null })
+  const [brandBusy, setBrandBusy] = useState(false)
+  const [brandMsg, setBrandMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  useEffect(() => {
+    if (!manager) return
+    fetch('/api/company/branding').then(r => r.ok ? r.json() : null).then(d => { if (d) setBrand(d) }).catch(() => {})
+  }, [manager])
+
+  async function patchBrand(patch: { logoUrl?: string | null; brandColor?: string | null }) {
+    setBrandMsg(null)
+    const r = await fetch('/api/company/branding', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch),
+    })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok) { setBrandMsg({ ok: false, text: j.error || 'Could not save.' }); return }
+    setBrand(b => ({ ...b, ...patch }))
+    setBrandMsg({ ok: true, text: 'Branding saved.' })
+  }
+
+  async function uploadLogo(file: File) {
+    setBrandBusy(true); setBrandMsg(null)
+    try {
+      const form = new FormData(); form.append('file', file)
+      const r = await fetch('/api/upload', { method: 'POST', body: form })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { setBrandMsg({ ok: false, text: j.error || 'Upload failed.' }); return }
+      await patchBrand({ logoUrl: j.url })
+    } finally { setBrandBusy(false) }
+  }
+
 
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-5" style={{ fontFamily: 'var(--font-public-sans), -apple-system, BlinkMacSystemFont, sans-serif' }}>
@@ -250,6 +295,75 @@ export default function ProfilePage() {
           {exportError && (
             <p className="px-5 pb-4 text-xs" style={{ color: '#A23434' }}>{exportError}</p>
           )}
+        </div>
+      )}
+
+      {/* Public listing branding — managers only */}
+      {manager && (
+        <div className="rounded-2xl bg-white overflow-hidden" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #EEF0F4' }}>
+          <div className="px-5 py-4 flex items-center gap-2.5" style={{ borderBottom: '1px solid #EEF0F4' }}>
+            <Palette className="h-5 w-5" style={{ color: '#2E5288' }} />
+            <div>
+              <p className="text-sm font-bold" style={{ color: H }}>Public listing branding</p>
+              <p className="text-xs mt-0.5" style={{ color: SUB }}>Your logo &amp; colour on the listing pages agents share with clients</p>
+            </div>
+          </div>
+          <div className="p-5 space-y-4">
+            {/* Live preview of the shared page's brand bar + footer */}
+            <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #EEF0F4' }}>
+              <div className="flex items-center gap-3 px-4 py-3" style={{ background: brand.brandColor ?? '#14223F' }}>
+                {brand.logoUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={brand.logoUrl} alt="" className="h-7 w-auto max-w-[150px] object-contain" style={{ borderRadius: 4 }} />
+                )}
+                <span className="text-sm font-bold" style={{ color: readableOn(brand.brandColor) }}>{brand.name ?? 'Your agency'}</span>
+              </div>
+              <div className="px-4 py-2 text-center text-xs" style={{ color: '#9AA3B2', background: '#fff' }}>
+                Presented by {brand.name ?? 'your agency'}
+              </div>
+            </div>
+
+            {/* Logo */}
+            <div>
+              <p className="text-xs font-bold mb-1.5" style={{ color: H }}>Logo</p>
+              <div className="flex items-center gap-2">
+                <label className="px-3 py-2 rounded-xl text-xs font-bold text-white cursor-pointer" style={{ background: brandBusy ? '#6A7488' : '#0E1F3D' }}>
+                  {brandBusy ? 'Uploading…' : brand.logoUrl ? 'Replace logo' : 'Upload logo'}
+                  <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" disabled={brandBusy}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) uploadLogo(f); e.currentTarget.value = '' }} />
+                </label>
+                {brand.logoUrl && (
+                  <button onClick={() => patchBrand({ logoUrl: '' })} className="px-3 py-2 rounded-xl text-xs font-bold" style={{ border: '1.5px solid #F3D7D7', background: '#FDF5F5', color: '#A23434' }}>Remove</button>
+                )}
+              </div>
+              <p className="text-xs mt-1.5" style={{ color: SUB }}>PNG, JPG or WebP, max 8 MB. A transparent PNG looks best on the colour bar.</p>
+            </div>
+
+            {/* Accent colour */}
+            <div>
+              <p className="text-xs font-bold mb-1.5" style={{ color: H }}>Accent colour</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                {BRAND_SWATCHES.map(c => (
+                  <button key={c} onClick={() => patchBrand({ brandColor: c })} title={c} aria-label={`Set accent ${c}`}
+                    className="w-7 h-7 rounded-full" style={{ background: c, outline: (brand.brandColor ?? '').toLowerCase() === c.toLowerCase() ? '2px solid #14223F' : '1px solid #EEF0F4', outlineOffset: 2 }} />
+                ))}
+                <label className="w-7 h-7 rounded-full flex items-center justify-center cursor-pointer" style={{ border: '1.5px dashed #C4CAD6' }} title="Custom colour">
+                  <input type="color" value={brand.brandColor ?? '#14223F'}
+                    onChange={e => setBrand(b => ({ ...b, brandColor: e.target.value }))}
+                    onBlur={e => patchBrand({ brandColor: e.target.value })}
+                    className="opacity-0 w-0 h-0" />
+                  <Plus className="h-3.5 w-3.5" style={{ color: SUB }} />
+                </label>
+                {brand.brandColor && (
+                  <button onClick={() => patchBrand({ brandColor: '' })} className="text-xs font-semibold ml-1" style={{ color: SUB }}>Reset</button>
+                )}
+              </div>
+            </div>
+
+            {brandMsg && (
+              <p className="text-xs px-3 py-2 rounded-lg" style={brandMsg.ok ? { background: '#E3F4EA', color: '#1F7A4D' } : { background: '#FBE7E7', color: '#A23434' }}>{brandMsg.text}</p>
+            )}
+          </div>
         </div>
       )}
 
