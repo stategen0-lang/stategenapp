@@ -105,7 +105,7 @@ best guess at a real intent is better than refusing a slightly misspelt message.
 
 Intents:
 - query_client: asking for information about a client ("send me info on Ahmed")
-- query_property: asking about listings or matches ("what matches a 500k budget in Beirut")
+- query_property: the AGENT searching existing listings, with NO specific person attached ("what matches a 500k budget in Beirut")
 - query_agents: asking how the team or a set of agents is performing ("how is the team doing", "agent activity")
 - query_schedule: asking what is on their calendar ("what is on today", "my schedule tomorrow")
 - create_event: wants a calendar entry ("book a viewing with Ahmed tomorrow at 3pm")
@@ -115,7 +115,7 @@ Intents:
 - update_deal: wants to move a client's deal along the sales pipeline ("move Ahmed to negotiating", "mark Ahmed's deal as won")
 - query_pipeline: asking about the deal pipeline or deals in a stage ("what's in negotiation", "show my pipeline", "what am I closing")
 - create_property: wants to add a new listing (describes a property to add)
-- create_client: wants to add a new client/lead/buyer/renter ("add a client", "new buyer Ahmed")
+- create_client: wants to add a new client/lead/buyer/renter ("add a client", "new buyer Ahmed"), OR is forwarding a prospective client's own enquiry — a message that gives a person's name and/or phone number together with what property they're after. A property need with a name or phone attached is a new client to register, NOT a search (query_property).
 - share_listing: wants a shareable public link to a listing to forward to a client ("send me the link for #23", "share property 23")
 - describe_property: wants an AI-written listing description for a property ("write a description for #23", "describe listing 23")
 - feedback: reporting the outcome of a call or a note about a client
@@ -138,6 +138,8 @@ using ONLY these key names (anything else is discarded):
 - property: status, price, rent, size, beds, baths, title, location, neighborhood, notes
   status must be one of: Available, Reserved, Sold, Rented
   "location" is the city, "neighborhood" is the area within it
+For create_client, put fields using ONLY these keys: name, phone,
+clientType (buyer|renter), propertyType, location, budget, beds, baths, parkings.
 For update_deal, put the target in "fields":
 - stage must be one of: lead, contacted, viewing, negotiating, closed
 - outcome (only when closing) must be one of: won, lost
@@ -164,6 +166,8 @@ Examples (note the typos and varied phrasing):
 "whats on today" -> {"intent":"query_schedule"}
 "add a client" -> {"intent":"create_client"}
 "new buyer Ahmed looking for a villa in Hamra, budget 600k, 03111222" -> {"intent":"create_client","fields":{"name":"Ahmed","clientType":"buyer","propertyType":"villa","location":"Hamra","budget":600000,"phone":"03111222"}}
+"Hi, I'm looking for a 2 bedroom apartment in Achrafieh around 250k, this is Joe Khoury 03 123456" -> {"intent":"create_client","fields":{"name":"Joe Khoury","clientType":"buyer","propertyType":"apartment","location":"Achrafieh","budget":250000,"beds":2,"phone":"03 123456"}}
+"Client Rana 71 998877 wants to rent an office in Hamra, budget 2000/month" -> {"intent":"create_client","fields":{"name":"Rana","clientType":"renter","propertyType":"office","location":"Hamra","budget":2000,"phone":"71 998877"}}
 "called Ahmed, he wants a viewing Saturday" -> {"intent":"feedback","clientName":"Ahmed","notes":"wants a viewing Saturday"}`
 
 /**

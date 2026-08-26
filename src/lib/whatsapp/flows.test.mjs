@@ -177,6 +177,18 @@ test('seedForm (client): maps an opening message\'s fields', () => {
   assert.equal(ctx.propertyType, 'Villa')
   assert.equal(ctx.budget, 600000)
 })
+test('seedForm (client): a full forwarded enquiry leaves nothing mandatory missing', () => {
+  // Fields as the classifier extracts them from a forwarded client message —
+  // seeding must fill every required field so the bot skips to confirm.
+  const ctx = seedForm(
+    { name: 'Joe Khoury', clientType: 'buyer', propertyType: 'apartment', location: 'Achrafieh', budget: 250000, beds: 2, phone: '03 123456' },
+    CREATE_CLIENT_STEPS,
+  )
+  assert.equal(ctx.propertyType, 'Appartement')   // "apartment" → canonical spelling
+  assert.equal(ctx.clientType, 'Buyer')
+  assert.equal(ctx.beds, 2)
+  assert.deepEqual(missingClient(ctx), [])
+})
 
 // ── Starting each flow, and the title ───────────────────────────────────────
 test('isStartListing / isStartClient recognise their own commands', () => {

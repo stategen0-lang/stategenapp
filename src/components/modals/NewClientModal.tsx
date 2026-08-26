@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Client, ClientType, ClientStatus, ClientReq, PropertyType,
   PROPERTIES, CURRENT_AGENT_ID, formatPrice
@@ -8,6 +8,7 @@ import {
 import { matchProperties, MATCH_THRESHOLD, PropertyMatch } from '@/lib/matching'
 import { dbRowToProperty } from '@/lib/db-mappers'
 import { useSession } from '@/hooks/use-session'
+import { isManager } from '@/lib/permissions'
 
 const PROPERTY_TYPES: PropertyType[] = ['Appartement', 'Shop', 'Office', 'Building', 'Villa', 'Land', 'Showroom', 'Restaurant']
 
@@ -41,11 +42,39 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
 
+  // A manager (e.g. the call-center) creating a client must say which agent owns
+  // it — an agent creating their own doesn't (it's always theirs). We only ask
+  // when there are real agents to assign to.
+  const manager = isManager(session?.role)
+  const [agentOptions, setAgentOptions] = useState<{ code: string; name: string }[]>([])
+  const [assignedAgent, setAssignedAgent] = useState<string>(initial?.agentId ?? '')
+
+  useEffect(() => {
+    if (!manager) return
+    let alive = true
+    fetch('/api/company/agents')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (!alive || !d?.agents) return
+        const opts = Object.entries(d.agents as Record<string, { name: string }>)
+          .map(([code, a]) => ({ code, name: a.name }))
+          .sort((x, y) => x.name.localeCompare(y.name))
+        setAgentOptions(opts)
+      })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [manager])
+
+  const needsAgent   = manager && agentOptions.length > 0
+  const agentMissing = needsAgent && !assignedAgent
+
   function setR(k: keyof ClientReq, v: string | number | boolean) {
     setReq(r => ({ ...r, [k]: v }))
   }
 
   async function handleFindMatches() {
+    if (agentMissing) { setSaveError('Please choose the responsible agent.'); return }
+    setSaveError('')
     setFinding(true)
     // Match against the agency's real listings (demo data as offline fallback).
     let pool = PROPERTIES
@@ -63,9 +92,13 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
 
   async function handleSave() {
     if (!name.trim()) { setSaveError('Client name is required.'); return }
+    if (agentMissing) { setSaveError('Please choose the responsible agent.'); return }
     setSaveError(''); setSaving(true)
-    // Own code when signed in; the server re-stamps this for agents anyway.
-    const agentId = initial?.agentId ?? (session?.agentCode as typeof CURRENT_AGENT_ID) ?? CURRENT_AGENT_ID
+    // A manager picks the owning agent explicitly; an agent's own code is used
+    // (the server re-stamps agents to themselves regardless).
+    const agentId = manager
+      ? (assignedAgent as typeof CURRENT_AGENT_ID)
+      : (initial?.agentId ?? (session?.agentCode as typeof CURRENT_AGENT_ID) ?? CURRENT_AGENT_ID)
     const status: ClientStatus = initial?.status ?? 'Searching'
     const budgetNum = parseInt(budget) || 0
     const payload = {
@@ -123,6 +156,15 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
                   <label className={label} style={labelStyle}>Name *</label>
                   <input className={inp} style={inpStyle} value={name} onChange={e => setName(e.target.value)} placeholder="Full name" />
                 </div>
+                {needsAgent && (
+                  <div className="col-span-2">
+                    <label className={label} style={labelStyle}>Assigned agent *</label>
+                    <select className={inp} style={inpStyle} value={assignedAgent} onChange={e => setAssignedAgent(e.target.value)}>
+                      <option value="">Choose an agent…</option>
+                      {agentOptions.map(a => <option key={a.code} value={a.code}>{a.name}</option>)}
+                    </select>
+                  </div>
+                )}
                 <div>
                   <label className={label} style={labelStyle}>Email</label>
                   <input className={inp} style={inpStyle} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="email@example.com" />
@@ -214,7 +256,7 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
               {editing ? (
                 <button
                   onClick={handleSave}
-                  disabled={!name || saving}
+                  disabled={!name || saving || agentMissing}
                   className="flex-1 rounded-xl py-2 text-sm font-bold text-white disabled:opacity-50"
                   style={{ background: '#0E1F3D' }}
                 >
@@ -223,7 +265,7 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
               ) : (
                 <button
                   onClick={handleFindMatches}
-                  disabled={!name || finding}
+                  disabled={!name || finding || agentMissing}
                   className="flex-1 rounded-xl py-2 text-sm font-bold text-white disabled:opacity-50"
                   style={{ background: '#0E1F3D' }}
                 >
@@ -308,7 +350,7 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
               </button>
               <button
                 onClick={handleSave}
-                disabled={saving}
+                disabled={saving || agentMissing}
                 className="flex-1 rounded-xl py-2 text-sm font-bold text-white disabled:opacity-50"
                 style={{ background: '#0E1F3D' }}
               >

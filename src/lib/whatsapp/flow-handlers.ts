@@ -15,6 +15,7 @@ import { buildUpdate, confirmationText, PROPERTY_FIELDS } from '@/lib/whatsapp/w
 import { stage, type Profile } from '@/lib/whatsapp/write-handlers'
 import type { IntentResult } from '@/lib/whatsapp/intent'
 import type { BotReply } from '@/lib/whatsapp/cloud'
+import { isManager } from '@/lib/permissions'
 
 type FlowName = 'create_property' | 'create_client'
 
@@ -86,9 +87,11 @@ async function finishClient(admin: SupabaseClient, profile: Profile, context: Fl
   if (context.beds != null) req.beds = context.beds
   if (context.baths != null) req.baths = context.baths
   if (context.parkings != null) req.parkings = context.parkings
+  // A manager assigns the client to a chosen agent (__ownerAgent, set by the
+  // pick-list step); an agent adding their own client owns it themselves.
   const extras: Record<string, unknown> = {
     type: clientType,
-    agentId: profile.agent_code ?? undefined,
+    agentId: (context.__ownerAgent as string | undefined) ?? profile.agent_code ?? undefined,
     req,
   }
 
@@ -100,6 +103,7 @@ async function finishClient(admin: SupabaseClient, profile: Profile, context: Fl
     context.beds ? `Bedrooms: ${context.beds}` : null,
     context.baths ? `Bathrooms: ${context.baths}` : null,
     context.parkings ? `Parking: ${context.parkings}` : null,
+    context.__ownerAgentName ? `Assigned to: ${context.__ownerAgentName}` : null,
   ].filter(Boolean) as string[]
 
   return stage(admin, profile, 'create_client', confirmationText('a new client', changes), {
@@ -110,6 +114,48 @@ async function finishClient(admin: SupabaseClient, profile: Profile, context: Fl
 const FLOWS: Record<FlowName, FlowConfig> = {
   create_property: { steps: CREATE_PROPERTY_STEPS, intro: LISTING_INTRO, noun: 'listing', finish: finishProperty },
   create_client:   { steps: CREATE_CLIENT_STEPS,   intro: CLIENT_INTRO,  noun: 'client',  finish: finishClient },
+}
+
+// ── Manager assigns the client to an agent (the call-center case) ──────────────
+
+interface AgentChoice { code: string; name: string }
+
+// Every colleague who can own a client — anyone with an agent_code (agents, and
+// an owner-manager who has one). Mirrors /api/company/agents.
+async function listCompanyAgents(admin: SupabaseClient, companyId: number): Promise<AgentChoice[]> {
+  const { data } = await admin
+    .from('Profiles')
+    .select('agent_code, Full_name')
+    .eq('company_id', companyId)
+    .not('agent_code', 'is', null)
+    .order('Full_name')
+  return (data ?? [])
+    .filter(p => p.agent_code)
+    .map(p => ({ code: p.agent_code as string, name: (p.Full_name as string) || (p.agent_code as string) }))
+}
+
+function agentPickList(agents: AgentChoice[]): string {
+  const lines = agents.map((a, i) => `${i + 1}. ${a.name}`).join('\n')
+  return `Who's the responsible agent for this client?\n\n${lines}\n\nReply with the number.`
+}
+
+/**
+ * The finish gate. A manager (call-center) adding a client must first say which
+ * agent owns it — we pause on a numbered pick-list. Everyone else (an agent
+ * adding their own client, any listing) goes straight to confirm-before-write.
+ */
+async function finishOrPickAgent(
+  admin: SupabaseClient, profile: Profile, flow: FlowName, context: FlowContext,
+): Promise<string> {
+  if (flow === 'create_client' && isManager(profile.role) && !context.__ownerAgent) {
+    const agents = await listCompanyAgents(admin, profile.company_id)
+    if (agents.length) {
+      await saveFlow(admin, profile, flow, { ...context, __agentChoices: agents }, 'await_agent')
+      return agentPickList(agents)
+    }
+    // No agents to assign to — fall through and let the write proceed unassigned.
+  }
+  return FLOWS[flow].finish(admin, profile, context)
 }
 
 // ── Starting each flow ────────────────────────────────────────────────────────
@@ -129,8 +175,9 @@ async function start(
   admin: SupabaseClient, profile: Profile, flow: FlowName, context: FlowContext,
 ): Promise<BotReply> {
   const cfg = FLOWS[flow]
-  // If the opening message already gave everything required, skip to confirm.
-  if (missingMandatory(context, cfg.steps).length === 0) return cfg.finish(admin, profile, context)
+  // If the opening message already gave everything required, skip to confirm
+  // (a manager is asked to pick the owning agent first).
+  if (missingMandatory(context, cfg.steps).length === 0) return finishOrPickAgent(admin, profile, flow, context)
 
   // Prefer the native Flow form when its ID is configured.
   const form = FLOW_FORM[flow]
@@ -171,7 +218,7 @@ export async function handleFlowSubmission(
   if (missing.length) {
     return `The form is missing: ${missing.map(s => s.label).join(', ')}. Send "add a ${cfg.noun}" and try again.`
   }
-  return cfg.finish(admin, profile, context)
+  return finishOrPickAgent(admin, profile, flow, context)
 }
 
 export function startCreatePropertyFlow(admin: SupabaseClient, profile: Profile, intent: IntentResult) {
@@ -189,7 +236,7 @@ export async function continueFlow(
 ): Promise<string | null> {
   const { data: state } = await admin
     .from('conversation_state')
-    .select('current_flow, context, updated_at')
+    .select('current_flow, context, updated_at, step')
     .eq('profile_id', profile.id)
     .maybeSingle()
 
@@ -214,6 +261,19 @@ export async function continueFlow(
 
   const prev = (state.context ?? {}) as FlowContext
 
+  // Manager picking the owning agent from the numbered list.
+  if (state.step === 'await_agent') {
+    const choices = (prev.__agentChoices ?? []) as AgentChoice[]
+    const n = parseInt(body.trim(), 10)
+    if (!Number.isInteger(n) || n < 1 || n > choices.length) {
+      return `Please reply with a number between 1 and ${choices.length}.\n\n${agentPickList(choices)}`
+    }
+    const picked = choices[n - 1]
+    const ctx: FlowContext = { ...prev, __ownerAgent: picked.code, __ownerAgentName: picked.name }
+    delete ctx.__agentChoices
+    return cfg.finish(admin, profile, ctx)
+  }
+
   if (/^help\b\??$/i.test(body.trim())) {
     const missing = missingMandatory(prev, cfg.steps).map(s => s.label)
     return [
@@ -235,5 +295,5 @@ export async function continueFlow(
     return `${problems.join(' ')}\n\n${renderForm(cfg.intro, cfg.steps, context)}\n\nOr reply "cancel" to stop.`
   }
 
-  return cfg.finish(admin, profile, context)
+  return finishOrPickAgent(admin, profile, flow, context)
 }
