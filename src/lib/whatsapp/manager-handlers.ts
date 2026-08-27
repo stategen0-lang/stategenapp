@@ -9,23 +9,47 @@ import { isManager } from '@/lib/permissions'
 import type { Profile } from '@/lib/whatsapp/write-handlers'
 import { fetchActivity } from '@/lib/activity-server'
 import { activityLine } from '@/lib/activity'
+import { sameZonedDay } from '@/lib/whatsapp/timezone'
 
 const REFUSAL = 'That report is for managers only.'
 
 // ── "what's new" / "recent activity" — the team activity feed ────────────────
-// A manager gets the whole agency's recent actions; an agent gets their own.
+// A manager gets EVERYTHING that happened today across the agency (not just a
+// handful); an agent gets their own recent actions.
 export async function handleActivityFeed(admin: SupabaseClient, profile: Profile): Promise<string> {
   const mgr = isManager(profile.role)
   const items = await fetchActivity(admin, {
     companyId: profile.company_id,
     agentCode: mgr ? null : profile.agent_code,
-    limit: 8,
+    limit: mgr ? 100 : 8,
   })
   if (!items.length) {
-    return mgr ? 'No recent team activity yet.' : 'No recent activity on your listings and clients yet.'
+    return mgr ? 'No team activity yet.' : 'No recent activity on your listings and clients yet.'
   }
-  const header = mgr ? '🗂️ Recent team activity' : '🗂️ Your recent activity'
-  return [header, '', ...items.map(i => activityLine(i, { withAgent: mgr }))].join('\n')
+
+  if (mgr) {
+    const now = new Date()
+    const todays = items.filter(i => i.at && sameZonedDay(new Date(i.at), now))
+    if (todays.length) {
+      // Cap only to stay inside WhatsApp's message size; note anything trimmed.
+      const shown = todays.slice(0, 60)
+      const extra = todays.length > shown.length ? [`…and ${todays.length - shown.length} more today`] : []
+      return [
+        `🗂️ Today — ${todays.length} update${todays.length === 1 ? '' : 's'}`,
+        '',
+        ...shown.map(i => activityLine(i, { withAgent: true })),
+        ...extra,
+      ].join('\n')
+    }
+    // Nothing today — fall back to the most recent so the reply isn't empty.
+    return [
+      '🗂️ Nothing logged today. Most recent:',
+      '',
+      ...items.slice(0, 8).map(i => activityLine(i, { withAgent: true })),
+    ].join('\n')
+  }
+
+  return ['🗂️ Your recent activity', '', ...items.slice(0, 8).map(i => activityLine(i, { withAgent: false }))].join('\n')
 }
 
 interface AgentRow {
