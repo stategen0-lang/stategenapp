@@ -55,7 +55,7 @@ function agentOf(row: Record<string, unknown>, blobColumn: string): string | nul
  * refusing to show — "Ziad belongs to another agent" defeats the masking that
  * the query path carefully applies.
  */
-function clientLabel(profile: Profile, row: Record<string, unknown>): string {
+export function clientLabel(profile: Profile, row: Record<string, unknown>): string {
   return canSeeClientPII(toSession(profile), agentOf(row, 'notes'))
     ? (row['Client Name'] as string)
     : maskClientName(Number(row.id))
@@ -107,7 +107,7 @@ export async function stage(
 
 type Resolved =
   | { ok: true; row: Record<string, unknown> }
-  | { ok: false; message: string }
+  | { ok: false; message: string; candidates?: Record<string, unknown>[] }
 
 export async function resolveClient(admin: SupabaseClient, profile: Profile, name: string | undefined): Promise<Resolved> {
   const ref = splitClientRef(name)
@@ -133,6 +133,7 @@ export async function resolveClient(admin: SupabaseClient, profile: Profile, nam
     const egArea = (rows[0]['prefered-location'] as string) || 'Beirut'
     return {
       ok: false,
+      candidates: rows,
       message: `${rows.length} clients match "${ref.name}":\n${lines.join('\n')}\n\nAdd the area to pick one, e.g. "${ref.name} in ${egArea}".`,
     }
   }

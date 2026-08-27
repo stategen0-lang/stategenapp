@@ -14,7 +14,7 @@ import { stageDealMove, handleQueryPipeline } from '@/lib/whatsapp/pipeline-hand
 import { isStartListing, isStartClient } from '@/lib/whatsapp/flows'
 import { parseConnect, isStopMessage, normalizeCode, pairingExpired } from '@/lib/whatsapp/pairing'
 import { handleAgentActivity, handleOverdueReminders, handleActivityFeed } from '@/lib/whatsapp/manager-handlers'
-import { stageLogOffer, stageResolveOffer, handleQueryOffers } from '@/lib/whatsapp/offer-handlers'
+import { stageLogOffer, stageResolveOffer, handleQueryOffers, continueOfferPick } from '@/lib/whatsapp/offer-handlers'
 import { stageCreateEvent, handleQuerySchedule } from '@/lib/whatsapp/calendar-handlers'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -95,6 +95,11 @@ async function route(
         : 'Cancelled — nothing was saved.',
     }
   }
+
+  // A pending "which client?" pick (e.g. mid-offer) — a numeric reply picks the
+  // client and continues the offer, rather than being re-read as a new message.
+  const pickAnswer = await continueOfferPick(admin, profile, body)
+  if (pickAnswer !== null) return { intent: 'log_offer', answer: pickAnswer }
 
   // Mid-flow, per the spec's router: an agent answering "Villa" to "what type?"
   // must not have that re-read as a fresh intent.
