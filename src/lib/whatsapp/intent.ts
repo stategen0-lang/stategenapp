@@ -22,6 +22,7 @@ export type Intent =
   | 'query_client'
   | 'query_property'
   | 'query_agents'
+  | 'query_activity'
   | 'query_schedule'
   | 'create_event'
   | 'create_client'
@@ -51,7 +52,7 @@ export interface IntentResult {
 
 const VALID: Intent[] = [
   'reminder_response', 'feedback', 'update_client', 'update_property', 'update_deal', 'query_pipeline',
-  'create_property', 'query_client', 'query_property', 'query_agents', 'query_schedule', 'create_event',
+  'create_property', 'query_client', 'query_property', 'query_agents', 'query_activity', 'query_schedule', 'create_event',
   'create_client', 'share_listing', 'describe_property', 'query_overdue', 'confirm', 'cancel', 'help', 'unknown',
 ]
 
@@ -106,7 +107,8 @@ best guess at a real intent is better than refusing a slightly misspelt message.
 Intents:
 - query_client: asking for information about a client ("send me info on Ahmed")
 - query_property: the AGENT searching existing listings, with NO specific person attached ("what matches a 500k budget in Beirut")
-- query_agents: asking how the team or a set of agents is performing ("how is the team doing", "agent activity")
+- query_agents: asking how the team or a set of agents is PERFORMING — stats/numbers ("how is the team doing", "agent performance", "who is my top agent")
+- query_activity: asking what has HAPPENED recently — a feed of recent actions, not stats ("what's new", "recent activity", "what did the team do today", "any updates", "latest")
 - query_schedule: asking what is on their calendar ("what is on today", "my schedule tomorrow")
 - create_event: wants a calendar entry ("book a viewing with Ahmed tomorrow at 3pm")
 - query_overdue: asking which follow-ups or reminders are late ("what follow-ups are overdue")
@@ -164,6 +166,10 @@ Examples (note the typos and varied phrasing):
 "add listing: 3 bed apartment in Hamra, Beirut, 450k, 180 sqm" -> {"intent":"create_property","fields":{"title":"3 bed apartment","beds":3,"neighborhood":"Hamra","location":"Beirut","price":450000,"size":180}}
 "book a viewing with ahmed tomorow at 3pm" -> {"intent":"create_event","clientName":"Ahmed","notes":"viewing tomorrow at 3pm"}
 "whats on today" -> {"intent":"query_schedule"}
+"whats new" -> {"intent":"query_activity"}
+"recent activity" -> {"intent":"query_activity"}
+"what did the team do today" -> {"intent":"query_activity"}
+"any updates" -> {"intent":"query_activity"}
 "add a client" -> {"intent":"create_client"}
 "new buyer Ahmed looking for a villa in Hamra, budget 600k, 03111222" -> {"intent":"create_client","fields":{"name":"Ahmed","clientType":"buyer","propertyType":"villa","location":"Hamra","budget":600000,"phone":"03111222"}}
 "Hi, I'm looking for a 2 bedroom apartment in Achrafieh around 250k, this is Joe Khoury 03 123456" -> {"intent":"create_client","fields":{"name":"Joe Khoury","clientType":"buyer","propertyType":"apartment","location":"Achrafieh","budget":250000,"beds":2,"phone":"03 123456"}}

@@ -7,8 +7,26 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { isManager } from '@/lib/permissions'
 import type { Profile } from '@/lib/whatsapp/write-handlers'
+import { fetchActivity } from '@/lib/activity-server'
+import { activityLine } from '@/lib/activity'
 
 const REFUSAL = 'That report is for managers only.'
+
+// ── "what's new" / "recent activity" — the team activity feed ────────────────
+// A manager gets the whole agency's recent actions; an agent gets their own.
+export async function handleActivityFeed(admin: SupabaseClient, profile: Profile): Promise<string> {
+  const mgr = isManager(profile.role)
+  const items = await fetchActivity(admin, {
+    companyId: profile.company_id,
+    agentCode: mgr ? null : profile.agent_code,
+    limit: 8,
+  })
+  if (!items.length) {
+    return mgr ? 'No recent team activity yet.' : 'No recent activity on your listings and clients yet.'
+  }
+  const header = mgr ? '🗂️ Recent team activity' : '🗂️ Your recent activity'
+  return [header, '', ...items.map(i => activityLine(i, { withAgent: mgr }))].join('\n')
+}
 
 interface AgentRow {
   id: string

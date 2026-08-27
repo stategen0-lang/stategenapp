@@ -14,6 +14,7 @@ import {
   BarChart3,
   User,
   UserCheck,
+  Activity,
   LogOut,
 } from 'lucide-react'
 import { type User as SupabaseUser } from '@supabase/supabase-js'
@@ -147,6 +148,22 @@ export default function AppSidebar({ profile, user }: AppSidebarProps) {
                   {pendingAgents > 99 ? '99+' : pendingAgents}
                 </span>
               )}
+            </Link>
+          )}
+
+          {/* Activity feed — managers see the whole agency's recent actions. */}
+          {isMgr && (
+            <Link
+              href="/activity"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
+              style={{
+                background: isActive('/activity') ? 'rgba(94,143,214,0.16)' : 'transparent',
+                color: isActive('/activity') ? '#ffffff' : '#9DB2CC',
+                borderLeft: isActive('/activity') ? '2px solid #5E8FD6' : '2px solid transparent',
+              }}
+            >
+              <Activity className="h-4 w-4 shrink-0" />
+              <span className="flex-1">Activity</span>
             </Link>
           )}
         </nav>

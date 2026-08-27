@@ -13,7 +13,7 @@ import { startCreatePropertyFlow, startCreateClientFlow, continueFlow, handleFlo
 import { stageDealMove, handleQueryPipeline } from '@/lib/whatsapp/pipeline-handlers'
 import { isStartListing, isStartClient } from '@/lib/whatsapp/flows'
 import { parseConnect, isStopMessage, normalizeCode, pairingExpired } from '@/lib/whatsapp/pairing'
-import { handleAgentActivity, handleOverdueReminders } from '@/lib/whatsapp/manager-handlers'
+import { handleAgentActivity, handleOverdueReminders, handleActivityFeed } from '@/lib/whatsapp/manager-handlers'
 import { stageCreateEvent, handleQuerySchedule } from '@/lib/whatsapp/calendar-handlers'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -134,6 +134,7 @@ async function route(
     case 'share_listing':  return { intent, answer: await handleShareListing(admin, profile, result, origin) }
     case 'describe_property': return { intent, answer: await stageDescribeProperty(admin, profile, result) }
     case 'query_agents':   return { intent, answer: await handleAgentActivity(admin, profile) }
+    case 'query_activity': return { intent, answer: await handleActivityFeed(admin, profile) }
     case 'query_overdue':  return { intent, answer: await handleOverdueReminders(admin, profile) }
     case 'query_schedule': return { intent, answer: await handleQuerySchedule(admin, profile, body) }
     // Dates are inferred from prose, so this stages a confirmation like every

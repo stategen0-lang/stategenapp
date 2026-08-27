@@ -265,6 +265,14 @@ test('a genuine agent search (no person/phone) is still a fast query_property', 
   assert.equal(quickIntent('what matches a 500k budget in Beirut')?.intent, 'query_property')
   assert.equal(quickIntent('any apartments in Hamra under 400k')?.intent, 'query_property')
 })
+test('activity feed vs agent-performance report', () => {
+  for (const s of ["what's new", 'recent activity', 'team activity', 'any updates', 'what happened today']) {
+    assert.equal(quickIntent(s)?.intent, 'query_activity', s)
+  }
+  // "agent activity" is the performance report, not the feed.
+  assert.equal(quickIntent('agent activity')?.intent, 'query_agents')
+  assert.equal(quickIntent('how is the team doing')?.intent, 'query_agents')
+})
 test('reminder replies are not claimed here', () => {
   // These are matched earlier by parseReminderReply against a live reminder.
   for (const s of ['done', 'snooze 3d', 'not interested', 'yes', 'no']) {

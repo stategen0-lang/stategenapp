@@ -140,6 +140,16 @@ export function quickIntent(raw: string | null | undefined): IntentResult | null
     return { intent: 'query_schedule', notes: text }
   }
 
+  // ── "what's new" / "recent activity" → the activity feed ──────────────────
+  // A feed of recent actions, distinct from the performance report below. The
+  // agent(s) guard keeps "agent activity" routing to that report instead.
+  if ((/\b(activity feed|recent activity|team activity|latest (updates?|activity))\b/i.test(text)
+       || /\b(what'?s?\s+new|any(thing)?\s+new|any\s+updates?)\b/i.test(text)
+       || /\bwhat (has |'?s )?happened\b/i.test(text))
+      && !/\bagents?\b/i.test(text)) {
+    return { intent: 'query_activity' }
+  }
+
   // ── manager reports ───────────────────────────────────────────────────────
   if (/\b(team|agents?)\b.*\b(doing|activity|performance|stats)\b/i.test(text)
       || /\b(agent activity|team report|how are (the )?agents)\b/i.test(text)) {
