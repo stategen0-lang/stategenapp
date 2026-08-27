@@ -41,15 +41,24 @@ export default function ResetPasswordPage() {
   }
 
   useEffect(() => {
-    // The recovery link fires PASSWORD_RECOVERY once the token is processed.
+    // Pre-fill the email when arriving from the login "Forgot password?" flow.
+    try { const e = sessionStorage.getItem('resetEmail'); if (e) setEmail(e) } catch { /* private mode */ }
+
+    const hash = typeof window !== 'undefined' ? window.location.hash : ''
+    const fromLink = /access_token=|type=recovery|error=/.test(hash)
+    if (!fromLink) {
+      // Direct visit (e.g. right after requesting a code) — show the code form
+      // immediately rather than waiting for a link that isn't there.
+      setReady(false)
+      return
+    }
+    // A recovery link/token is present — exchange it for a session.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY' || session) setReady(true)
     })
-    // Also handle the case where the session is already established.
     supabase.auth.getSession().then(({ data }) => {
       setReady(prev => prev ?? !!data.session)
     })
-    // Give the URL-token exchange a moment before declaring the link invalid.
     const t = setTimeout(() => setReady(prev => prev ?? false), 3000)
     return () => { subscription.unsubscribe(); clearTimeout(t) }
   }, [supabase])
@@ -63,7 +72,9 @@ export default function ResetPasswordPage() {
     const { error } = await supabase.auth.updateUser({ password })
     setSaving(false)
     if (error) { setError(error.message); return }
+    try { sessionStorage.removeItem('resetEmail') } catch { /* ignore */ }
     setDone(true)
+    // Password set + recovery session live → straight into the app.
     setTimeout(() => { router.push('/dashboard'); router.refresh() }, 1500)
   }
 
@@ -84,7 +95,7 @@ export default function ResetPasswordPage() {
           <>
             <h2 className="text-2xl font-extrabold mb-1.5" style={{ color: '#14223F', letterSpacing: '-0.5px' }}>Reset your password</h2>
             <p className="text-sm mb-7" style={{ color: '#6A7488' }}>
-              Enter your email and the reset code you were given to set a new password.
+              We&apos;ve emailed you a reset code. Enter it below with your email to set a new password.
             </p>
             <div className="space-y-4">
               <div>

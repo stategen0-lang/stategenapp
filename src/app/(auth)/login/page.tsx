@@ -52,7 +52,10 @@ export default function LoginPage() {
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo })
       if (error) { setError(cleanMsg(error.message, 'Could not send the reset email. Please try again.')); return }
-      setResetMsg(`If an account exists for ${email.trim()}, a reset link is on its way. Check your email.`)
+      // Carry the email over so the reset page can pre-fill it, then take the
+      // user straight to where they'll enter the code.
+      try { sessionStorage.setItem('resetEmail', email.trim()) } catch { /* private mode */ }
+      router.push('/reset-password')
     } catch {
       setError('Could not reach the server. Check your connection and try again.')
     } finally {
