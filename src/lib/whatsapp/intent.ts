@@ -28,6 +28,10 @@ export type Intent =
   | 'create_client'
   | 'share_listing'
   | 'describe_property'
+  | 'log_offer'
+  | 'query_offers'
+  | 'accept_offer'
+  | 'reject_offer'
   | 'query_overdue'
   | 'confirm'
   | 'cancel'
@@ -53,7 +57,8 @@ export interface IntentResult {
 const VALID: Intent[] = [
   'reminder_response', 'feedback', 'update_client', 'update_property', 'update_deal', 'query_pipeline',
   'create_property', 'query_client', 'query_property', 'query_agents', 'query_activity', 'query_schedule', 'create_event',
-  'create_client', 'share_listing', 'describe_property', 'query_overdue', 'confirm', 'cancel', 'help', 'unknown',
+  'create_client', 'share_listing', 'describe_property', 'log_offer', 'query_offers', 'accept_offer', 'reject_offer',
+  'query_overdue', 'confirm', 'cancel', 'help', 'unknown',
 ]
 
 /**
@@ -120,6 +125,10 @@ Intents:
 - create_client: wants to add a new client/lead/buyer/renter ("add a client", "new buyer Ahmed"), OR is forwarding a prospective client's own enquiry — a message that gives a person's name and/or phone number together with what property they're after. A property need with a name or phone attached is a new client to register, NOT a search (query_property).
 - share_listing: wants a shareable public link to a listing to forward to a client ("send me the link for #23", "share property 23")
 - describe_property: wants an AI-written listing description for a property ("write a description for #23", "describe listing 23")
+- log_offer: log an offer or counter-offer on a deal ("offer 450k from Joe on #23", "counter Joe 470k", "buyer offered 500k on #12"). Put the amount in fields.amount (plain USD number). A CLIENT's offer is side "buyer" (default); the OWNER/agency countering is side "owner" ("counter" = owner).
+- query_offers: asking where a negotiation stands ("offers on #23", "what's the offer on #12", "where does the negotiation stand for Joe")
+- accept_offer: accept the current offer, closing the deal won ("accept Joe's offer", "accept the offer on #23")
+- reject_offer: reject the current offer ("reject Joe's offer", "turn down the offer on #23")
 - feedback: reporting the outcome of a call or a note about a client
 - reminder_response: responding to a call reminder
 - help: asking what the bot can do
@@ -142,6 +151,9 @@ using ONLY these key names (anything else is discarded):
   "location" is the city, "neighborhood" is the area within it
 For create_client, put fields using ONLY these keys: name, phone,
 clientType (buyer|renter), propertyType, location, budget, beds, baths, parkings.
+For log_offer, put the amount in fields.amount (plain USD number: "450k"->450000,
+"1.2m"->1200000) and set fields.side to "owner" ONLY when the owner/agency is
+countering ("counter …"); otherwise omit side (it defaults to the buyer).
 For update_deal, put the target in "fields":
 - stage must be one of: lead, contacted, viewing, negotiating, closed
 - outcome (only when closing) must be one of: won, lost
@@ -158,6 +170,13 @@ Examples (note the typos and varied phrasing):
 "share property 23 with the client" -> {"intent":"share_listing","propertyId":23}
 "write a description for #23" -> {"intent":"describe_property","propertyId":23}
 "can you write me a blurb for listing 23" -> {"intent":"describe_property","propertyId":23}
+"offer 450k from Joe on #23" -> {"intent":"log_offer","clientName":"Joe","propertyId":23,"fields":{"amount":450000}}
+"counter joe 470k" -> {"intent":"log_offer","clientName":"Joe","fields":{"amount":470000,"side":"owner"}}
+"buyer offered 500k on #12 from Maya" -> {"intent":"log_offer","clientName":"Maya","propertyId":12,"fields":{"amount":500000}}
+"offers on #23" -> {"intent":"query_offers","propertyId":23}
+"where does the negotiation stand for joe" -> {"intent":"query_offers","clientName":"Joe"}
+"accept joes offer" -> {"intent":"accept_offer","clientName":"Joe"}
+"reject the offer on #23" -> {"intent":"reject_offer","propertyId":23}
 "move ahmed to negotiating" -> {"intent":"update_deal","clientName":"Ahmed","fields":{"stage":"negotiating"}}
 "ahmeds deal is won" -> {"intent":"update_deal","clientName":"Ahmed","fields":{"stage":"closed","outcome":"won"}}
 "whats in negotiation" -> {"intent":"query_pipeline","fields":{"stage":"negotiating"}}

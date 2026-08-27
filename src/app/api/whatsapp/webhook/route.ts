@@ -14,6 +14,7 @@ import { stageDealMove, handleQueryPipeline } from '@/lib/whatsapp/pipeline-hand
 import { isStartListing, isStartClient } from '@/lib/whatsapp/flows'
 import { parseConnect, isStopMessage, normalizeCode, pairingExpired } from '@/lib/whatsapp/pairing'
 import { handleAgentActivity, handleOverdueReminders, handleActivityFeed } from '@/lib/whatsapp/manager-handlers'
+import { stageLogOffer, stageResolveOffer, handleQueryOffers } from '@/lib/whatsapp/offer-handlers'
 import { stageCreateEvent, handleQuerySchedule } from '@/lib/whatsapp/calendar-handlers'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -133,6 +134,10 @@ async function route(
     case 'query_property': return { intent, answer: await handleQueryProperty(admin, profile, result) }
     case 'share_listing':  return { intent, answer: await handleShareListing(admin, profile, result, origin) }
     case 'describe_property': return { intent, answer: await stageDescribeProperty(admin, profile, result) }
+    case 'log_offer':      return { intent, answer: await stageLogOffer(admin, profile, result) }
+    case 'query_offers':   return { intent, answer: await handleQueryOffers(admin, profile, result) }
+    case 'accept_offer':   return { intent, answer: await stageResolveOffer(admin, profile, result, 'accept') }
+    case 'reject_offer':   return { intent, answer: await stageResolveOffer(admin, profile, result, 'reject') }
     case 'query_agents':   return { intent, answer: await handleAgentActivity(admin, profile) }
     case 'query_activity': return { intent, answer: await handleActivityFeed(admin, profile) }
     case 'query_overdue':  return { intent, answer: await handleOverdueReminders(admin, profile) }

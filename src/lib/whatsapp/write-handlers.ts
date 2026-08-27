@@ -25,6 +25,7 @@ import { reminderOutcome } from '@/lib/whatsapp/reminders'
 import { splitClientRef } from '@/lib/whatsapp/client-ref'
 import type { ReminderAction } from '@/lib/whatsapp/replies'
 import { createListingAlerts } from '@/lib/alerts-server'
+import { applyOfferAction } from '@/lib/offers-server'
 
 export interface Profile {
   id: string
@@ -62,7 +63,7 @@ function clientLabel(profile: Profile, row: Record<string, unknown>): string {
 
 /** What a pending_actions row carries between the confirmation and the write. */
 export interface Payload {
-  table: 'client_requests' | 'Properties' | 'calendar_events' | 'deals'
+  table: 'client_requests' | 'Properties' | 'calendar_events' | 'deals' | 'offers'
   /** Row to update; absent for an insert. */
   id?: number | string
   columns: Record<string, unknown>
@@ -418,6 +419,9 @@ export async function applyPendingAction(
   if (!p || !p.table) return 'That request expired. Please send it again.'
 
   try {
+    // Offers have their own logic (insert a round / settle it + advance the deal).
+    if (p.table === 'offers') return await applyOfferAction(admin, profile, actionType, p)
+
     // Insert (new listing, or a calendar event)
     if (!p.id) {
       const insert = p.blobColumn

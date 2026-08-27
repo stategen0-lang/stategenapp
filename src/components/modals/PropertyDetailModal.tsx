@@ -4,6 +4,7 @@ import { useState, useRef } from 'react'
 import { MessageCircle, Link2 } from 'lucide-react'
 import { Property, Agent, Client, TYPE_GRADIENTS, statusStyle, formatPrice, buildDesc, getAgent } from '@/lib/data'
 import MatchCards from '@/components/matching/MatchCards'
+import OffersSection from '@/components/offers/OffersSection'
 import ClientDetailModal from './ClientDetailModal'
 
 interface Props {
@@ -242,6 +243,11 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
                   <MessageCircle className="h-3.5 w-3.5" /> Message
                 </a>
               )}
+            </div>
+
+            {/* ── Offers & negotiation ── */}
+            <div style={{ borderTop: '1px solid #EEF0F4', paddingTop: 16 }}>
+              <OffersSection propertyId={p.id} asking={p.transaction === 'For Rent' ? p.rent : p.price} />
             </div>
 
             {/* ── AI Matching ── */}
