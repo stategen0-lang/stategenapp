@@ -20,6 +20,7 @@ export async function GET() {
     name: (row.Name as string) ?? null,
     logoUrl: (row.logo_url as string) ?? null,
     brandColor: (row.brand_color as string) ?? null,
+    domain: (row.domain as string) ?? null,   // slug for the public microsite (/a/<domain>)
   })
 }
 

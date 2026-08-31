@@ -38,6 +38,7 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith('/privacy') ||
     pathname.startsWith('/api') ||
     pathname.startsWith('/l/') ||
+    pathname.startsWith('/a/') ||
     pathname.startsWith('/admin') ||
     // PWA assets must be reachable without a session, or install + offline break.
     pathname === '/manifest.webmanifest' ||

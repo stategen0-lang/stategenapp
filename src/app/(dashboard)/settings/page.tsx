@@ -182,8 +182,9 @@ export default function ProfilePage() {
   }
 
   // ── Public listing branding (managers only) ──
-  type Brand = { name: string | null; logoUrl: string | null; brandColor: string | null }
-  const [brand, setBrand] = useState<Brand>({ name: null, logoUrl: null, brandColor: null })
+  type Brand = { name: string | null; logoUrl: string | null; brandColor: string | null; domain?: string | null }
+  const [brand, setBrand] = useState<Brand>({ name: null, logoUrl: null, brandColor: null, domain: null })
+  const [copiedSite, setCopiedSite] = useState(false)
   const [brandBusy, setBrandBusy] = useState(false)
   const [brandMsg, setBrandMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
@@ -359,6 +360,22 @@ export default function ProfilePage() {
                 )}
               </div>
             </div>
+
+            {brand.domain && (
+              <div className="pt-3" style={{ borderTop: '1px solid #EEF0F4' }}>
+                <p className="text-xs font-bold mb-1.5" style={{ color: H }}>Your public site</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-xs px-2.5 py-2 rounded-lg truncate" style={{ background: '#F7F8FB', color: '#2E5288', border: '1px solid #EEF0F4' }}>
+                    {typeof window !== 'undefined' ? window.location.origin : ''}/a/{brand.domain}
+                  </code>
+                  <a href={`/a/${brand.domain}`} target="_blank" rel="noopener noreferrer" className="text-xs font-bold px-3 py-2 rounded-lg" style={{ border: '1.5px solid #EEF0F4', color: H }}>Open</a>
+                  <button
+                    onClick={() => { try { navigator.clipboard.writeText(`${window.location.origin}/a/${brand.domain}`); setCopiedSite(true); setTimeout(() => setCopiedSite(false), 1500) } catch { /* ignore */ } }}
+                    className="text-xs font-bold px-3 py-2 rounded-lg text-white" style={{ background: '#0E1F3D' }}>{copiedSite ? 'Copied ✓' : 'Copy'}</button>
+                </div>
+                <p className="text-xs mt-1.5" style={{ color: SUB }}>All your listings + a contact form. Share it anywhere — enquiries land in Clients.</p>
+              </div>
+            )}
 
             {brandMsg && (
               <p className="text-xs px-3 py-2 rounded-lg" style={brandMsg.ok ? { background: '#E3F4EA', color: '#1F7A4D' } : { background: '#FBE7E7', color: '#A23434' }}>{brandMsg.text}</p>
