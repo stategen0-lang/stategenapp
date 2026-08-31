@@ -34,6 +34,7 @@ export interface Deal {
   propertyLabel: string | null   // "Appartement · Hamra, Beirut"
   leadScore: number              // 0-100 (Phase 2 lead scoring)
   agentRating: number            // 1-5 stars
+  offer?: { amount: number; status: string } | null   // current offer, for the board badge
 }
 
 // ── Days in current stage ────────────────────────────────────────────────────

@@ -15,6 +15,12 @@ import { isManager } from '@/lib/permissions'
 const H = '#14223F'
 const SUB = '#6A7488'
 
+const OFFER_BADGE: Record<string, { bg: string; color: string }> = {
+  open:     { bg: '#FBEFD6', color: '#9A6516' },
+  accepted: { bg: '#E3F4EA', color: '#1F7A4D' },
+  rejected: { bg: '#FBE7E7', color: '#A23434' },
+}
+
 // Resolve against the live roster. Never falls back to "the first agent" —
 // that silently displayed one agent's deals under another's name and colour.
 function agentOf(roster: RosterAgent[], id: string | null) {
@@ -82,6 +88,16 @@ function DealCard({
           {days}d in stage
         </span>
       </div>
+
+      {deal.offer && (
+        <span
+          className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+          style={OFFER_BADGE[deal.offer.status] ?? OFFER_BADGE.open}
+          title="Current offer"
+        >
+          💬 {formatPrice(deal.offer.amount)}{deal.offer.status !== 'open' ? ` · ${deal.offer.status}` : ''}
+        </span>
+      )}
 
       {/* Won / Lost picker for closed deals with no outcome yet */}
       {deal.stage === 'closed' && !deal.outcome && (
