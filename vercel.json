@@ -3,7 +3,7 @@
   "crons": [
     {
       "path": "/api/whatsapp/send-reminder",
-      "schedule": "0 6 * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/cron/billing-reminder",
