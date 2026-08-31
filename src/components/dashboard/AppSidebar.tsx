@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import {
@@ -15,6 +15,7 @@ import {
   User,
   UserCheck,
   Activity,
+  MoreHorizontal,
   LogOut,
 } from 'lucide-react'
 import { type User as SupabaseUser } from '@supabase/supabase-js'
@@ -34,6 +35,25 @@ interface AppSidebarProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   profile: any
   user: SupabaseUser | null
+}
+
+// One row in the mobile "More" sheet (Alerts / Team / Activity).
+function MoreItem({ href, icon, label, badge, badgeColor, active, onNav }: {
+  href: string; icon: ReactNode; label: string
+  badge?: number; badgeColor?: string; active: boolean; onNav: () => void
+}) {
+  return (
+    <Link href={href} onClick={onNav} className="flex items-center gap-3 px-4 py-3 border-b last:border-b-0"
+      style={{ borderColor: 'rgba(255,255,255,0.07)', background: active ? 'rgba(94,143,214,0.12)' : 'transparent' }}>
+      <span style={{ color: active ? '#5E8FD6' : '#9DB2CC' }}>{icon}</span>
+      <span className="text-sm font-semibold flex-1" style={{ color: active ? '#DCE7F5' : '#C8D6EA' }}>{label}</span>
+      {badge != null && badge > 0 && (
+        <span className="min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center" style={{ background: badgeColor ?? '#D94A4A', color: '#fff' }}>
+          {badge > 9 ? '9+' : badge}
+        </span>
+      )}
+    </Link>
+  )
 }
 
 export default function AppSidebar({ profile, user }: AppSidebarProps) {
@@ -73,6 +93,7 @@ export default function AppSidebar({ profile, user }: AppSidebarProps) {
 
   const displayName = profile?.Full_name ?? user?.email ?? 'Agent'
   const isMgr = profile?.role === 'owner' || profile?.role === 'manager'
+  const [moreOpen, setMoreOpen] = useState(false)
   const companyName = isMgr ? 'Manager · StateGen' : (profile?.Companies?.Name ?? 'StateGen')
   const initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
 
@@ -189,27 +210,28 @@ export default function AppSidebar({ profile, user }: AppSidebarProps) {
       <div className="md:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 py-3" style={{ background: '#0E1F3D', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
         <Logo variant="white" size={26} withWordmark priority />
         <div className="flex items-center gap-2">
-          {/* Approvals — managers only; mobile has no room in the tab bar. */}
-          {isMgr && (
-            <Link href="/approvals" className="relative p-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.08)' }}>
-              <UserCheck className="h-3.5 w-3.5" style={{ color: '#9DB2CC' }} />
-              {pendingAgents > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center" style={{ background: '#E08A1E', color: '#fff' }}>
-                  {pendingAgents > 9 ? '9+' : pendingAgents}
+          {/* "More" — houses the secondary sections (Alerts, Team, Activity) so
+              the bottom tab bar and top bar never get crowded on mobile. */}
+          <div className="relative">
+            <button onClick={() => setMoreOpen(o => !o)} className="relative p-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.08)' }} aria-label="More">
+              <MoreHorizontal className="h-4 w-4" style={{ color: '#9DB2CC' }} />
+              {unseenAlerts + pendingAgents > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center" style={{ background: '#D94A4A', color: '#fff' }}>
+                  {unseenAlerts + pendingAgents > 9 ? '9+' : unseenAlerts + pendingAgents}
                 </span>
               )}
-            </Link>
-          )}
-          {/* Alerts bell — the mobile home for alerts, since the bottom tab bar
-              is already full. */}
-          <Link href="/alerts" className="relative p-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.08)' }}>
-            <Bell className="h-3.5 w-3.5" style={{ color: '#9DB2CC' }} />
-            {unseenAlerts > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center" style={{ background: '#D94A4A', color: '#fff' }}>
-                {unseenAlerts > 9 ? '9+' : unseenAlerts}
-              </span>
+            </button>
+            {moreOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
+                <div className="absolute right-0 mt-2 w-48 rounded-xl overflow-hidden z-50" style={{ background: '#13294D', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 12px 32px rgba(0,0,0,0.45)' }}>
+                  <MoreItem href="/alerts" icon={<Bell className="h-4 w-4" />} label="Alerts" badge={unseenAlerts} badgeColor="#D94A4A" active={isActive('/alerts')} onNav={() => setMoreOpen(false)} />
+                  {isMgr && <MoreItem href="/approvals" icon={<UserCheck className="h-4 w-4" />} label="Team" badge={pendingAgents} badgeColor="#E08A1E" active={isActive('/approvals')} onNav={() => setMoreOpen(false)} />}
+                  {isMgr && <MoreItem href="/activity" icon={<Activity className="h-4 w-4" />} label="Activity" active={isActive('/activity')} onNav={() => setMoreOpen(false)} />}
+                </div>
+              </>
             )}
-          </Link>
+          </div>
           <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: '#2E5288', color: '#fff' }}>
             {initials}
           </div>
