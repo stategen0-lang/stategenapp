@@ -221,3 +221,10 @@ test('offerStats: win-rate + avg discount vs asking', () => {
   assert.equal(o.winRate, 50)
   assert.equal(o.avgAcceptedDiscount, 3)   // 15k below 480k ≈ 3%
 })
+test('dealCommission: rentals are 1 month rent to agent + 1 to company', () => {
+  const c = dealCommission({ ...deal({ outcome: 'won', value: 2000 }), isRental: true, monthlyRent: 2000 })
+  assert.deepEqual(c, { agent: 2000, company: 2000, total: 4000 })
+  // falls back to value as the rent basis when monthlyRent is absent
+  const c2 = dealCommission({ ...deal({ outcome: 'won', value: 1500 }), isRental: true })
+  assert.deepEqual(c2, { agent: 1500, company: 1500, total: 3000 })
+})

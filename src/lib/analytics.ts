@@ -12,19 +12,33 @@ export interface AnalyticsDeal {
   value: number
   created_at: string
   stage_changed_at: string | null
-  agentCommissionPct?: number   // default 2.5
-  companyCommissionPct?: number // default 2.5
+  agentCommissionPct?: number   // sale: default 2.5
+  companyCommissionPct?: number // sale: default 2.5
+  isRental?: boolean            // rentals are commissioned in months of rent, not %
+  monthlyRent?: number          // the rent basis for a rental deal
 }
 
 export const COMMISSION_AGENT_DEFAULT = 2.5
 export const COMMISSION_COMPANY_DEFAULT = 2.5
+// Rentals: one month's rent to the agent, one month to the company.
+export const RENT_MONTHS_AGENT = 1
+export const RENT_MONTHS_COMPANY = 1
 
-/** The commission a won deal earns: agent + company shares (0 for open/lost). */
+/** The commission a won deal earns: agent + company shares (0 for open/lost).
+ *  Sales are a % of value (default 2.5% each); rentals are months of rent
+ *  (default 1 month each). */
 export function dealCommission(d: AnalyticsDeal): { agent: number; company: number; total: number } {
   if (d.outcome !== 'won') return { agent: 0, company: 0, total: 0 }
-  const v = Number(d.value) || 0
-  const agent = v * ((d.agentCommissionPct ?? COMMISSION_AGENT_DEFAULT) / 100)
-  const company = v * ((d.companyCommissionPct ?? COMMISSION_COMPANY_DEFAULT) / 100)
+  let agent: number, company: number
+  if (d.isRental) {
+    const rent = Number(d.monthlyRent ?? d.value) || 0
+    agent = rent * RENT_MONTHS_AGENT
+    company = rent * RENT_MONTHS_COMPANY
+  } else {
+    const v = Number(d.value) || 0
+    agent = v * ((d.agentCommissionPct ?? COMMISSION_AGENT_DEFAULT) / 100)
+    company = v * ((d.companyCommissionPct ?? COMMISSION_COMPANY_DEFAULT) / 100)
+  }
   return { agent: Math.round(agent), company: Math.round(company), total: Math.round(agent + company) }
 }
 

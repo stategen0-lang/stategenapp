@@ -7,7 +7,7 @@ import { dbRowToProperty, dbRowToClient } from '@/lib/db-mappers'
 import { negotiationState, type OfferRound, type OfferSide } from '@/lib/offers'
 import {
   summarise, funnel, leaderboard, rankOf, monthlyClosed, monthOverMonth, avgDaysToClose,
-  inventoryStats, clientStats, offerStats,
+  inventoryStats, clientStats, offerStats, dealCommission,
   type AnalyticsDeal, type InvProperty, type ClientLite, type NegLite,
 } from '@/lib/analytics'
 
@@ -40,11 +40,14 @@ export async function GET() {
   const agents = roster.map(a => ({ id: a.id, name: a.name }))
 
   // ── Deals → AnalyticsDeal (+ keep property/client for offers & the table) ──
-  const priceOf = new Map<number, number>()
+  // Per-property: is it a rental, its monthly rent, and its asking (sale price
+  // or rent) — used for the rental commission basis and the offers-vs-asking.
+  const propInfo = new Map<number, { isRental: boolean; rent: number; asking: number }>()
   const props: InvProperty[] = []
   ;(propsRes.data ?? []).forEach((row, i) => {
     const p = dbRowToProperty(row as Row, i)
-    priceOf.set(p.id, p.transaction === 'For Rent' ? p.rent : p.price)
+    const isRental = p.transaction === 'For Rent'
+    propInfo.set(p.id, { isRental, rent: p.rent, asking: isRental ? p.rent : p.price })
     if (!mgr && p.agentId !== me) return
     props.push({ type: p.type, transaction: p.transaction, status: p.status, price: p.price, rent: p.rent })
   })
@@ -56,17 +59,22 @@ export async function GET() {
     clients.push({ type: c.type, leadScore: Number((row as Row).lead_score) || 0 })
   })
 
-  const deals: AnalyticsDeal[] = dealRows.map(d => ({
-    id: d.id as string,
-    agent_id: (d.agent_id as string) ?? null,
-    stage: d.stage as string,
-    outcome: (d.outcome as 'won' | 'lost' | null) ?? null,
-    value: Number(d.value) || 0,
-    created_at: d.created_at as string,
-    stage_changed_at: (d.stage_changed_at as string) ?? null,
-    agentCommissionPct: d.agent_commission_pct != null ? Number(d.agent_commission_pct) : undefined,
-    companyCommissionPct: d.company_commission_pct != null ? Number(d.company_commission_pct) : undefined,
-  }))
+  const deals: AnalyticsDeal[] = dealRows.map(d => {
+    const info = d.property_id != null ? propInfo.get(d.property_id as number) : undefined
+    return {
+      id: d.id as string,
+      agent_id: (d.agent_id as string) ?? null,
+      stage: d.stage as string,
+      outcome: (d.outcome as 'won' | 'lost' | null) ?? null,
+      value: Number(d.value) || 0,
+      created_at: d.created_at as string,
+      stage_changed_at: (d.stage_changed_at as string) ?? null,
+      agentCommissionPct: d.agent_commission_pct != null ? Number(d.agent_commission_pct) : undefined,
+      companyCommissionPct: d.company_commission_pct != null ? Number(d.company_commission_pct) : undefined,
+      isRental: info?.isRental ?? false,
+      monthlyRent: info?.rent,
+    }
+  })
   const scopedDeals = mgr ? deals : deals.filter(d => d.agent_id === me)
 
   // ── Negotiations → offer stats (join asking via deal.property_id) ──
@@ -86,7 +94,7 @@ export async function GET() {
     const st = negotiationState(rounds)
     if (st.count === 0) continue
     const pid = propertyOfDeal.get(dealId)
-    negs.push({ status: st.status, amount: st.currentAmount, asking: pid ? (priceOf.get(pid) ?? null) : null })
+    negs.push({ status: st.status, amount: st.currentAmount, asking: pid ? (propInfo.get(pid)?.asking ?? null) : null })
   }
 
   const payload: Record<string, unknown> = {
@@ -109,15 +117,17 @@ export async function GET() {
       .filter(d => d.outcome === 'won')
       .map(d => {
         const value = Number(d.value) || 0
+        const info = d.property_id != null ? propInfo.get(d.property_id as number) : undefined
+        const isRental = info?.isRental ?? false
         const aPct = d.agent_commission_pct != null ? Number(d.agent_commission_pct) : 2.5
         const cPct = d.company_commission_pct != null ? Number(d.company_commission_pct) : 2.5
+        const comm = dealCommission({ id: '', agent_id: null, stage: 'closed', outcome: 'won', value, created_at: '', stage_changed_at: null, isRental, monthlyRent: info?.rent, agentCommissionPct: aPct, companyCommissionPct: cPct })
         return {
-          id: d.id, value,
+          id: d.id, value, isRental,
           clientName: ((d.client_requests as Row | null)?.['Client Name'] as string) ?? 'Client',
           agentName: nameOf.get(d.agent_id as string) ?? (d.agent_id as string) ?? '—',
           agentPct: aPct, companyPct: cPct,
-          agentCommission: Math.round(value * aPct / 100),
-          companyCommission: Math.round(value * cPct / 100),
+          agentCommission: comm.agent, companyCommission: comm.company,
         }
       })
       .sort((a, b) => b.value - a.value)

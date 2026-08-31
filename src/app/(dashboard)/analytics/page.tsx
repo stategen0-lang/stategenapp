@@ -12,7 +12,7 @@ const H = '#14223F'
 const SUB = '#6A7488'
 const LINE = '#EEF0F4'
 
-interface ClosedDeal { id: string; value: number; clientName: string; agentName: string; agentPct: number; companyPct: number; agentCommission: number; companyCommission: number }
+interface ClosedDeal { id: string; value: number; isRental: boolean; clientName: string; agentName: string; agentPct: number; companyPct: number; agentCommission: number; companyCommission: number }
 interface Payload {
   scope: 'manager' | 'agent'
   summary: Summary
@@ -215,7 +215,7 @@ export default function AnalyticsPage() {
         <div className="mt-4">
           <SectionTitle>Closed deals &amp; commission</SectionTitle>
           <Card>
-            <p className="text-xs mb-3" style={{ color: SUB }}>Default split is 2.5% agent / 2.5% company. Adjust a row when a co-broker took part.</p>
+            <p className="text-xs mb-3" style={{ color: SUB }}>Sales: 2.5% agent / 2.5% company (adjust a row for a co-broker). Rentals: 1 month&apos;s rent each.</p>
             <CommissionTable rows={data.closedDeals} onSaved={refresh} />
           </Card>
         </div>
@@ -256,18 +256,24 @@ function CommissionTable({ rows, onSaved }: { rows: ClosedDeal[]; onSaved: () =>
               <tr key={r.id} style={{ borderTop: `1px solid ${LINE}` }}>
                 <td className="py-2 font-semibold" style={{ color: H }}>{r.clientName}</td>
                 <td className="py-2" style={{ color: SUB }}>{r.agentName}</td>
-                <td className="py-2 text-right" style={{ color: H }}>{formatPrice(r.value)}</td>
-                <td className="py-2 text-right">
-                  <input value={a} onChange={ev => setEdit(x => ({ ...x, [r.id]: { a: ev.target.value, c } }))} inputMode="decimal"
-                    className="w-14 text-right rounded-md px-1.5 py-1" style={{ border: `1.5px solid ${dirty ? '#5E8FD6' : LINE}`, color: H }} />
-                </td>
-                <td className="py-2 text-right">
-                  <input value={c} onChange={ev => setEdit(x => ({ ...x, [r.id]: { a, c: ev.target.value } }))} inputMode="decimal"
-                    className="w-14 text-right rounded-md px-1.5 py-1" style={{ border: `1.5px solid ${dirty ? '#5E8FD6' : LINE}`, color: H }} />
-                </td>
+                <td className="py-2 text-right" style={{ color: H }}>{r.isRental ? `${formatPrice(r.value)}/mo` : formatPrice(r.value)}</td>
+                {r.isRental ? (
+                  <td className="py-2 text-right text-xs" colSpan={2} style={{ color: SUB }}>Rental · 1 mo + 1 mo</td>
+                ) : (
+                  <>
+                    <td className="py-2 text-right">
+                      <input value={a} onChange={ev => setEdit(x => ({ ...x, [r.id]: { a: ev.target.value, c } }))} inputMode="decimal"
+                        className="w-14 text-right rounded-md px-1.5 py-1" style={{ border: `1.5px solid ${dirty ? '#5E8FD6' : LINE}`, color: H }} />
+                    </td>
+                    <td className="py-2 text-right">
+                      <input value={c} onChange={ev => setEdit(x => ({ ...x, [r.id]: { a, c: ev.target.value } }))} inputMode="decimal"
+                        className="w-14 text-right rounded-md px-1.5 py-1" style={{ border: `1.5px solid ${dirty ? '#5E8FD6' : LINE}`, color: H }} />
+                    </td>
+                  </>
+                )}
                 <td className="py-2 text-right font-bold" style={{ color: '#1F7A4D' }}>{money(r.agentCommission + r.companyCommission)}</td>
                 <td className="py-2 text-right">
-                  {dirty && <button onClick={() => save(r.id, Number(a), Number(c))} disabled={busy === r.id} className="text-xs font-bold px-2 py-1 rounded-md text-white disabled:opacity-50" style={{ background: '#0E1F3D' }}>{busy === r.id ? '…' : 'Save'}</button>}
+                  {!r.isRental && dirty && <button onClick={() => save(r.id, Number(a), Number(c))} disabled={busy === r.id} className="text-xs font-bold px-2 py-1 rounded-md text-white disabled:opacity-50" style={{ background: '#0E1F3D' }}>{busy === r.id ? '…' : 'Save'}</button>}
                 </td>
               </tr>
             )
