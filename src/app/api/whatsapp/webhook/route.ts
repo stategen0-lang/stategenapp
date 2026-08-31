@@ -15,6 +15,7 @@ import { isStartListing, isStartClient } from '@/lib/whatsapp/flows'
 import { parseConnect, isStopMessage, normalizeCode, pairingExpired } from '@/lib/whatsapp/pairing'
 import { handleAgentActivity, handleOverdueReminders, handleActivityFeed } from '@/lib/whatsapp/manager-handlers'
 import { stageLogOffer, stageResolveOffer, handleQueryOffers, continueOfferPick } from '@/lib/whatsapp/offer-handlers'
+import { continuePhotoCollection } from '@/lib/whatsapp/photo-handlers'
 import { stageCreateEvent, handleQuerySchedule } from '@/lib/whatsapp/calendar-handlers'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -289,6 +290,15 @@ async function handleInbound(
   if (profile.whatsapp_enabled === false) {
     await stamp({ intent: 'disabled' })
     await answerWith('The WhatsApp assistant is turned off for your account. Turn it back on in Settings → WhatsApp.', 'disabled', profile)
+    return
+  }
+
+  // Just added a listing? A photo now gets attached to it; "done" or any other
+  // message ends the window (and, if it wasn't a photo, routes normally below).
+  const photoReply = await continuePhotoCollection(admin, profile, inbound)
+  if (photoReply !== null) {
+    await stamp({ intent: 'collect_photo' })
+    await answerWith(photoReply, 'collect_photo', profile)
     return
   }
 

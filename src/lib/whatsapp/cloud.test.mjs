@@ -149,3 +149,10 @@ test('toCloudAddress: null/empty yields empty string', () => {
   assert.equal(toCloudAddress(null), '')
   assert.equal(toCloudAddress(''), '')
 })
+
+test('parseInbound: reads an image message (media id + caption)', () => {
+  const m = parseInbound({ entry: [{ changes: [{ value: { messages: [{ from: '961700', id: 'wamid.9', type: 'image', image: { id: 'MID123', mime_type: 'image/jpeg', caption: 'front' } }] } }] }] })
+  assert.equal(m.type, 'image')
+  assert.equal(m.text, 'front')
+  assert.deepEqual(m.image, { id: 'MID123', mime: 'image/jpeg', caption: 'front' })
+})

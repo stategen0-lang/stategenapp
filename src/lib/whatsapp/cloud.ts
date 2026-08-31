@@ -32,6 +32,27 @@ export function displayNumber(): string {
 }
 
 /**
+ * Download an inbound media file (a photo an agent sent) by its Meta media id.
+ * Two hops: resolve the id to a short-lived URL, then fetch the bytes — both
+ * require the access token in the Authorization header.
+ */
+export async function downloadMedia(mediaId: string): Promise<{ ok: true; bytes: Uint8Array; mime: string } | { ok: false; error: string }> {
+  const token = accessToken()
+  if (!token) return { ok: false, error: 'WhatsApp access token is not configured' }
+  try {
+    const metaRes = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${mediaId}`, { headers: { Authorization: `Bearer ${token}` } })
+    if (!metaRes.ok) return { ok: false, error: `media lookup failed (${metaRes.status})` }
+    const meta = await metaRes.json() as { url?: string; mime_type?: string }
+    if (!meta.url) return { ok: false, error: 'media url missing' }
+    const fileRes = await fetch(meta.url, { headers: { Authorization: `Bearer ${token}` } })
+    if (!fileRes.ok) return { ok: false, error: `media download failed (${fileRes.status})` }
+    return { ok: true, bytes: new Uint8Array(await fileRes.arrayBuffer()), mime: meta.mime_type || 'image/jpeg' }
+  } catch (e) {
+    return { ok: false, error: String(e) }
+  }
+}
+
+/**
  * Is this webhook genuinely from Meta? HMAC-SHA256 of the *raw* request body
  * with the app secret, compared timing-safe to the `X-Hub-Signature-256` header
  * (`sha256=<hex>`).
@@ -61,6 +82,8 @@ export interface InboundMessage {
   type: string        // 'text' | 'interactive' | 'button' | 'flow' | 'image' | ...
   /** Present when the agent submitted a WhatsApp Flow form (the parsed fields). */
   flow?: { data: Record<string, unknown> }
+  /** Present when the agent sent a photo — the Meta media id to download. */
+  image?: { id: string; mime?: string; caption?: string }
 }
 
 /**
@@ -89,8 +112,13 @@ export function parseInbound(payload: unknown): InboundMessage | null {
     // a future tap-to-fill UI routes through the same intent logic as typing.
     let text = ''
     let flow: { data: Record<string, unknown> } | undefined
+    let image: { id: string; mime?: string; caption?: string } | undefined
     if (type === 'text') {
       text = String((msg.text as { body?: string } | undefined)?.body ?? '')
+    } else if (type === 'image') {
+      const img = msg.image as { id?: string; mime_type?: string; caption?: string } | undefined
+      if (img?.id) image = { id: String(img.id), mime: img.mime_type, caption: img.caption }
+      text = String(img?.caption ?? '')
     } else if (type === 'interactive') {
       const inter = msg.interactive as {
         button_reply?: { title?: string }
@@ -111,7 +139,9 @@ export function parseInbound(payload: unknown): InboundMessage | null {
     const name = String(contacts?.[0]?.profile?.name ?? '')
 
     const base: InboundMessage = { from, text, name, messageId, type: flow ? 'flow' : type }
-    return flow ? { ...base, flow } : base
+    if (flow) return { ...base, flow }
+    if (image) return { ...base, image }
+    return base
   } catch {
     return null
   }

@@ -437,6 +437,13 @@ export async function applyPendingAction(
       // from the web form.
       if (p.table === 'Properties' && data) {
         await createListingAlerts(admin, profile.company_id, data as Record<string, unknown>)
+        // Enter a short "send me photos" window tied to this listing.
+        await admin.from('conversation_state').upsert({
+          company_id: profile.company_id, profile_id: profile.id,
+          current_flow: 'collecting_photos', step: 'photos',
+          context: { propertyId: data.id, count: 0 }, updated_at: new Date().toISOString(),
+        }, { onConflict: 'profile_id' })
+        return `Saved — listing #${data.id} created.\n\n📸 Send photos for it now (one or several), or reply "done".`
       }
       return `Saved — listing #${data?.id} created.`
     }
