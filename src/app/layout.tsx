@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Public_Sans } from "next/font/google";
 import "./globals.css";
 import ServiceWorkerRegister from "@/components/pwa/ServiceWorkerRegister";
+import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Analytics } from "@vercel/analytics/next";
 
 const publicSans = Public_Sans({
   variable: "--font-public-sans",
@@ -66,6 +68,8 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <ServiceWorkerRegister />
         {children}
+        <SpeedInsights />
+        <Analytics />
       </body>
     </html>
   );
