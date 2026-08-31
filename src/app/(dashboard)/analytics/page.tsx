@@ -1,230 +1,279 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { TrendingUp, DollarSign, Percent, Layers, ArrowUp, ArrowDown } from 'lucide-react'
+import { useState } from 'react'
+import { TrendingUp, DollarSign, Percent, Wallet, Trophy, HandCoins, Home, Users, ArrowUp, ArrowDown } from 'lucide-react'
 import { formatPrice } from '@/lib/data'
-import { findAgent, unknownAgent, type RosterAgent } from '@/lib/agent-roster'
-import { useSession } from '@/hooks/use-session'
-import { isManager } from '@/lib/permissions'
-import {
-  summarise, funnel, leaderboard, monthlyClosed, monthOverMonth, avgDaysToClose,
-  type AnalyticsDeal,
+import { useCachedFetch } from '@/hooks/use-cached-fetch'
+import type {
+  Summary, FunnelStage, AgentStat, MonthPoint, InventoryStats, ClientStats, OfferStats,
 } from '@/lib/analytics'
 
 const H = '#14223F'
 const SUB = '#6A7488'
 const LINE = '#EEF0F4'
 
-// The deals API returns everything these need; keep the fields we read explicit.
-interface DealRow extends AnalyticsDeal {
-  agent_id: string | null
+interface ClosedDeal { id: string; value: number; clientName: string; agentName: string; agentPct: number; companyPct: number; agentCommission: number; companyCommission: number }
+interface Payload {
+  scope: 'manager' | 'agent'
+  summary: Summary
+  funnel: FunnelStage[]
+  monthly: MonthPoint[]
+  mom: { wonThis: number; wonLast: number; valueThis: number; valueLast: number }
+  avgDaysToClose: number | null
+  inventory: InventoryStats
+  clients: ClientStats
+  offers: OfferStats
+  leaderboard?: AgentStat[]
+  closedDeals?: ClosedDeal[]
+  ranks?: { revenue: { rank: number; of: number } | null; commission: { rank: number; of: number } | null }
 }
 
-// ── Month-over-month delta chip ───────────────────────────────────────────────
-function Delta({ now, prev, unit = '' }: { now: number; prev: number; unit?: string }) {
-  if (prev === 0 && now === 0) return <span className="text-xs" style={{ color: SUB }}>No change vs last month</span>
+function money(n: number) { return `$${Math.round(n).toLocaleString('en-US')}` }
+
+function Delta({ now, prev, money: asMoney }: { now: number; prev: number; money?: boolean }) {
   const diff = now - prev
   if (diff === 0) return <span className="text-xs" style={{ color: SUB }}>Level with last month</span>
   const up = diff > 0
   const Icon = up ? ArrowUp : ArrowDown
   return (
-    <span className="text-xs font-medium flex items-center gap-0.5" style={{ color: up ? '#1F7A4D' : '#A23434' }}>
-      <Icon className="h-3 w-3" />
-      {unit === '$' ? formatPrice(Math.abs(diff)) : Math.abs(diff)}{unit && unit !== '$' ? unit : ''} vs last month
+    <span className="text-xs font-medium inline-flex items-center gap-0.5" style={{ color: up ? '#1F7A4D' : '#A23434' }}>
+      <Icon className="h-3 w-3" />{asMoney ? formatPrice(Math.abs(diff)) : Math.abs(diff)} vs last month
     </span>
   )
 }
 
+function Card({ children }: { children: React.ReactNode }) {
+  return <div className="rounded-2xl bg-white p-4 md:p-5" style={{ border: `1px solid ${LINE}`, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>{children}</div>
+}
+
+function Kpi({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: string; sub?: React.ReactNode }) {
+  return (
+    <Card>
+      <div className="flex items-center gap-2 mb-1.5" style={{ color: SUB }}>{icon}<span className="text-xs font-semibold uppercase tracking-wide">{label}</span></div>
+      <p className="text-2xl font-extrabold" style={{ color: H, letterSpacing: '-0.5px' }}>{value}</p>
+      {sub && <div className="mt-1">{sub}</div>}
+    </Card>
+  )
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return <p className="text-sm font-bold mb-2.5 mt-1" style={{ color: H }}>{children}</p>
+}
+
 export default function AnalyticsPage() {
-  const { session } = useSession()
-  const manager = isManager(session?.role)
+  const { data, refresh } = useCachedFetch<Payload>('analytics', '/api/analytics')
 
-  const [deals, setDeals] = useState<DealRow[]>([])
-  const [roster, setRoster] = useState<RosterAgent[]>([])
-  const [loading, setLoading] = useState(true)
+  if (!data) return <div className="p-6 text-sm" style={{ color: SUB }}>Loading analytics…</div>
 
-  // URL-backed agent filter, matching the pipeline and calendar.
-  const [agentFilter, setAgentFilter] = useState('')
-  useEffect(() => {
-    const fromUrl = new URLSearchParams(window.location.search).get('agent') ?? ''
-    if (fromUrl) setAgentFilter(fromUrl)
-  }, [])
-  function selectAgent(id: string) {
-    setAgentFilter(id)
-    const url = new URL(window.location.href)
-    if (id) url.searchParams.set('agent', id); else url.searchParams.delete('agent')
-    window.history.replaceState(null, '', url)
-  }
-
-  const requestId = useRef(0)
-  const load = useCallback(async () => {
-    const id = ++requestId.current
-    const url = agentFilter ? `/api/deals?agent=${encodeURIComponent(agentFilter)}` : '/api/deals'
-    try {
-      const res = await fetch(url)
-      if (res.ok) {
-        const data = await res.json()
-        if (id !== requestId.current) return
-        if (Array.isArray(data.deals)) setDeals(data.deals)
-        if (Array.isArray(data.agents)) setRoster(data.agents)
-      }
-    } catch { /* keep what's on screen */ }
-    if (id === requestId.current) setLoading(false)
-  }, [agentFilter])
-  useEffect(() => { load() }, [load])
-
-  const s = useMemo(() => summarise(deals), [deals])
-  const stages = useMemo(() => funnel(deals), [deals])
-  const board = useMemo(() => leaderboard(deals, roster.map(a => ({ id: a.id, name: a.name }))), [deals, roster])
-  const months = useMemo(() => monthlyClosed(deals), [deals])
-  const mom = useMemo(() => monthOverMonth(deals), [deals])
-  const avgDays = useMemo(() => avgDaysToClose(deals), [deals])
-
-  const agentOf = (id: string | null) => findAgent(roster, id) ?? unknownAgent(id)
-  const maxStage = Math.max(...stages.map(x => x.count), 1)
-  const maxWon = Math.max(...board.map(a => a.wonValue), 1)
-  const maxMonth = Math.max(...months.map(m => m.wonValue), 1)
-
-  const kpis = [
-    {
-      label: 'Closed won', value: String(s.won),
-      icon: TrendingUp, bg: '#EAF0FA', fg: '#2E5288',
-      delta: <Delta now={mom.wonThis} prev={mom.wonLast} />,
-    },
-    {
-      label: 'Closed value', value: formatPrice(s.wonValue),
-      icon: DollarSign, bg: '#E3F4EA', fg: '#1F8A5B',
-      delta: <Delta now={mom.valueThis} prev={mom.valueLast} unit="$" />,
-    },
-    {
-      label: 'Win rate', value: s.winRate === null ? '—' : `${s.winRate}%`,
-      icon: Percent, bg: '#FBEFD6', fg: '#9A6516',
-      delta: <span className="text-xs" style={{ color: SUB }}>{s.won} won · {s.lost} lost</span>,
-    },
-    {
-      label: 'Open pipeline', value: formatPrice(s.openValue),
-      icon: Layers, bg: '#FBE7E7', fg: '#A23434',
-      delta: <span className="text-xs" style={{ color: SUB }}>{s.open} active deal{s.open === 1 ? '' : 's'}</span>,
-    },
-  ]
+  const { summary: s, mom } = data
+  const manager = data.scope === 'manager'
+  const maxMonth = Math.max(1, ...data.monthly.map(m => m.wonValue))
 
   return (
-    <div className="p-4 md:p-6 space-y-4 md:space-y-5" style={{ fontFamily: 'var(--font-public-sans), -apple-system, BlinkMacSystemFont, sans-serif' }}>
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-xl md:text-2xl font-bold" style={{ color: H, letterSpacing: '-0.3px' }}>Reports</h1>
-          <p className="text-xs md:text-sm mt-0.5" style={{ color: SUB }}>
-            {loading
-              ? 'Loading…'
-              : manager
-                ? `Live figures${agentFilter ? ` · ${agentOf(agentFilter).name}` : ' · whole agency'}${avgDays !== null ? ` · avg ${avgDays}d to close` : ''}`
-                : `Your performance${avgDays !== null ? ` · avg ${avgDays}d to close` : ''}`}
-          </p>
-        </div>
-        {manager && (
-          <select
-            value={agentFilter}
-            onChange={e => selectAgent(e.target.value)}
-            className="rounded-xl px-3 py-2 text-sm font-semibold outline-none"
-            style={{ border: `1.5px solid ${LINE}`, background: '#F7F8FB', color: H }}
-            aria-label="Filter reports by agent"
-          >
-            <option value="">All agents</option>
-            {roster.map(a => <option key={a.id} value={a.id}>{a.orphan ? `${a.name} — no profile` : a.name}</option>)}
-          </select>
-        )}
+    <div className="max-w-4xl mx-auto p-4 md:p-6" style={{ fontFamily: 'var(--font-public-sans), -apple-system, BlinkMacSystemFont, sans-serif' }}>
+      <div className="mb-5">
+        <h1 className="text-xl md:text-2xl font-bold" style={{ color: H, letterSpacing: '-0.3px' }}>Analytics</h1>
+        <p className="text-sm mt-0.5" style={{ color: SUB }}>
+          {manager ? 'Your whole agency — revenue, commissions, and performance.' : 'Your performance this period.'}
+        </p>
       </div>
 
-      {/* KPI cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-        {kpis.map(({ label, value, icon: Icon, bg, fg, delta }) => (
-          <div key={label} className="rounded-2xl p-5 bg-white" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: `1px solid ${LINE}` }}>
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: bg }}>
-              <Icon className="h-5 w-5" style={{ color: fg }} />
+      {/* Money KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Kpi icon={<DollarSign className="h-4 w-4" />} label="Revenue won" value={formatPrice(s.wonValue)}
+          sub={<Delta now={mom.valueThis} prev={mom.valueLast} money />} />
+        <Kpi icon={<Wallet className="h-4 w-4" />} label={manager ? 'Commission (agency)' : 'My commission'}
+          value={money(manager ? s.totalCommission : s.agentCommission)}
+          sub={manager ? <span className="text-xs" style={{ color: SUB }}>{money(s.agentCommission)} agents · {money(s.companyCommission)} company</span> : undefined} />
+        <Kpi icon={<TrendingUp className="h-4 w-4" />} label="Pipeline in play" value={formatPrice(s.openValue)}
+          sub={<span className="text-xs" style={{ color: SUB }}>{s.open} open deals</span>} />
+        <Kpi icon={<Percent className="h-4 w-4" />} label="Win rate" value={s.winRate == null ? '—' : `${s.winRate}%`}
+          sub={<span className="text-xs" style={{ color: SUB }}>{s.won} won · {s.lost} lost{data.avgDaysToClose != null ? ` · ${data.avgDaysToClose}d avg` : ''}</span>} />
+      </div>
+
+      {/* Agent private rank */}
+      {!manager && data.ranks && (data.ranks.revenue || data.ranks.commission) && (
+        <div className="mt-3">
+          <Card>
+            <div className="flex items-center gap-2 mb-2" style={{ color: SUB }}><Trophy className="h-4 w-4" /><span className="text-xs font-semibold uppercase tracking-wide">Where you rank</span></div>
+            <div className="flex flex-wrap gap-6">
+              {data.ranks.revenue && <div><p className="text-2xl font-extrabold" style={{ color: H }}>#{data.ranks.revenue.rank}<span className="text-sm font-semibold" style={{ color: SUB }}> of {data.ranks.revenue.of}</span></p><p className="text-xs" style={{ color: SUB }}>by revenue</p></div>}
+              {data.ranks.commission && <div><p className="text-2xl font-extrabold" style={{ color: H }}>#{data.ranks.commission.rank}<span className="text-sm font-semibold" style={{ color: SUB }}> of {data.ranks.commission.of}</span></p><p className="text-xs" style={{ color: SUB }}>by commission</p></div>}
             </div>
-            <p className="text-2xl font-bold" style={{ color: H, letterSpacing: '-0.3px' }}>{loading ? '—' : value}</p>
-            <p className="text-xs mt-0.5 font-medium" style={{ color: SUB }}>{label}</p>
-            <div className="mt-1.5">{!loading && delta}</div>
-          </div>
-        ))}
+            <p className="text-xs mt-2" style={{ color: '#9AA3B2' }}>Only your own position is shown — teammates&apos; numbers stay private.</p>
+          </Card>
+        </div>
+      )}
+
+      {/* Manager leaderboard */}
+      {manager && data.leaderboard && data.leaderboard.length > 0 && (
+        <div className="mt-4">
+          <SectionTitle>Agent leaderboard</SectionTitle>
+          <Card>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" style={{ minWidth: 520 }}>
+                <thead><tr style={{ color: SUB }}>
+                  {['Agent', 'Won', 'Revenue', 'Commission', 'Open', 'Win %', 'Avg days'].map((h, i) => (
+                    <th key={h} className={`py-2 font-semibold ${i === 0 ? 'text-left' : 'text-right'}`}>{h}</th>
+                  ))}
+                </tr></thead>
+                <tbody>
+                  {data.leaderboard.map((a, i) => (
+                    <tr key={a.id} style={{ borderTop: `1px solid ${LINE}` }}>
+                      <td className="py-2.5 font-semibold" style={{ color: H }}>
+                        <span className="inline-block w-5 text-center mr-1.5" style={{ color: i < 3 ? '#8A5A12' : '#C4CAD6' }}>{i + 1}</span>{a.name}
+                      </td>
+                      <td className="py-2.5 text-right" style={{ color: H }}>{a.won}</td>
+                      <td className="py-2.5 text-right font-semibold" style={{ color: H }}>{formatPrice(a.wonValue)}</td>
+                      <td className="py-2.5 text-right font-bold" style={{ color: '#1F7A4D' }}>{money(a.commission)}</td>
+                      <td className="py-2.5 text-right" style={{ color: SUB }}>{a.open}</td>
+                      <td className="py-2.5 text-right" style={{ color: SUB }}>{a.winRate == null ? '—' : `${a.winRate}%`}</td>
+                      <td className="py-2.5 text-right" style={{ color: SUB }}>{a.avgDaysToClose == null ? '—' : `${a.avgDaysToClose}d`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Pipeline funnel + monthly trend */}
+      <div className="grid md:grid-cols-2 gap-4 mt-4">
+        <div>
+          <SectionTitle>Pipeline</SectionTitle>
+          <Card>
+            <div className="space-y-2">
+              {data.funnel.map(f => (
+                <div key={f.id}>
+                  <div className="flex justify-between text-xs mb-0.5"><span style={{ color: H, fontWeight: 600 }}>{f.label}</span><span style={{ color: SUB }}>{f.count} · {formatPrice(f.value)}</span></div>
+                  <div className="h-2 rounded-full" style={{ background: '#F0F2F5' }}><div className="h-2 rounded-full" style={{ width: `${f.pct}%`, background: '#5E8FD6' }} /></div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+        <div>
+          <SectionTitle>Revenue closed — last 6 months</SectionTitle>
+          <Card>
+            <div className="flex items-end gap-2" style={{ height: 140 }}>
+              {data.monthly.map(m => (
+                <div key={m.key} className="flex-1 flex flex-col items-center justify-end gap-1">
+                  <div className="w-full rounded-t" style={{ height: `${Math.max(4, (m.wonValue / maxMonth) * 110)}px`, background: m.wonValue ? '#1F7A4D' : '#E3E7EE' }} title={formatPrice(m.wonValue)} />
+                  <span className="text-[10px]" style={{ color: SUB }}>{m.label}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5">
-        {/* Pipeline funnel */}
-        <div className="rounded-2xl bg-white p-5" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: `1px solid ${LINE}` }}>
-          <h2 className="text-sm font-bold mb-1" style={{ color: H }}>Pipeline by stage</h2>
-          <p className="text-xs mb-4" style={{ color: SUB }}>Where the {s.total} deal{s.total === 1 ? '' : 's'} sit right now</p>
-          <div className="space-y-3">
-            {stages.map(st => (
-              <div key={st.id}>
-                <div className="flex justify-between text-xs mb-1.5">
-                  <span style={{ color: H, fontWeight: 600 }}>{st.label}</span>
-                  <span style={{ color: SUB }}>{st.count} · {formatPrice(st.value)}</span>
-                </div>
-                <div className="h-2.5 rounded-full" style={{ background: '#EEF0F4' }}>
-                  <div className="h-2.5 rounded-full transition-all" style={{ width: `${(st.count / maxStage) * 100}%`, background: '#5E8FD6' }} />
-                </div>
-              </div>
-            ))}
-            {!loading && s.total === 0 && <p className="text-xs text-center py-4" style={{ color: SUB }}>No deals yet.</p>}
-          </div>
+      {/* Offers / inventory / clients */}
+      <div className="grid md:grid-cols-3 gap-4 mt-4">
+        <div>
+          <SectionTitle>Offers &amp; negotiation</SectionTitle>
+          <Card>
+            <p className="text-2xl font-extrabold" style={{ color: H }}>{data.offers.winRate == null ? '—' : `${data.offers.winRate}%`}</p>
+            <p className="text-xs" style={{ color: SUB }}>accepted of decided negotiations</p>
+            <div className="mt-3 text-xs space-y-1" style={{ color: SUB }}>
+              <div className="flex justify-between"><span>Open</span><span style={{ color: H, fontWeight: 600 }}>{data.offers.open}</span></div>
+              <div className="flex justify-between"><span>Accepted</span><span style={{ color: '#1F7A4D', fontWeight: 600 }}>{data.offers.accepted}</span></div>
+              <div className="flex justify-between"><span>Rejected</span><span style={{ color: '#A23434', fontWeight: 600 }}>{data.offers.rejected}</span></div>
+              {data.offers.avgAcceptedDiscount != null && <div className="flex justify-between"><span>Avg vs asking</span><span style={{ color: H, fontWeight: 600 }}>{data.offers.avgAcceptedDiscount > 0 ? `${data.offers.avgAcceptedDiscount}% below` : `${Math.abs(data.offers.avgAcceptedDiscount)}% above`}</span></div>}
+            </div>
+          </Card>
         </div>
-
-        {/* Monthly closed trend */}
-        <div className="rounded-2xl bg-white p-5" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: `1px solid ${LINE}` }}>
-          <h2 className="text-sm font-bold mb-1" style={{ color: H }}>Closed deals — last 6 months</h2>
-          <p className="text-xs mb-4" style={{ color: SUB }}>Won deals by the month they closed</p>
-          <div className="flex items-end justify-between gap-2" style={{ height: 140 }}>
-            {months.map(m => (
-              <div key={m.key} className="flex-1 flex flex-col items-center justify-end gap-1.5" style={{ height: '100%' }}>
-                <span className="text-xs font-bold" style={{ color: m.wonCount ? H : '#C4CAD6' }}>{m.wonCount || ''}</span>
-                <div
-                  className="w-full rounded-t-md transition-all"
-                  title={`${m.label}: ${m.wonCount} won · ${formatPrice(m.wonValue)}`}
-                  style={{
-                    height: `${Math.max((m.wonValue / maxMonth) * 100, m.wonCount ? 4 : 0)}%`,
-                    minHeight: m.wonCount ? 6 : 0,
-                    background: '#1F8A5B',
-                  }}
-                />
-                <span className="text-xs" style={{ color: SUB }}>{m.label}</span>
-              </div>
-            ))}
-          </div>
+        <div>
+          <SectionTitle>Inventory</SectionTitle>
+          <Card>
+            <p className="text-2xl font-extrabold" style={{ color: H }}>{data.inventory.total}</p>
+            <p className="text-xs" style={{ color: SUB }}>listings · {formatPrice(data.inventory.totalValue)} value</p>
+            <div className="mt-3 text-xs space-y-1" style={{ color: SUB }}>
+              <div className="flex justify-between"><span>Available</span><span style={{ color: H, fontWeight: 600 }}>{data.inventory.available}</span></div>
+              <div className="flex justify-between"><span>Reserved</span><span style={{ color: H, fontWeight: 600 }}>{data.inventory.reserved}</span></div>
+              <div className="flex justify-between"><span>Sold / rented</span><span style={{ color: H, fontWeight: 600 }}>{data.inventory.sold}</span></div>
+              <div className="flex justify-between"><span>For sale / rent</span><span style={{ color: H, fontWeight: 600 }}>{data.inventory.forSale} / {data.inventory.forRent}</span></div>
+            </div>
+          </Card>
+        </div>
+        <div>
+          <SectionTitle>Clients</SectionTitle>
+          <Card>
+            <p className="text-2xl font-extrabold" style={{ color: H }}>{data.clients.total}</p>
+            <p className="text-xs" style={{ color: SUB }}>{data.clients.buyers} buyers · {data.clients.renters} renters</p>
+            <div className="mt-3 text-xs space-y-1" style={{ color: SUB }}>
+              <div className="flex justify-between"><span>🔥 Hot leads</span><span style={{ color: '#A23434', fontWeight: 600 }}>{data.clients.hot}</span></div>
+              <div className="flex justify-between"><span>Warm</span><span style={{ color: '#9A6516', fontWeight: 600 }}>{data.clients.warm}</span></div>
+              <div className="flex justify-between"><span>Cold</span><span style={{ color: SUB, fontWeight: 600 }}>{data.clients.cold}</span></div>
+            </div>
+          </Card>
         </div>
       </div>
 
-      {/* Agent leaderboard */}
-      <div className="rounded-2xl bg-white p-5" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: `1px solid ${LINE}` }}>
-        <h2 className="text-sm font-bold mb-1" style={{ color: H }}>{manager ? 'Agent leaderboard' : 'Your performance'}</h2>
-        <p className="text-xs mb-4" style={{ color: SUB }}>Ranked by closed value; open pipeline breaks a tie</p>
-        <div className="space-y-3">
-          {board.map((a, i) => {
-            const agent = agentOf(a.id)
+      {/* Commission table (managers) — editable co-broker split */}
+      {manager && data.closedDeals && data.closedDeals.length > 0 && (
+        <div className="mt-4">
+          <SectionTitle>Closed deals &amp; commission</SectionTitle>
+          <Card>
+            <p className="text-xs mb-3" style={{ color: SUB }}>Default split is 2.5% agent / 2.5% company. Adjust a row when a co-broker took part.</p>
+            <CommissionTable rows={data.closedDeals} onSaved={refresh} />
+          </Card>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Editable commission table ─────────────────────────────────────────────────
+function CommissionTable({ rows, onSaved }: { rows: ClosedDeal[]; onSaved: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null)
+  const [edit, setEdit] = useState<Record<string, { a: string; c: string }>>({})
+
+  async function save(id: string, agentPct: number, companyPct: number) {
+    setBusy(id)
+    try {
+      await fetch('/api/analytics', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dealId: id, agentPct, companyPct }) })
+      await onSaved()
+      setEdit(e => { const n = { ...e }; delete n[id]; return n })
+    } finally { setBusy(null) }
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm" style={{ minWidth: 560 }}>
+        <thead><tr style={{ color: SUB }}>
+          {['Client', 'Agent', 'Value', 'Agent %', 'Company %', 'Commission', ''].map((h, i) => (
+            <th key={h} className={`py-2 font-semibold ${i === 0 || i === 1 ? 'text-left' : 'text-right'}`}>{h}</th>
+          ))}
+        </tr></thead>
+        <tbody>
+          {rows.map(r => {
+            const e = edit[r.id]
+            const a = e ? e.a : String(r.agentPct)
+            const c = e ? e.c : String(r.companyPct)
+            const dirty = e && (Number(e.a) !== r.agentPct || Number(e.c) !== r.companyPct)
             return (
-              <div key={a.id} className="rounded-xl p-3" style={{ border: `1.5px solid ${LINE}` }}>
-                <div className="flex items-center gap-2.5 mb-2">
-                  {manager && <span className="text-xs font-bold w-4 shrink-0" style={{ color: SUB }}>{i + 1}</span>}
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0" style={{ background: agent.color }}>{agent.initials}</div>
-                  <span className="text-sm font-semibold flex-1 min-w-0 truncate" style={{ color: H }}>{a.name}</span>
-                  <span className="text-sm font-bold shrink-0" style={{ color: '#1F7A4D' }}>{formatPrice(a.wonValue)}</span>
-                </div>
-                <div className="h-2 rounded-full mb-2" style={{ background: '#EEF0F4' }}>
-                  <div className="h-2 rounded-full transition-all" style={{ width: `${(a.wonValue / maxWon) * 100}%`, background: agent.color }} />
-                </div>
-                <div className="flex items-center gap-3 text-xs flex-wrap" style={{ color: SUB }}>
-                  <span><b style={{ color: H }}>{a.won}</b> won</span>
-                  <span><b style={{ color: H }}>{a.lost}</b> lost</span>
-                  <span><b style={{ color: H }}>{a.open}</b> open · {formatPrice(a.openValue)}</span>
-                  <span>win rate <b style={{ color: H }}>{a.winRate === null ? '—' : `${a.winRate}%`}</b></span>
-                </div>
-              </div>
+              <tr key={r.id} style={{ borderTop: `1px solid ${LINE}` }}>
+                <td className="py-2 font-semibold" style={{ color: H }}>{r.clientName}</td>
+                <td className="py-2" style={{ color: SUB }}>{r.agentName}</td>
+                <td className="py-2 text-right" style={{ color: H }}>{formatPrice(r.value)}</td>
+                <td className="py-2 text-right">
+                  <input value={a} onChange={ev => setEdit(x => ({ ...x, [r.id]: { a: ev.target.value, c } }))} inputMode="decimal"
+                    className="w-14 text-right rounded-md px-1.5 py-1" style={{ border: `1.5px solid ${dirty ? '#5E8FD6' : LINE}`, color: H }} />
+                </td>
+                <td className="py-2 text-right">
+                  <input value={c} onChange={ev => setEdit(x => ({ ...x, [r.id]: { a, c: ev.target.value } }))} inputMode="decimal"
+                    className="w-14 text-right rounded-md px-1.5 py-1" style={{ border: `1.5px solid ${dirty ? '#5E8FD6' : LINE}`, color: H }} />
+                </td>
+                <td className="py-2 text-right font-bold" style={{ color: '#1F7A4D' }}>{money(r.agentCommission + r.companyCommission)}</td>
+                <td className="py-2 text-right">
+                  {dirty && <button onClick={() => save(r.id, Number(a), Number(c))} disabled={busy === r.id} className="text-xs font-bold px-2 py-1 rounded-md text-white disabled:opacity-50" style={{ background: '#0E1F3D' }}>{busy === r.id ? '…' : 'Save'}</button>}
+                </td>
+              </tr>
             )
           })}
-          {!loading && board.length === 0 && <p className="text-xs text-center py-4" style={{ color: SUB }}>No agents to show.</p>}
-        </div>
-      </div>
+        </tbody>
+      </table>
     </div>
   )
 }

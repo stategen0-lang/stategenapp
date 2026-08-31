@@ -12,6 +12,20 @@ export interface AnalyticsDeal {
   value: number
   created_at: string
   stage_changed_at: string | null
+  agentCommissionPct?: number   // default 2.5
+  companyCommissionPct?: number // default 2.5
+}
+
+export const COMMISSION_AGENT_DEFAULT = 2.5
+export const COMMISSION_COMPANY_DEFAULT = 2.5
+
+/** The commission a won deal earns: agent + company shares (0 for open/lost). */
+export function dealCommission(d: AnalyticsDeal): { agent: number; company: number; total: number } {
+  if (d.outcome !== 'won') return { agent: 0, company: 0, total: 0 }
+  const v = Number(d.value) || 0
+  const agent = v * ((d.agentCommissionPct ?? COMMISSION_AGENT_DEFAULT) / 100)
+  const company = v * ((d.companyCommissionPct ?? COMMISSION_COMPANY_DEFAULT) / 100)
+  return { agent: Math.round(agent), company: Math.round(company), total: Math.round(agent + company) }
 }
 
 export const STAGES: { id: string; label: string }[] = [
@@ -37,25 +51,36 @@ export interface Summary {
   openValue: number   // pipeline still in play
   wonValue: number    // closed-won value
   avgWonValue: number // average size of a won deal
+  agentCommission: number   // commission earned by agents on won deals
+  companyCommission: number // the company's share on won deals
+  totalCommission: number   // agent + company (the agency's gross)
+  /** won / all deals, 0-100 — overall lead-to-close conversion. */
+  closeRate: number | null
 }
 
 export function summarise(deals: AnalyticsDeal[]): Summary {
   let open = 0, closed = 0, won = 0, lost = 0, openValue = 0, wonValue = 0
+  let agentCommission = 0, companyCommission = 0
   for (const d of deals) {
     const v = num(d.value)
     if (d.stage === 'closed') closed++
     else { open++; openValue += v }
-    if (d.outcome === 'won') { won++; wonValue += v }
-    else if (d.outcome === 'lost') lost++
+    if (d.outcome === 'won') {
+      won++; wonValue += v
+      const c = dealCommission(d)
+      agentCommission += c.agent; companyCommission += c.company
+    } else if (d.outcome === 'lost') lost++
   }
   const decided = won + lost
   return {
     total: deals.length,
     open, closed, won, lost,
     winRate: decided ? Math.round((won / decided) * 100) : null,
+    closeRate: deals.length ? Math.round((won / deals.length) * 100) : null,
     openValue,
     wonValue,
     avgWonValue: won ? Math.round(wonValue / won) : 0,
+    agentCommission, companyCommission, totalCommission: agentCommission + companyCommission,
   }
 }
 
@@ -99,11 +124,16 @@ export interface AgentStat {
   winRate: number | null
   wonValue: number
   openValue: number
+  commission: number   // the agent's own earned commission (won deals)
+  avgDaysToClose: number | null
 }
+
+export type RankMetric = 'wonValue' | 'commission' | 'won' | 'openValue'
 
 export function leaderboard(
   deals: AnalyticsDeal[],
   agents: { id: string; name: string }[],
+  by: RankMetric = 'wonValue',
 ): AgentStat[] {
   const stats = agents.map(a => {
     const theirs = deals.filter(d => d.agent_id === a.id)
@@ -118,11 +148,27 @@ export function leaderboard(
       winRate: s.winRate,
       wonValue: s.wonValue,
       openValue: s.openValue,
+      commission: s.agentCommission,
+      avgDaysToClose: avgDaysToClose(theirs),
     }
   })
-  // Best closer first; open pipeline breaks a tie so a busy agent with no
-  // closes yet still ranks above an idle one.
-  return stats.sort((a, b) => b.wonValue - a.wonValue || b.openValue - a.openValue)
+  // Sort by the chosen metric; open pipeline breaks a tie so a busy agent with
+  // no closes yet still ranks above an idle one.
+  return stats.sort((a, b) => (b[by] as number) - (a[by] as number) || b.openValue - a.openValue)
+}
+
+/** An agent's 1-based rank + team size on a metric — for the private self-view
+ *  ("you're #2 of 5"), without exposing other agents' names or figures. */
+export function rankOf(
+  deals: AnalyticsDeal[],
+  agents: { id: string; name: string }[],
+  agentId: string,
+  by: RankMetric = 'wonValue',
+): { rank: number; of: number } | null {
+  const ranked = leaderboard(deals, agents, by)
+  const i = ranked.findIndex(a => a.id === agentId)
+  if (i === -1) return null
+  return { rank: i + 1, of: ranked.length }
 }
 
 // ── Monthly closed trend ────────────────────────────────────────────────────
@@ -187,4 +233,83 @@ export function avgDaysToClose(deals: AnalyticsDeal[]): number | null {
   }
   if (!spans.length) return null
   return Math.round(spans.reduce((a, b) => a + b, 0) / spans.length)
+}
+
+// ── Inventory (listings) ──────────────────────────────────────────────────────
+
+export interface InvProperty { type: string; transaction: string; status: string; price: number; rent: number }
+export interface InventoryStats {
+  total: number
+  totalValue: number    // sum of sale prices across for-sale listings
+  available: number
+  reserved: number
+  sold: number
+  forSale: number
+  forRent: number
+  avgSalePrice: number
+  byType: { type: string; count: number }[]
+}
+
+export function inventoryStats(props: InvProperty[]): InventoryStats {
+  let totalValue = 0, available = 0, reserved = 0, sold = 0, forSale = 0, forRent = 0, saleSum = 0, saleCount = 0
+  const types = new Map<string, number>()
+  for (const p of props) {
+    const st = (p.status || '').toLowerCase()
+    if (st === 'sold' || st === 'rented') sold++
+    else if (st === 'reserved') reserved++
+    else available++
+    if ((p.transaction || '').toLowerCase().includes('rent')) forRent++
+    else { forSale++; const v = num(p.price); totalValue += v; if (v) { saleSum += v; saleCount++ } }
+    types.set(p.type || 'Other', (types.get(p.type || 'Other') ?? 0) + 1)
+  }
+  return {
+    total: props.length, totalValue, available, reserved, sold, forSale, forRent,
+    avgSalePrice: saleCount ? Math.round(saleSum / saleCount) : 0,
+    byType: [...types.entries()].map(([type, count]) => ({ type, count })).sort((a, b) => b.count - a.count),
+  }
+}
+
+// ── Clients / leads ───────────────────────────────────────────────────────────
+
+export interface ClientLite { type: string; leadScore: number }
+export interface ClientStats { total: number; buyers: number; renters: number; hot: number; warm: number; cold: number }
+
+export function clientStats(clients: ClientLite[]): ClientStats {
+  let buyers = 0, renters = 0, hot = 0, warm = 0, cold = 0
+  for (const c of clients) {
+    if ((c.type || '').toLowerCase() === 'renter') renters++; else buyers++
+    const s = num(c.leadScore)
+    if (s >= 70) hot++; else if (s >= 40) warm++; else cold++
+  }
+  return { total: clients.length, buyers, renters, hot, warm, cold }
+}
+
+// ── Offers / negotiation ──────────────────────────────────────────────────────
+
+export interface NegLite { status: string; amount: number | null; asking?: number | null }
+export interface OfferStats {
+  total: number
+  open: number
+  accepted: number
+  rejected: number
+  winRate: number | null              // accepted / (accepted + rejected)
+  avgAcceptedDiscount: number | null  // avg % below asking on accepted deals
+}
+
+export function offerStats(negs: NegLite[]): OfferStats {
+  let open = 0, accepted = 0, rejected = 0
+  const discounts: number[] = []
+  for (const n of negs) {
+    if (n.status === 'accepted') {
+      accepted++
+      if (n.amount != null && n.asking && n.asking > 0) discounts.push(((n.asking - n.amount) / n.asking) * 100)
+    } else if (n.status === 'rejected') rejected++
+    else if (n.status === 'open') open++
+  }
+  const decided = accepted + rejected
+  return {
+    total: negs.length, open, accepted, rejected,
+    winRate: decided ? Math.round((accepted / decided) * 100) : null,
+    avgAcceptedDiscount: discounts.length ? Math.round(discounts.reduce((a, b) => a + b, 0) / discounts.length) : null,
+  }
 }

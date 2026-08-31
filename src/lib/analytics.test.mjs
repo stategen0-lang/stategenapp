@@ -6,6 +6,7 @@ import assert from 'node:assert/strict'
 import {
   summarise, funnel, leaderboard, monthlyClosed, monthOverMonth,
   avgDaysToClose, STAGES,
+  dealCommission, rankOf, inventoryStats, clientStats, offerStats,
 } from './analytics.ts'
 
 const deal = (o = {}) => ({
@@ -155,4 +156,68 @@ test('avgDaysToClose: ignores a negative or unparseable span', () => {
     deal({ outcome: 'won', created_at: '2026-07-01T00:00:00Z', stage_changed_at: '2026-07-06T00:00:00Z' }), // 5d
   ])
   assert.equal(d, 5)
+})
+
+// ── commission ────────────────────────────────────────────────────────────
+test('dealCommission: 2.5% agent + 2.5% company on won deals only', () => {
+  assert.deepEqual(dealCommission(deal({ outcome: 'won', value: 400000 })), { agent: 10000, company: 10000, total: 20000 })
+  assert.deepEqual(dealCommission(deal({ outcome: 'lost', value: 400000 })), { agent: 0, company: 0, total: 0 })
+  assert.deepEqual(dealCommission(deal({ stage: 'lead', value: 400000 })), { agent: 0, company: 0, total: 0 })
+})
+test('dealCommission: respects a per-deal override (co-broker split)', () => {
+  const c = dealCommission({ ...deal({ outcome: 'won', value: 400000 }), agentCommissionPct: 1.25, companyCommissionPct: 1.25 })
+  assert.deepEqual(c, { agent: 5000, company: 5000, total: 10000 })
+})
+test('summarise: rolls commission + close rate', () => {
+  const s = summarise([deal({ outcome: 'won', value: 400000 }), deal({ outcome: 'won', value: 200000 }), deal({ stage: 'lead' })])
+  assert.equal(s.agentCommission, 15000)      // 2.5% of 600k
+  assert.equal(s.companyCommission, 15000)
+  assert.equal(s.totalCommission, 30000)
+  assert.equal(s.closeRate, 67)               // 2 won of 3 total
+})
+
+// ── rankOf (private self-rank) ──────────────────────────────────────────────
+test('rankOf: 1-based rank + team size by a metric', () => {
+  const agents = [{ id: 'a1', name: 'A' }, { id: 'a2', name: 'B' }, { id: 'a3', name: 'C' }]
+  const deals = [
+    deal({ agent_id: 'a1', outcome: 'won', value: 100 }),
+    deal({ agent_id: 'a2', outcome: 'won', value: 500 }),
+    deal({ agent_id: 'a3', outcome: 'won', value: 300 }),
+  ]
+  assert.deepEqual(rankOf(deals, agents, 'a2', 'wonValue'), { rank: 1, of: 3 })
+  assert.deepEqual(rankOf(deals, agents, 'a1', 'wonValue'), { rank: 3, of: 3 })
+  assert.equal(rankOf(deals, agents, 'nope', 'wonValue'), null)
+})
+
+// ── inventory / clients / offers ────────────────────────────────────────────
+test('inventoryStats: counts, value, status mix', () => {
+  const inv = inventoryStats([
+    { type: 'Villa', transaction: 'For Sale', status: 'Available', price: 500000, rent: 0 },
+    { type: 'Villa', transaction: 'For Sale', status: 'Sold', price: 300000, rent: 0 },
+    { type: 'Office', transaction: 'For Rent', status: 'Available', price: 0, rent: 2000 },
+  ])
+  assert.equal(inv.total, 3)
+  assert.equal(inv.totalValue, 800000)
+  assert.equal(inv.available, 2)
+  assert.equal(inv.sold, 1)
+  assert.equal(inv.forSale, 2)
+  assert.equal(inv.forRent, 1)
+  assert.equal(inv.byType[0].type, 'Villa')
+})
+test('clientStats: buyer/renter + hot/warm/cold buckets', () => {
+  const cs = clientStats([
+    { type: 'Buyer', leadScore: 80 }, { type: 'Renter', leadScore: 50 }, { type: 'Buyer', leadScore: 20 },
+  ])
+  assert.equal(cs.buyers, 2); assert.equal(cs.renters, 1)
+  assert.equal(cs.hot, 1); assert.equal(cs.warm, 1); assert.equal(cs.cold, 1)
+})
+test('offerStats: win-rate + avg discount vs asking', () => {
+  const o = offerStats([
+    { status: 'accepted', amount: 465000, asking: 480000 },
+    { status: 'rejected', amount: 400000, asking: 480000 },
+    { status: 'open', amount: 470000, asking: 480000 },
+  ])
+  assert.equal(o.accepted, 1); assert.equal(o.rejected, 1); assert.equal(o.open, 1)
+  assert.equal(o.winRate, 50)
+  assert.equal(o.avgAcceptedDiscount, 3)   // 15k below 480k ≈ 3%
 })
