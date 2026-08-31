@@ -10,11 +10,18 @@ import { dbRowToProperty } from '@/lib/db-mappers'
 import { useSession } from '@/hooks/use-session'
 import { isManager } from '@/lib/permissions'
 
+type AgentMap = Record<string, { name: string; initials: string; color: string; whatsapp: string | null }>
+
+// Module-scope caches so revisiting shows the last data instantly (revalidated
+// in the background). Cleared on a full reload.
+let PROPS_CACHE: Property[] | null = null
+let PROP_AGENTS_CACHE: AgentMap | null = null
+
 export default function PropertiesPage() {
   const [scope, setScope] = useState<'me' | 'company'>('company')
-  const [list, setList] = useState<Property[]>([])
-  const [loaded, setLoaded] = useState(false)
-  const [agents, setAgents] = useState<Record<string, { name: string; initials: string; color: string; whatsapp: string | null }>>({})
+  const [list, setList] = useState<Property[]>(PROPS_CACHE ?? [])
+  const [loaded, setLoaded] = useState(PROPS_CACHE != null)
+  const [agents, setAgents] = useState<AgentMap>(PROP_AGENTS_CACHE ?? {})
   const { session } = useSession()
 
   useEffect(() => {
@@ -25,12 +32,12 @@ export default function PropertiesPage() {
       .then(data => {
         // Always reflect the real result — even an empty one — so a new agency
         // sees its (empty) list, not leftover demo data.
-        if (data.properties) setList(data.properties.map(dbRowToProperty))
+        if (data.properties) { const m = data.properties.map(dbRowToProperty); PROPS_CACHE = m; setList(m) }
       })
       .catch(() => clearTimeout(t))
       .finally(() => setLoaded(true))
     // Real agent names/colours/WhatsApp, so listings show who they belong to.
-    fetch('/api/company/agents').then(r => r.ok ? r.json() : null).then(d => { if (d?.agents) setAgents(d.agents) }).catch(() => {})
+    fetch('/api/company/agents').then(r => r.ok ? r.json() : null).then(d => { if (d?.agents) { PROP_AGENTS_CACHE = d.agents; setAgents(d.agents) } }).catch(() => {})
   }, [])
 
   // Real agent for a listing's code, falling back to the demo helper for codes
@@ -49,11 +56,15 @@ export default function PropertiesPage() {
 
   async function reloadProperties() {
     const r = await fetch('/api/properties')
-    if (r.ok) { const d = await r.json(); if (d.properties) setList(d.properties.map(dbRowToProperty)) }
+    if (r.ok) { const d = await r.json(); if (d.properties) { const m = d.properties.map(dbRowToProperty); PROPS_CACHE = m; setList(m) } }
   }
 
   function upsert(p: Property) {
-    setList(prev => prev.some(x => x.id === p.id) ? prev.map(x => x.id === p.id ? p : x) : [p, ...prev])
+    setList(prev => {
+      const next = prev.some(x => x.id === p.id) ? prev.map(x => x.id === p.id ? p : x) : [p, ...prev]
+      PROPS_CACHE = next
+      return next
+    })
   }
 
   // "Mine" means the signed-in agent's own listings (was hardcoded to 'a1').

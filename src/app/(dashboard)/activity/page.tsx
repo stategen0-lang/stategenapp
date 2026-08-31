@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import { Activity as ActivityIcon } from 'lucide-react'
 import { useSession } from '@/hooks/use-session'
+import { useCachedFetch } from '@/hooks/use-cached-fetch'
 import { isManager } from '@/lib/permissions'
 import { ACTIVITY_ICON, activityAgo, type ActivityItem, type ActivityKind } from '@/lib/activity'
 
@@ -32,14 +32,9 @@ function dayLabel(iso: string): string {
 export default function ActivityPage() {
   const { session } = useSession()
   const manager = isManager(session?.role)
-  const [items, setItems] = useState<ActivityItem[] | null>(null)
-
-  useEffect(() => {
-    fetch('/api/activity')
-      .then(r => (r.ok ? r.json() : null))
-      .then(d => setItems(Array.isArray(d?.items) ? d.items : []))
-      .catch(() => setItems([]))
-  }, [])
+  // Cached: a revisit shows the last feed instantly while it revalidates.
+  const { data } = useCachedFetch<{ items?: ActivityItem[] }>('activity', '/api/activity')
+  const items: ActivityItem[] | null = data ? (Array.isArray(data.items) ? data.items : []) : null
 
   // Group the (already newest-first) items by day, preserving order.
   const groups: { label: string; items: ActivityItem[] }[] = []
