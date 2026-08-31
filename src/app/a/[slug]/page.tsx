@@ -78,8 +78,10 @@ function NotFound() {
   )
 }
 
-export default async function MicrositePage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function MicrositePage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ from?: string }> }) {
   const { slug } = await params
+  const { from } = await searchParams
+  const fromApp = from === 'app'   // opened from inside the app (Settings) — offer a way back
   const loaded = await loadSite(slug)
   if (!loaded) return <NotFound />
   const { brand, cards } = loaded.site
@@ -87,6 +89,13 @@ export default async function MicrositePage({ params }: { params: Promise<{ slug
 
   return (
     <main className="min-h-screen pb-16" style={{ background: '#F4F5F7', fontFamily: 'var(--font-public-sans), -apple-system, BlinkMacSystemFont, sans-serif' }}>
+      {/* Back-to-app bar — only when opened from the app (never for public visitors) */}
+      {fromApp && (
+        <a href="/dashboard" className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold" style={{ background: '#0E1F3D', color: '#fff' }}>
+          <span aria-hidden>←</span> Back to app
+        </a>
+      )}
+
       {/* Header */}
       <div className="px-5 py-5" style={{ background: brand.color }}>
         <div className="max-w-5xl mx-auto flex items-center gap-3">

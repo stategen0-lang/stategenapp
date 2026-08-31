@@ -368,7 +368,7 @@ export default function ProfilePage() {
                   <code className="flex-1 text-xs px-2.5 py-2 rounded-lg truncate" style={{ background: '#F7F8FB', color: '#2E5288', border: '1px solid #EEF0F4' }}>
                     {typeof window !== 'undefined' ? window.location.origin : ''}/a/{brand.domain}
                   </code>
-                  <a href={`/a/${brand.domain}`} target="_blank" rel="noopener noreferrer" className="text-xs font-bold px-3 py-2 rounded-lg" style={{ border: '1.5px solid #EEF0F4', color: H }}>Open</a>
+                  <a href={`/a/${brand.domain}?from=app`} target="_blank" rel="noopener noreferrer" className="text-xs font-bold px-3 py-2 rounded-lg" style={{ border: '1.5px solid #EEF0F4', color: H }}>Open</a>
                   <button
                     onClick={() => { try { navigator.clipboard.writeText(`${window.location.origin}/a/${brand.domain}`); setCopiedSite(true); setTimeout(() => setCopiedSite(false), 1500) } catch { /* ignore */ } }}
                     className="text-xs font-bold px-3 py-2 rounded-lg text-white" style={{ background: '#0E1F3D' }}>{copiedSite ? 'Copied ✓' : 'Copy'}</button>
