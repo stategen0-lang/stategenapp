@@ -155,12 +155,17 @@ export async function fetchPropertyNegotiations(admin: SupabaseClient, opts: { c
   }).filter(n => n.state.count > 0)
 }
 
-/** Current offer per deal id (for pipeline badges). Only deals with offers. */
-export async function fetchDealOfferSummary(admin: SupabaseClient, companyId: number, dealIds: string[]): Promise<Record<string, { amount: number; status: string }>> {
-  if (!dealIds.length) return {}
-  const { data: offers } = await admin
+/** Current offer per deal id (for pipeline badges). Only deals with offers.
+ *  Pass dealIds to narrow, or omit to summarise the whole company. */
+export async function fetchDealOfferSummary(admin: SupabaseClient, companyId: number, dealIds?: string[]): Promise<Record<string, { amount: number; status: string }>> {
+  let q = admin
     .from('offers').select('deal_id, amount, side, status, created_at')
-    .eq('company_id', companyId).in('deal_id', dealIds).order('created_at', { ascending: true })
+    .eq('company_id', companyId).order('created_at', { ascending: true })
+  if (dealIds) {
+    if (!dealIds.length) return {}
+    q = q.in('deal_id', dealIds)
+  }
+  const { data: offers } = await q
 
   const byDeal = new Map<string, Row[]>()
   for (const o of (offers ?? []) as Row[]) {

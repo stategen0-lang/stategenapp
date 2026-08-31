@@ -162,9 +162,12 @@ export default function PipelinePage() {
 
   const load = useCallback(async () => {
     const id = ++requestId.current
+    // Never let a slow/cold request leave the board spinning forever.
+    const ctrl = new AbortController()
+    const t = setTimeout(() => ctrl.abort(), 12000)
     try {
       const url = agentFilter ? `/api/deals?agent=${encodeURIComponent(agentFilter)}` : '/api/deals'
-      const res = await fetch(url)
+      const res = await fetch(url, { signal: ctrl.signal })
       if (res.ok) {
         const data = await res.json()
         if (id !== requestId.current) return   // superseded — discard
@@ -174,7 +177,17 @@ export default function PipelinePage() {
         if (Array.isArray(data.agents)) setRoster(data.agents)
       }
     } catch { /* leave the board as-is */ }
+    finally { clearTimeout(t) }
     if (id === requestId.current) setLoading(false)
+
+    // Offer badges load separately, so they never delay the board itself.
+    fetch('/api/offers/summary')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (id !== requestId.current || !d?.summary) return
+        setDeals(ds => ds.map(deal => ({ ...deal, offer: d.summary[String(deal.id)] ?? null })))
+      })
+      .catch(() => {})
   }, [agentFilter])
 
   useEffect(() => { load() }, [load])

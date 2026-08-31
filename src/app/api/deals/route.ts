@@ -6,7 +6,6 @@ import { getSession } from '@/lib/session'
 import { isManager, canSeeDeal, canSeeClientPII, maskClientName } from '@/lib/permissions'
 import { type RosterAgent } from '@/lib/agent-roster'
 import { loadCompanyRoster } from '@/lib/agent-roster-server'
-import { fetchDealOfferSummary } from '@/lib/offers-server'
 
 
 // Embed the client (name + lead score) and the property in play so the board
@@ -91,15 +90,9 @@ export async function GET(req: NextRequest) {
       agents = agents.filter(a => a.id === session.agentCode)
     }
 
-    // Attach the current offer (amount + status) to each deal so the board can
-    // badge negotiations. Fails soft (empty) if the offers table isn't there.
-    let dealsOut = deals
-    try {
-      const summary = await fetchDealOfferSummary(supabase, session.companyId, deals.map(d => String(d.id)))
-      dealsOut = deals.map(d => ({ ...d, offer: summary[String(d.id)] ?? null }))
-    } catch { /* no offers table yet — badges just won't show */ }
-
-    return NextResponse.json({ deals: dealsOut, agents })
+    // NB: offer badges are loaded separately (GET /api/offers/summary) so this
+    // response — which the board blocks on — stays a single fast query.
+    return NextResponse.json({ deals, agents })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
