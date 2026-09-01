@@ -50,6 +50,7 @@ export default function AdminPage() {
   const [pinError, setPinError] = useState(false)
   const [companies, setCompanies] = useState<Company[]>([])
   const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   // Activation picker state
   const [activating, setActivating] = useState<number | null>(null)   // company id being activated
@@ -105,10 +106,23 @@ export default function AdminPage() {
   useEffect(() => {
     if (!unlocked) return
     setLoading(true)
+    setLoadError(null)
     fetch('/api/admin/companies')
-      .then(r => r.json())
-      .then(data => setCompanies(data.companies ?? []))
-      .catch(() => {})
+      .then(async r => {
+        const data = await r.json().catch(() => ({}))
+        if (!r.ok) {
+          // The panel is operator-only. A 401/403 here means the signed-in
+          // account isn't a StateGen operator — say so instead of a blank list.
+          setLoadError(
+            r.status === 401 || r.status === 403
+              ? 'Not signed in as a StateGen operator. Sign in with the operator account (stategen0@gmail.com) in this same browser, then reopen /admin.'
+              : (data.error || 'Could not load companies.'),
+          )
+          return
+        }
+        setCompanies(data.companies ?? [])
+      })
+      .catch(() => setLoadError('Could not reach the server. Check your connection and try again.'))
       .finally(() => setLoading(false))
   }, [unlocked])
 
@@ -266,6 +280,8 @@ export default function AdminPage() {
 
           {loading ? (
             <div className="py-16 text-center text-sm" style={{ color: '#9AA3B2' }}>Loading…</div>
+          ) : loadError ? (
+            <div className="py-12 px-6 text-center text-sm mx-4 my-4 rounded-xl" style={{ background: '#FBE7E7', color: '#A23434', border: '1px solid #F0CFCF' }}>{loadError}</div>
           ) : companies.length === 0 ? (
             <div className="py-16 text-center text-sm" style={{ color: '#9AA3B2' }}>No companies yet.</div>
           ) : (
