@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getAgent, statusStyle, CLIENT_TYPE_STYLE, formatPrice, Client, Agent } from '@/lib/data'
+import { getAgent, statusStyle, CLIENT_TYPE_STYLE, formatPrice, tagStyle, Client, Agent } from '@/lib/data'
 import { useSession } from '@/hooks/use-session'
 import { isManager } from '@/lib/permissions'
 import { sortOwnFirst } from '@/lib/client-order'
 import ClientDetailModal from '@/components/modals/ClientDetailModal'
 import NewClientModal from '@/components/modals/NewClientModal'
+import BulkForwardModal from '@/components/modals/BulkForwardModal'
 import ImportModal from '@/components/import/ImportModal'
 import { dbRowToClient } from '@/lib/db-mappers'
 
@@ -48,7 +49,9 @@ export default function ClientsPage() {
   const [detailId, setDetailId] = useState<number | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const [forwardOpen, setForwardOpen] = useState(false)
   const [editClient, setEditClient] = useState<Client | null>(null)
+  const [tagFilter, setTagFilter] = useState<string | null>(null)
   const [toast, setToast] = useState('')
 
   async function reloadClients() {
@@ -67,9 +70,18 @@ export default function ClientsPage() {
   // "Mine" means the signed-in agent's own clients (was hardcoded to 'a1').
   // Under "All", an agent's own clients are floated to the top of the list,
   // with the rest of the company's below them.
-  const filtered = scope === 'me'
+  const scoped = scope === 'me'
     ? list.filter(c => session?.agentCode != null && c.agentId === session.agentCode)
     : sortOwnFirst(list, session?.agentCode)
+  const filtered = tagFilter ? scoped.filter(c => (c.tags ?? []).includes(tagFilter)) : scoped
+
+  // Every tag currently in use, for the filter bar. Cleared automatically if the
+  // active filter no longer applies to any visible client.
+  const allTags = [...new Set(scoped.flatMap(c => c.tags ?? []))].sort((a, b) => a.localeCompare(b))
+
+  // Recipients a bulk-forward can actually reach: the agent's own clients with a
+  // phone (masked, other-agent clients have no phone and are never messaged).
+  const forwardTargets = filtered.filter(c => !c.masked && c.phone)
 
   const detailClient = detailId != null ? list.find(c => c.id === detailId) ?? null : null
   const detailAgent = detailClient ? agentFor(detailClient.agentId) : null
@@ -100,6 +112,16 @@ export default function ClientsPage() {
               </button>
             ))}
           </div>
+          {forwardTargets.length > 0 && (
+            <button
+              onClick={() => setForwardOpen(true)}
+              className="px-3 py-1.5 rounded-xl text-xs md:text-sm font-bold"
+              style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: '#0E1F3D' }}
+              title={tagFilter ? `Forward a listing to your ${tagFilter} clients` : 'Forward a listing to these clients'}
+            >
+              Forward{tagFilter ? ` · ${forwardTargets.length}` : ''}
+            </button>
+          )}
           {isManager(session?.role) && (
             <button
               onClick={() => setImportOpen(true)}
@@ -118,6 +140,33 @@ export default function ClientsPage() {
           </button>
         </div>
       </div>
+
+      {/* Tag filter bar — only shown once tags exist */}
+      {allTags.length > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap -mt-1">
+          <button
+            onClick={() => setTagFilter(null)}
+            className="text-xs font-semibold px-2.5 py-1 rounded-full transition-all"
+            style={!tagFilter ? { background: '#0E1F3D', color: '#fff' } : { background: '#F2F4F7', color: '#6A7488' }}
+          >
+            All
+          </button>
+          {allTags.map(t => {
+            const on = tagFilter === t
+            const s = tagStyle(t)
+            return (
+              <button
+                key={t}
+                onClick={() => setTagFilter(on ? null : t)}
+                className="text-xs font-semibold px-2.5 py-1 rounded-full transition-all"
+                style={on ? { background: s.color, color: '#fff' } : { background: s.bg, color: s.color }}
+              >
+                {t}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* Desktop table */}
       <div className="hidden md:block rounded-2xl overflow-hidden bg-white" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #EEF0F4' }}>
@@ -155,6 +204,14 @@ export default function ClientsPage() {
                       <div>
                         <p className="font-semibold" style={{ color: '#14223F' }}>{c.name}</p>
                         <p className="text-xs" style={{ color: '#9AA3B2' }}>{c.phone}</p>
+                        {(c.tags?.length ?? 0) > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {c.tags!.map(t => {
+                              const s = tagStyle(t)
+                              return <span key={t} className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: s.bg, color: s.color }}>{t}</span>
+                            })}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </td>
@@ -190,6 +247,14 @@ export default function ClientsPage() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold truncate" style={{ color: '#14223F' }}>{c.name}</p>
                 <p className="text-xs truncate" style={{ color: '#9AA3B2' }}>{c.phone}</p>
+                {(c.tags?.length ?? 0) > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {c.tags!.slice(0, 3).map(t => {
+                      const s = tagStyle(t)
+                      return <span key={t} className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: s.bg, color: s.color }}>{t}</span>
+                    })}
+                  </div>
+                )}
               </div>
               <div className="flex flex-col items-end gap-1 shrink-0">
                 <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: tc.bg, color: tc.color }}>{c.type}</span>
@@ -227,6 +292,13 @@ export default function ClientsPage() {
           kind="clients"
           onClose={() => setImportOpen(false)}
           onDone={n => { setImportOpen(false); showToast(`Imported ${n} client${n === 1 ? '' : 's'}!`); reloadClients() }}
+        />
+      )}
+      {forwardOpen && (
+        <BulkForwardModal
+          clients={forwardTargets}
+          tagLabel={tagFilter}
+          onClose={() => setForwardOpen(false)}
         />
       )}
       {editClient && (

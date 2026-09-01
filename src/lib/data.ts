@@ -105,6 +105,24 @@ export interface Client {
   leadScore?: number     // 0-100 lead score (Phase 2)
   agentRating?: number   // agent's 1-5 star gut-feel rating
   masked?: boolean       // another agent's client: name/phone hidden, read-only
+  tags?: string[]        // free-form labels for grouping (Hot / Investor / …)
+}
+
+// Suggested client tags. Agents can also type their own — these are just the
+// quick-pick chips shown in the editor and the filter bar.
+export const CLIENT_TAG_PRESETS = ['Hot', 'Warm', 'Investor', 'First-time', 'VIP', 'Cash', 'Urgent'] as const
+
+// A stable colour for a tag chip, derived from the text so the same tag always
+// looks the same without needing a stored palette.
+export function tagStyle(tag: string): { bg: string; color: string } {
+  const palette = [
+    { bg: '#FBE7E7', color: '#A23434' }, { bg: '#E3F4EA', color: '#1F7A4D' },
+    { bg: '#E6EEFB', color: '#2E5288' }, { bg: '#FBEFD6', color: '#9A6516' },
+    { bg: '#EFE7FB', color: '#5B3AA2' }, { bg: '#E0F2F4', color: '#1B6C74' },
+  ]
+  let h = 0
+  for (let i = 0; i < tag.length; i++) h = (h * 31 + tag.charCodeAt(i)) >>> 0
+  return palette[h % palette.length]
 }
 
 export const CLIENTS: Client[] = [

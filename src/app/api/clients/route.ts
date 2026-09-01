@@ -10,6 +10,19 @@ function clientAgent(row: Record<string, unknown>): string | null {
   try { return (JSON.parse((row.notes as string) || '{}').agentId as string) ?? null } catch { return null }
 }
 
+// Free-form labels: strings only, trimmed, de-duped, capped so a bad payload
+// can't bloat the row.
+function sanitizeTags(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  const seen = new Set<string>()
+  for (const t of raw) {
+    if (typeof t !== 'string') continue
+    const v = t.trim().slice(0, 24)
+    if (v) seen.add(v)
+  }
+  return [...seen].slice(0, 12)
+}
+
 // A client change is a scoring signal — refresh that client's lead score.
 // Deferred with after() so the write returns immediately: re-scoring loads the
 // company's clients/properties/deals and was making every save wait on it. The
@@ -103,8 +116,20 @@ export async function PATCH(req: NextRequest) {
     }
     if (body.req?.beds !== undefined) update.bedrooms = body.req.beds
     if (body.req?.transaction !== undefined) update.payment_terms = body.req.transaction
-    if (body.name !== undefined || body.email !== undefined || body.type !== undefined || body.req !== undefined) {
-      update.notes = JSON.stringify({ email: body.email, type: body.type, agentId: body.agentId, req: body.req })
+    if (body.name !== undefined || body.email !== undefined || body.type !== undefined || body.req !== undefined || body.tags !== undefined) {
+      // Merge onto the existing notes so a partial update (e.g. tags-only)
+      // never wipes email / agentId / req that weren't resent.
+      let prev: Record<string, unknown> = {}
+      try { prev = JSON.parse((existing.notes as string) || '{}') } catch { /* start fresh */ }
+      const merged = {
+        ...prev,
+        ...(body.email !== undefined ? { email: body.email } : {}),
+        ...(body.type !== undefined ? { type: body.type } : {}),
+        ...(body.agentId !== undefined ? { agentId: body.agentId } : {}),
+        ...(body.req !== undefined ? { req: body.req } : {}),
+        ...(body.tags !== undefined ? { tags: sanitizeTags(body.tags) } : {}),
+      }
+      update.notes = JSON.stringify(merged)
     }
 
     if (Object.keys(update).length === 0) {
@@ -146,6 +171,7 @@ export async function POST(req: NextRequest) {
       type: body.type,
       agentId: ownerAgent,
       req: body.req,
+      tags: sanitizeTags(body.tags),
     }
 
     // Agent_id is a uuid column; the UI's agentId is a mock code like "a1",

@@ -74,5 +74,6 @@ export function dbRowToClient(row: Record<string, unknown>, idx: number): Client
     leadScore: Number(row['lead_score'] ?? 0),
     agentRating: Number(row['agent_rating'] ?? 3),
     masked: row['masked'] === true,
+    tags: Array.isArray(extras.tags) ? (extras.tags as string[]).filter(t => typeof t === 'string') : [],
   }
 }

@@ -49,6 +49,7 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
   const [aiError, setAiError] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [dupes, setDupes] = useState<{ id: number; title: string }[]>([])
   const [templates, setTemplates] = useState<DescriptionTemplate[]>(loadTemplates())
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('none')
   const [templateOpen, setTemplateOpen] = useState(false)
@@ -119,10 +120,31 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
     }
   }
 
-  async function handleSave() {
+  async function handleSave(skipDupeCheck = false) {
     // District (neighborhood) is optional — land plots and some areas have none.
     if (!form.title || !form.city) { setSaveError('Title and city are required.'); return }
-    setSaveError(''); setSaving(true)
+    setSaveError('')
+
+    // Warn about a likely-duplicate listing before creating a new one (never on
+    // an edit). Overridable with "Save anyway".
+    if (!editing && !skipDupeCheck) {
+      setSaving(true)
+      try {
+        const r = await fetch('/api/properties/check', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: form.title, district: form.district, city: form.city, type: form.type,
+            transaction: form.transaction, price: parseInt(form.price) || 0, rent: parseInt(form.rent) || 0,
+          }),
+        })
+        if (r.ok) {
+          const d = await r.json()
+          if (Array.isArray(d.dupes) && d.dupes.length) { setDupes(d.dupes); setSaving(false); return }
+        }
+      } catch { /* if the check fails, don't block the save */ }
+    }
+    setDupes([])
+    setSaving(true)
     // Own code when signed in; the server re-stamps this for agents anyway.
     const agentId = (initial?.agentId ?? session?.agentCode ?? CURRENT_AGENT_ID) as AgentId
     const payload = {
@@ -436,18 +458,27 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
         </div>
 
         <div className="px-5 py-4" style={{ borderTop: '1px solid #EEF0F4' }}>
+          {dupes.length > 0 && (
+            <div className="rounded-xl p-3 mb-2" style={{ background: '#FBEFD6', border: '1px solid #E9CE90' }}>
+              <p className="text-xs font-bold" style={{ color: '#9A6516' }}>Possible duplicate listing</p>
+              <ul className="text-xs mt-1 space-y-0.5" style={{ color: '#7A5510' }}>
+                {dupes.map(d => <li key={d.id}>• {d.title}</li>)}
+              </ul>
+              <p className="text-[11px] mt-1.5" style={{ color: '#9A6516' }}>Save anyway if this is a different unit.</p>
+            </div>
+          )}
           {saveError && <p className="text-xs mb-2" style={{ color: '#A23434' }}>{saveError}</p>}
           <div className="flex gap-3">
             <button onClick={onClose} className="flex-1 rounded-xl py-2 text-sm font-semibold" style={{ border: '1.5px solid #EEF0F4', color: '#6A7488' }}>
               Cancel
             </button>
             <button
-              onClick={handleSave}
+              onClick={() => handleSave(dupes.length > 0)}
               disabled={!form.title || !form.city || uploading || saving}
               className="flex-1 rounded-xl py-2 text-sm font-bold text-white disabled:opacity-50"
-              style={{ background: '#0E1F3D' }}
+              style={{ background: dupes.length > 0 ? '#9A6516' : '#0E1F3D' }}
             >
-              {uploading ? 'Uploading…' : saving ? 'Saving…' : editing ? 'Save changes' : 'Save listing'}
+              {uploading ? 'Uploading…' : saving ? 'Saving…' : dupes.length > 0 ? 'Save anyway' : editing ? 'Save changes' : 'Save listing'}
             </button>
           </div>
         </div>

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import {
   Client, ClientType, ClientStatus, ClientReq, PropertyType,
-  PROPERTIES, CURRENT_AGENT_ID, formatPrice
+  PROPERTIES, CURRENT_AGENT_ID, formatPrice, CLIENT_TAG_PRESETS, tagStyle
 } from '@/lib/data'
 import { matchProperties, MATCH_THRESHOLD, PropertyMatch } from '@/lib/matching'
 import { dbRowToProperty } from '@/lib/db-mappers'
@@ -39,8 +39,11 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
   const [type, setType] = useState<ClientType>(initial?.type ?? 'Buyer')
   const [budget, setBudget] = useState<string>(initial?.budget ? String(initial.budget) : '')
   const [req, setReq] = useState<ClientReq>(initial?.req ? { ...emptyReq(), ...initial.req } : emptyReq())
+  const [tags, setTags] = useState<string[]>(initial?.tags ?? [])
+  const [tagInput, setTagInput] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [dupes, setDupes] = useState<{ id: number; name: string | null; mine: boolean }[]>([])
 
   // A manager (e.g. the call-center) creating a client must say which agent owns
   // it — an agent creating their own doesn't (it's always theirs). We only ask
@@ -72,6 +75,17 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
     setReq(r => ({ ...r, [k]: v }))
   }
 
+  function toggleTag(t: string) {
+    const v = t.trim().slice(0, 24)
+    if (!v) return
+    setTags(prev => prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v].slice(0, 12))
+  }
+  function addCustomTag() {
+    const v = tagInput.trim()
+    if (v && !tags.includes(v)) toggleTag(v)
+    setTagInput('')
+  }
+
   async function handleFindMatches() {
     if (agentMissing) { setSaveError('Please choose the responsible agent.'); return }
     setSaveError('')
@@ -90,10 +104,28 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
     setStep(2)
   }
 
-  async function handleSave() {
+  async function handleSave(skipDupeCheck = false) {
     if (!name.trim()) { setSaveError('Client name is required.'); return }
     if (agentMissing) { setSaveError('Please choose the responsible agent.'); return }
-    setSaveError(''); setSaving(true)
+    setSaveError('')
+
+    // Warn about likely duplicates before creating a brand-new client (never on
+    // an edit). The user can override with "Save anyway".
+    if (!editing && !skipDupeCheck) {
+      setSaving(true)
+      try {
+        const r = await fetch('/api/clients/check', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, phone }),
+        })
+        if (r.ok) {
+          const d = await r.json()
+          if (Array.isArray(d.dupes) && d.dupes.length) { setDupes(d.dupes); setSaving(false); return }
+        }
+      } catch { /* if the check fails, don't block the save */ }
+    }
+    setDupes([])
+    setSaving(true)
     // A manager picks the owning agent explicitly; an agent's own code is used
     // (the server re-stamps agents to themselves regardless).
     const agentId = manager
@@ -107,6 +139,7 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
       agentId,
       status,
       req: { ...req, priceMin: budgetNum, priceMax: budgetNum },
+      tags,
     }
     let savedId = initial?.id ?? ++_nextId
     try {
@@ -236,6 +269,39 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
               </div>
 
               <div>
+                <label className={label} style={labelStyle}>Tags</label>
+                {/* Quick-pick presets + any custom tags already on the client */}
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {[...new Set([...CLIENT_TAG_PRESETS, ...tags])].map(t => {
+                    const on = tags.includes(t)
+                    const s = tagStyle(t)
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => toggleTag(t)}
+                        className="text-xs font-semibold px-2.5 py-1 rounded-full transition-all"
+                        style={on
+                          ? { background: s.bg, color: s.color, boxShadow: `inset 0 0 0 1.5px ${s.color}` }
+                          : { background: '#F2F4F7', color: '#9AA3B2' }}
+                      >
+                        {on ? '✓ ' : ''}{t}
+                      </button>
+                    )
+                  })}
+                </div>
+                <input
+                  className={inp}
+                  style={inpStyle}
+                  value={tagInput}
+                  onChange={e => setTagInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomTag() } }}
+                  onBlur={addCustomTag}
+                  placeholder="Add a custom tag + Enter"
+                />
+              </div>
+
+              <div>
                 <label className={label} style={labelStyle}>Notes</label>
                 <textarea
                   className={inp}
@@ -255,7 +321,7 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
               </button>
               {editing ? (
                 <button
-                  onClick={handleSave}
+                  onClick={() => handleSave()}
                   disabled={!name || saving || agentMissing}
                   className="flex-1 rounded-xl py-2 text-sm font-bold text-white disabled:opacity-50"
                   style={{ background: '#0E1F3D' }}
@@ -343,18 +409,31 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
               )}
             </div>
 
+            {dupes.length > 0 && (
+              <div className="px-5 pt-3">
+                <div className="rounded-xl p-3" style={{ background: '#FBEFD6', border: '1px solid #E9CE90' }}>
+                  <p className="text-xs font-bold" style={{ color: '#9A6516' }}>Possible duplicate</p>
+                  <ul className="text-xs mt-1 space-y-0.5" style={{ color: '#7A5510' }}>
+                    {dupes.map(d => (
+                      <li key={d.id}>• {d.name ?? 'A client held by another agent'}{d.name && !d.mine ? ' (another agent)' : ''}</li>
+                    ))}
+                  </ul>
+                  <p className="text-[11px] mt-1.5" style={{ color: '#9A6516' }}>Save anyway if this is a different person.</p>
+                </div>
+              </div>
+            )}
             {saveError && <p className="px-5 pt-3 text-xs" style={{ color: '#A23434' }}>{saveError}</p>}
             <div className="px-5 py-4 flex gap-3" style={{ borderTop: '1px solid #EEF0F4' }}>
               <button onClick={() => setStep(1)} className="flex-1 rounded-xl py-2 text-sm font-semibold" style={{ border: '1.5px solid #EEF0F4', color: '#6A7488' }}>
                 ← Back
               </button>
               <button
-                onClick={handleSave}
+                onClick={() => handleSave(dupes.length > 0)}
                 disabled={saving || agentMissing}
                 className="flex-1 rounded-xl py-2 text-sm font-bold text-white disabled:opacity-50"
-                style={{ background: '#0E1F3D' }}
+                style={{ background: dupes.length > 0 ? '#9A6516' : '#0E1F3D' }}
               >
-                {saving ? 'Saving…' : 'Save client'}
+                {saving ? 'Saving…' : dupes.length > 0 ? 'Save anyway' : 'Save client'}
               </button>
             </div>
           </>
