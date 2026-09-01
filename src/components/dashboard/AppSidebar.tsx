@@ -94,6 +94,10 @@ export default function AppSidebar({ profile, user }: AppSidebarProps) {
   const displayName = profile?.Full_name ?? user?.email ?? 'Agent'
   const isMgr = profile?.role === 'owner' || profile?.role === 'manager'
   const [moreOpen, setMoreOpen] = useState(false)
+  // The More tab reads as active while its sheet is open or the route is one of
+  // the sections it houses (Reports/Profile/Alerts/Team/Activity).
+  const moreActive = moreOpen || ['/analytics', '/settings', '/alerts', '/approvals', '/activity'].some(p => isActive(p))
+  useEffect(() => { setMoreOpen(false) }, [pathname])
   const companyName = isMgr ? 'Manager · StateGen' : (profile?.Companies?.Name ?? 'StateGen')
   const initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
 
@@ -210,28 +214,6 @@ export default function AppSidebar({ profile, user }: AppSidebarProps) {
       <div className="md:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 py-3" style={{ background: '#0E1F3D', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
         <Logo variant="white" size={26} withWordmark priority />
         <div className="flex items-center gap-2">
-          {/* "More" — houses the secondary sections (Alerts, Team, Activity) so
-              the bottom tab bar and top bar never get crowded on mobile. */}
-          <div className="relative">
-            <button onClick={() => setMoreOpen(o => !o)} className="relative p-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.08)' }} aria-label="More">
-              <MoreHorizontal className="h-4 w-4" style={{ color: '#9DB2CC' }} />
-              {unseenAlerts + pendingAgents > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center" style={{ background: '#D94A4A', color: '#fff' }}>
-                  {unseenAlerts + pendingAgents > 9 ? '9+' : unseenAlerts + pendingAgents}
-                </span>
-              )}
-            </button>
-            {moreOpen && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
-                <div className="absolute right-0 mt-2 w-48 rounded-xl overflow-hidden z-50" style={{ background: '#13294D', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 12px 32px rgba(0,0,0,0.45)' }}>
-                  <MoreItem href="/alerts" icon={<Bell className="h-4 w-4" />} label="Alerts" badge={unseenAlerts} badgeColor="#D94A4A" active={isActive('/alerts')} onNav={() => setMoreOpen(false)} />
-                  {isMgr && <MoreItem href="/approvals" icon={<UserCheck className="h-4 w-4" />} label="Team" badge={pendingAgents} badgeColor="#E08A1E" active={isActive('/approvals')} onNav={() => setMoreOpen(false)} />}
-                  {isMgr && <MoreItem href="/activity" icon={<Activity className="h-4 w-4" />} label="Activity" active={isActive('/activity')} onNav={() => setMoreOpen(false)} />}
-                </div>
-              </>
-            )}
-          </div>
           <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: '#2E5288', color: '#fff' }}>
             {initials}
           </div>
@@ -242,8 +224,10 @@ export default function AppSidebar({ profile, user }: AppSidebarProps) {
       </div>
 
       {/* ── Mobile bottom tab bar ── */}
+      {/* Five core tabs + a "More" tab that houses the rest (Reports, Profile,
+          Alerts, and the manager sections) so the bar never gets crowded. */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 flex" style={{ background: '#0E1F3D', borderTop: '1px solid rgba(255,255,255,0.10)' }}>
-        {navItems.map(({ href, label, icon: Icon }) => {
+        {navItems.slice(0, 5).map(({ href, label, icon: Icon }) => {
           const active = isActive(href)
           return (
             <Link
@@ -257,6 +241,38 @@ export default function AppSidebar({ profile, user }: AppSidebarProps) {
             </Link>
           )
         })}
+
+        {/* More tab — opens a sheet upward from the bar */}
+        <div className="flex-1 relative">
+          <button
+            onClick={() => setMoreOpen(o => !o)}
+            className="w-full flex flex-col items-center justify-center py-2.5 gap-0.5"
+            style={{ color: moreActive ? '#5E8FD6' : '#9DB2CC' }}
+            aria-label="More"
+          >
+            <span className="relative">
+              <MoreHorizontal className="h-5 w-5" />
+              {unseenAlerts + pendingAgents > 0 && (
+                <span className="absolute -top-1.5 -right-2 min-w-[15px] h-[15px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center" style={{ background: '#D94A4A', color: '#fff' }}>
+                  {unseenAlerts + pendingAgents > 9 ? '9+' : unseenAlerts + pendingAgents}
+                </span>
+              )}
+            </span>
+            <span className="text-[10px] font-medium">More</span>
+          </button>
+          {moreOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
+              <div className="absolute bottom-full right-1 mb-1 w-52 rounded-xl overflow-hidden z-50" style={{ background: '#13294D', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 -8px 32px rgba(0,0,0,0.45)' }}>
+                <MoreItem href="/analytics" icon={<BarChart3 className="h-4 w-4" />} label="Reports" active={isActive('/analytics')} onNav={() => setMoreOpen(false)} />
+                <MoreItem href="/settings" icon={<User className="h-4 w-4" />} label="Profile" active={isActive('/settings')} onNav={() => setMoreOpen(false)} />
+                <MoreItem href="/alerts" icon={<Bell className="h-4 w-4" />} label="Alerts" badge={unseenAlerts} badgeColor="#D94A4A" active={isActive('/alerts')} onNav={() => setMoreOpen(false)} />
+                {isMgr && <MoreItem href="/approvals" icon={<UserCheck className="h-4 w-4" />} label="Team" badge={pendingAgents} badgeColor="#E08A1E" active={isActive('/approvals')} onNav={() => setMoreOpen(false)} />}
+                {isMgr && <MoreItem href="/activity" icon={<Activity className="h-4 w-4" />} label="Activity" active={isActive('/activity')} onNav={() => setMoreOpen(false)} />}
+              </div>
+            </>
+          )}
+        </div>
       </nav>
     </>
   )
