@@ -99,7 +99,10 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
         if (Array.isArray(data.properties)) pool = data.properties.map(dbRowToProperty)
       }
     } catch { /* keep demo fallback */ }
-    setMatches(matchProperties({ req, budget: parseInt(budget) || 0, type }, pool, matchThreshold))
+    // Transaction is implied by client type (Buyer→For Sale, Renter→For Rent) —
+    // there's no separate field to fill.
+    const reqForMatch = { ...req, transaction: (type === 'Renter' ? 'For Rent' : 'For Sale') as ClientReq['transaction'] }
+    setMatches(matchProperties({ req: reqForMatch, budget: parseInt(budget) || 0, type }, pool, matchThreshold))
     setFinding(false)
     setStep(2)
   }
@@ -138,7 +141,7 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
       budget: budgetNum,
       agentId,
       status,
-      req: { ...req, priceMin: budgetNum, priceMax: budgetNum },
+      req: { ...req, priceMin: budgetNum, priceMax: budgetNum, transaction: (type === 'Renter' ? 'For Rent' : 'For Sale') as ClientReq['transaction'] },
       tags,
     }
     let savedId = initial?.id ?? ++_nextId
@@ -199,7 +202,7 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
                   </div>
                 )}
                 <div>
-                  <label className={label} style={labelStyle}>Email</label>
+                  <label className={label} style={labelStyle}>Email <span style={{ color: '#9AA3B2', fontWeight: 400 }}>(optional)</span></label>
                   <input className={inp} style={inpStyle} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="email@example.com" />
                 </div>
                 <div>
@@ -210,14 +213,6 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
                   <label className={label} style={labelStyle}>Client type</label>
                   <select className={inp} style={inpStyle} value={type} onChange={e => setType(e.target.value as ClientType)}>
                     {(['Buyer','Renter'] as ClientType[]).map(t => <option key={t}>{t}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className={label} style={labelStyle}>Transaction</label>
-                  <select className={inp} style={inpStyle} value={req.transaction} onChange={e => setR('transaction', e.target.value)}>
-                    <option value="">Any</option>
-                    <option>For Sale</option>
-                    <option>For Rent</option>
                   </select>
                 </div>
                 <div>
@@ -260,7 +255,7 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
                   <input type="checkbox" checked={req.balcony} onChange={e => setR('balcony', e.target.checked)} />
                   Balcony required
                 </label>
-                {(req.transaction === 'For Rent' || type === 'Renter') && (
+                {type === 'Renter' && (
                   <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: '#14223F' }}>
                     <input type="checkbox" checked={req.advancedPayment ?? false} onChange={e => setR('advancedPayment', e.target.checked)} />
                     Can pay advanced <span className="text-xs" style={{ color: '#9AA3B2' }}>(optional)</span>
