@@ -18,6 +18,14 @@ export function normalizePhone(raw: string | null | undefined): string {
   return d.replace(/^0+/, '')
 }
 
+/** A phone in wa.me click-to-chat form: international digits, no "+". Assumes a
+ *  Lebanese number — reduces to the subscriber part and prefixes the 961 country
+ *  code. Empty string when there are no usable digits. */
+export function waNumber(raw: string | null | undefined): string {
+  const sub = normalizePhone(raw)
+  return sub ? `961${sub}` : ''
+}
+
 function normText(s: string | null | undefined): string {
   return String(s ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
 }

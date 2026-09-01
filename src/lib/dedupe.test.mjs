@@ -2,7 +2,18 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { normalizePhone, findClientDupes, findPropertyDupes } from './dedupe.ts'
+import { normalizePhone, waNumber, findClientDupes, findPropertyDupes } from './dedupe.ts'
+
+test('waNumber: builds a wa.me number regardless of input format', () => {
+  assert.equal(waNumber('+961 3 221 904'), '9613221904')
+  assert.equal(waNumber('03 221 904'), '9613221904')
+  assert.equal(waNumber('9613221904'), '9613221904')
+  assert.equal(waNumber('00961 3 221 904'), '9613221904')
+})
+test('waNumber: empty/nullish → empty string', () => {
+  assert.equal(waNumber(''), '')
+  assert.equal(waNumber(null), '')
+})
 
 // ── normalizePhone ─────────────────────────────────────────────────────────
 test('normalizePhone: same number in different formats collapses equal', () => {

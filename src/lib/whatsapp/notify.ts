@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { waNumber } from '@/lib/dedupe'
 import { sendTemplate, sendText } from './cloud'
 import { newClientLine, newClientCore, type NewClientInfo } from './notify-copy'
 
@@ -37,17 +38,21 @@ export async function notifyAgentNewClient(opts: NotifyOpts): Promise<{ notified
   if (!number || profile?.whatsapp_enabled === false) return { notified: false, reason: 'agent has no WhatsApp' }
 
   const templateName = process.env.WHATSAPP_NEW_CLIENT_TEMPLATE
-  if (templateName) {
+  const wa = waNumber(client.phone)   // the client's number, for the wa.me button
+  if (templateName && wa) {
     const lang = process.env.WHATSAPP_NEW_CLIENT_TEMPLATE_LANG || 'en'
-    // The template supplies the "New client for you — … reach out" framing; the
-    // {{1}} variable is just the client data.
+    // Body {{1}} is just the client data (the template supplies the framing);
+    // the dynamic URL button's {{1}} is the wa.me number, so a tap opens the
+    // client's chat in the AGENT'S own WhatsApp — the agent reaches out, the bot
+    // never messages the client.
     const res = await sendTemplate(number, templateName, lang, [
       { type: 'body', parameters: [{ type: 'text', text: newClientCore(client) }] },
+      { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: wa }] },
     ])
     return { notified: res.ok, reason: res.ok ? undefined : 'template send failed' }
   }
 
-  // No template configured — try free text (only lands inside the 24h window).
+  // No template, or no client phone for the button → free text (24h window only).
   const res = await sendText(number, newClientLine(client))
-  return { notified: res.ok, reason: res.ok ? undefined : 'no template; outside 24h window' }
+  return { notified: res.ok, reason: res.ok ? undefined : 'no template / no client phone' }
 }
