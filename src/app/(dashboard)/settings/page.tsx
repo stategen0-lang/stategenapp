@@ -16,6 +16,16 @@ const SUB = '#7A8499'
 // Preset accents for the public-listing branding; the picker also allows any custom colour.
 const BRAND_SWATCHES = ['#14223F', '#0E1F3D', '#2E5288', '#1F7A4D', '#8A5A12', '#A23434', '#5E3B76']
 
+// The agency's public microsite URL. On the live domain it's their own
+// subdomain (acme.stategen.app); on localhost/preview (no wildcard) it falls
+// back to the /a/<domain> path so the link still works.
+function publicSiteUrl(domain: string | null | undefined): string {
+  if (!domain || typeof window === 'undefined') return ''
+  const host = window.location.host
+  const onProd = host === 'stategen.app' || host.endsWith('.stategen.app')
+  return onProd ? `https://${domain}.stategen.app` : `${window.location.origin}/a/${domain}`
+}
+
 function initialsOf(name: string) {
   return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
@@ -366,14 +376,14 @@ export default function ProfilePage() {
                 <p className="text-xs font-bold mb-1.5" style={{ color: H }}>Your public site</p>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 text-xs px-2.5 py-2 rounded-lg truncate" style={{ background: '#F7F8FB', color: '#2E5288', border: '1px solid #EEF0F4' }}>
-                    {typeof window !== 'undefined' ? window.location.origin : ''}/a/{brand.domain}
+                    {publicSiteUrl(brand.domain).replace(/^https?:\/\//, '')}
                   </code>
-                  <a href={`/a/${brand.domain}?from=app`} target="_blank" rel="noopener noreferrer" className="text-xs font-bold px-3 py-2 rounded-lg" style={{ border: '1.5px solid #EEF0F4', color: H }}>Open</a>
+                  <a href={publicSiteUrl(brand.domain)} target="_blank" rel="noopener noreferrer" className="text-xs font-bold px-3 py-2 rounded-lg" style={{ border: '1.5px solid #EEF0F4', color: H }}>Open</a>
                   <button
-                    onClick={() => { try { navigator.clipboard.writeText(`${window.location.origin}/a/${brand.domain}`); setCopiedSite(true); setTimeout(() => setCopiedSite(false), 1500) } catch { /* ignore */ } }}
+                    onClick={() => { try { navigator.clipboard.writeText(publicSiteUrl(brand.domain)); setCopiedSite(true); setTimeout(() => setCopiedSite(false), 1500) } catch { /* ignore */ } }}
                     className="text-xs font-bold px-3 py-2 rounded-lg text-white" style={{ background: '#0E1F3D' }}>{copiedSite ? 'Copied ✓' : 'Copy'}</button>
                 </div>
-                <p className="text-xs mt-1.5" style={{ color: SUB }}>All your listings + a contact form. Share it anywhere — enquiries land in Clients.</p>
+                <p className="text-xs mt-1.5" style={{ color: SUB }}>All your listings + a contact form on your own <strong>{brand.domain}.stategen.app</strong> address. Share it anywhere — enquiries land in Clients.</p>
               </div>
             )}
 

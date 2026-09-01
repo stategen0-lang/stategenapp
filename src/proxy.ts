@@ -1,7 +1,45 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+// The app itself lives on the apex + www; every OTHER *.stategen.app label is an
+// agency microsite subdomain (acme.stategen.app → that agency's listings page).
+const ROOT_DOMAIN = 'stategen.app'
+
+/** The company microsite label for a host, or null when the host is the app
+ *  (apex, www, the vercel.app domain, or localhost). */
+function companySubdomain(host: string | null): string | null {
+  const h = (host ?? '').split(':')[0].toLowerCase()
+  if (!h.endsWith(`.${ROOT_DOMAIN}`)) return null   // apex / vercel.app / localhost
+  const label = h.slice(0, -(ROOT_DOMAIN.length + 1))
+  if (!label || label === 'www' || label.includes('.')) return null
+  return label
+}
+
 export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl
+
+  // ── Agency microsite subdomains ────────────────────────────────────────────
+  // A company subdomain serves ONLY the public microsite. Rewrite its root to
+  // the /a/<label> page (URL stays on the subdomain); let the listing pages, the
+  // lead API and static assets through; send anything else back to the root.
+  const sub = companySubdomain(request.headers.get('host'))
+  if (sub) {
+    if (pathname === '/') {
+      return NextResponse.rewrite(new URL(`/a/${sub}`, request.url))
+    }
+    if (
+      pathname.startsWith('/a/') || pathname.startsWith('/l/') ||
+      pathname.startsWith('/api/') || pathname.startsWith('/_next/') ||
+      pathname.startsWith('/icons/') || pathname === '/favicon.ico' ||
+      pathname === '/manifest.webmanifest' || pathname === '/sw.js' ||
+      pathname === '/offline.html' || /\.[a-z0-9]+$/i.test(pathname)
+    ) {
+      return NextResponse.next()
+    }
+    return NextResponse.redirect(new URL('/', request.url))
+  }
+
+  // ── Main app (apex / www) ──────────────────────────────────────────────────
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -24,8 +62,6 @@ export async function proxy(request: NextRequest) {
   )
 
   const { data: { user } } = await supabase.auth.getUser()
-
-  const { pathname } = request.nextUrl
 
   // Require authentication for app pages. Public paths are always allowed
   // through: login, signup, API routes, and shared listing pages (/l/<token>),
