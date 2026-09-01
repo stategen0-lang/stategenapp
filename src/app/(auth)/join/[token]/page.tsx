@@ -98,26 +98,26 @@ export default function JoinPage() {
               <p className="text-sm mt-1" style={{ color: '#7A8499' }}>Set up your agent account — you&apos;ll be signed in right away.</p>
             </div>
 
-            <form onSubmit={submit} className="space-y-3.5">
+            <form onSubmit={submit} className="space-y-3.5" autoComplete="off">
               <div>
                 <p className="text-xs font-bold tracking-wider mb-1.5 uppercase" style={labelStyle}>Full name</p>
                 <div className="relative">
                   <User className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#9AA3B2' }} />
-                  <input className={inp} style={inpStyle} required value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Your name" />
+                  <input className={inp} style={inpStyle} required value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Your name" name="join_name" autoComplete="off" autoCapitalize="words" />
                 </div>
               </div>
               <div>
                 <p className="text-xs font-bold tracking-wider mb-1.5 uppercase" style={labelStyle}>Password</p>
                 <div className="relative">
                   <Lock className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#9AA3B2' }} />
-                  <input className={inp} style={inpStyle} required type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 8 characters" />
+                  <input className={inp} style={inpStyle} required type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 8 characters" name="join_new_password" autoComplete="new-password" />
                 </div>
               </div>
               <div>
                 <p className="text-xs font-bold tracking-wider mb-1.5 uppercase" style={labelStyle}>Confirm password</p>
                 <div className="relative">
                   <Lock className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#9AA3B2' }} />
-                  <input className={inp} style={inpStyle} required type="password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="Re-enter password" />
+                  <input className={inp} style={inpStyle} required type="password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="Re-enter password" name="join_confirm_password" autoComplete="new-password" />
                 </div>
               </div>
 
