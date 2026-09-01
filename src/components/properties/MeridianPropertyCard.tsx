@@ -19,30 +19,40 @@ export default function PropertyCard({ property: p, agent, onClick }: Props) {
       onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.11)')}
       onMouseLeave={e => (e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.07)')}
     >
-      {/* Gradient header */}
+      {/* Header — the listing photo when there is one, else the type gradient */}
       <div
-        className="h-28 px-4 pt-3 pb-3 flex flex-col justify-between relative"
+        className="h-28 relative overflow-hidden"
         style={{ background: TYPE_GRADIENTS[p.type] }}
       >
-        <div className="flex items-start justify-between">
-          <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.18)', color: '#fff' }}>
-            {p.type} · {p.transaction}
-          </span>
-          <span
-            className="text-xs font-semibold px-2 py-0.5 rounded-full"
-            style={{ background: sc.bg, color: sc.color }}
-          >
-            {p.status}
-          </span>
-        </div>
-        <div>
-          <p className="text-sm font-bold text-white leading-tight">{p.title}</p>
-          <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.65)' }}>{p.district}, {p.city}</p>
+        {p.photos?.[0] && (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={p.photos[0]} alt="" className="absolute inset-0 w-full h-full object-cover" />
+            {/* Scrim so the white chips/title stay legible over any photo */}
+            <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(10,20,40,0.30) 0%, rgba(10,20,40,0.62) 100%)' }} />
+          </>
+        )}
+        <div className="relative h-full px-4 pt-3 pb-3 flex flex-col justify-between">
+          <div className="flex items-start justify-between">
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(0,0,0,0.28)', color: '#fff' }}>
+              {p.type} · {p.transaction}
+            </span>
+            <span
+              className="text-xs font-semibold px-2 py-0.5 rounded-full"
+              style={{ background: sc.bg, color: sc.color }}
+            >
+              {p.status}
+            </span>
+          </div>
+          <div>
+            <p className="text-sm font-bold text-white leading-tight">{p.title}</p>
+            <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.78)' }}>{p.district}, {p.city}</p>
+          </div>
         </div>
         {/* Agent initials */}
         <div
           className="absolute bottom-3 right-3 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white"
-          style={{ background: agent.color }}
+          style={{ background: agent.color, boxShadow: '0 0 0 2px rgba(255,255,255,0.35)' }}
           title={agent.name}
         >
           {agent.initials}
