@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { recalculateScores } from '@/lib/score-engine'
 import { getSession } from '@/lib/session'
 import { canSeeClientPII, canEditClient, isManager, maskClientName } from '@/lib/permissions'
+import { notifyAgentNewClient } from '@/lib/whatsapp/notify'
 
 
 // The owning agent code lives in the client's notes JSON.
@@ -199,6 +200,27 @@ export async function POST(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     if (data?.id) refreshScoreAfter(Number(data.id), session.companyId)
+
+    // Ping the responsible agent on WhatsApp to reach out — but only when the
+    // client was assigned to someone OTHER than the person adding it (a manager
+    // assigning to an agent). Deferred so the save returns immediately; non-fatal.
+    after(async () => {
+      try {
+        await notifyAgentNewClient({
+          companyId: session.companyId,
+          ownerAgentCode: ownerAgent,
+          actorAgentCode: session.agentCode,
+          client: {
+            name: body.name,
+            phone: body.phone,
+            type: body.type,
+            budget: body.budget ?? body.req?.priceMax,
+            location: body.req?.location,
+          },
+        })
+      } catch { /* notification is best-effort */ }
+    })
+
     return NextResponse.json({ client: data })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
