@@ -71,22 +71,16 @@ export function eventTitle(text: string, matchedWhen: string, kindLabel = 'Event
 
 // ── "book a viewing with Ahmed tomorrow at 3pm" ─────────────────────────────
 
-export async function stageCreateEvent(
+/** Build the confirm-before-write once a time is known, from `text` (the message
+ *  the title/kind are read out of) and the parsed `when`. */
+async function finalizeEvent(
   admin: SupabaseClient,
   profile: Profile,
-  rawMessage: string,
+  text: string,
+  when: NonNullable<ReturnType<typeof parseWhen>>,
 ): Promise<string> {
-  const when = parseWhen(rawMessage)
-  if (!when) {
-    return [
-      "I couldn't work out when that is.",
-      '',
-      'Try "book a viewing tomorrow at 3pm" or "meeting on Friday".',
-    ].join('\n')
-  }
-
-  const kind = inferKind(rawMessage)
-  const title = eventTitle(rawMessage, when.matched, kindStyle(kind).label)
+  const kind = inferKind(text)
+  const title = eventTitle(text, when.matched, kindStyle(kind).label)
 
   // An all-day event runs to the end of that day in the agency's zone; a timed
   // one runs an hour.
@@ -120,6 +114,77 @@ export async function stageCreateEvent(
     // No blobColumn: calendar_events stores no JSON blob.
     label: title,
   })
+}
+
+async function saveEventState(admin: SupabaseClient, profile: Profile, subject: string) {
+  await admin.from('conversation_state').upsert({
+    company_id: profile.company_id,
+    profile_id: profile.id,
+    current_flow: 'create_event',
+    step: 'await_when',
+    context: { subject },
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'profile_id' })
+}
+
+async function clearEventState(admin: SupabaseClient, profileId: string) {
+  await admin.from('conversation_state').delete().eq('profile_id', profileId)
+}
+
+export async function stageCreateEvent(
+  admin: SupabaseClient,
+  profile: Profile,
+  rawMessage: string,
+): Promise<string> {
+  const when = parseWhen(rawMessage)
+  if (!when) {
+    // Missing only the time — ask for it conversationally, remembering the rest,
+    // rather than making the agent retype the whole thing.
+    await saveEventState(admin, profile, rawMessage)
+    return 'Sure — when is it? (e.g. "tomorrow at 3pm", "Friday", "the 25th at noon")'
+  }
+  return finalizeEvent(admin, profile, rawMessage, when)
+}
+
+/**
+ * Continue an event that's waiting on a time. The agent's reply is combined with
+ * the remembered subject so both the time and any extra detail ("tomorrow 3pm
+ * with the Rizk family") are read together. Returns null when no event is pending.
+ */
+export async function continueEventFlow(
+  admin: SupabaseClient,
+  profile: Profile,
+  body: string,
+): Promise<string | null> {
+  const { data: state } = await admin
+    .from('conversation_state')
+    .select('current_flow, context, updated_at')
+    .eq('profile_id', profile.id)
+    .maybeSingle()
+
+  if (!state || state.current_flow !== 'create_event') return null
+
+  // A booking left open for a day is forgotten — let a fresh message be read anew.
+  if (state.updated_at && Date.now() - new Date(state.updated_at).getTime() > 24 * 3600_000) {
+    await clearEventState(admin, profile.id)
+    return null
+  }
+
+  const t = body.trim()
+  if (/^(cancel|abort|nevermind|never mind|quit)\b/i.test(t)) {
+    await clearEventState(admin, profile.id)
+    return 'Cancelled — nothing was added to your calendar.'
+  }
+
+  const subject = String((state.context as Record<string, unknown> | null)?.subject ?? '')
+  const combined = `${subject} ${body}`.trim()
+  const when = parseWhen(combined) ?? parseWhen(body)
+  if (!when) {
+    return 'I still couldn\'t catch a time. When is it? e.g. "tomorrow at 3pm" or "Friday".'
+  }
+
+  await clearEventState(admin, profile.id)
+  return finalizeEvent(admin, profile, combined, when)
 }
 
 // ── "what's on today" ───────────────────────────────────────────────────────

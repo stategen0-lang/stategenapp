@@ -16,7 +16,7 @@ import { parseConnect, isStopMessage, normalizeCode, pairingExpired } from '@/li
 import { handleAgentActivity, handleOverdueReminders, handleActivityFeed } from '@/lib/whatsapp/manager-handlers'
 import { stageLogOffer, stageResolveOffer, handleQueryOffers, continueOfferPick } from '@/lib/whatsapp/offer-handlers'
 import { continuePhotoCollection } from '@/lib/whatsapp/photo-handlers'
-import { stageCreateEvent, handleQuerySchedule } from '@/lib/whatsapp/calendar-handlers'
+import { stageCreateEvent, continueEventFlow, handleQuerySchedule } from '@/lib/whatsapp/calendar-handlers'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 interface Profile {
@@ -106,6 +106,11 @@ async function route(
   // must not have that re-read as a fresh intent.
   const flowAnswer = await continueFlow(admin, profile, body)
   if (flowAnswer !== null) return { intent: 'create_property', answer: flowAnswer }
+
+  // An event waiting on a time: the agent's "tomorrow at 3pm" reply completes the
+  // booking rather than being read as a brand-new message.
+  const eventAnswer = await continueEventFlow(admin, profile, body)
+  if (eventAnswer !== null) return { intent: 'create_event', answer: eventAnswer }
 
   // "done" / "snooze 3d" / "not interested" only mean what they appear to while
   // a reminder is outstanding; otherwise this returns null and the message
