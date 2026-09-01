@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
+import { isManager } from '@/lib/permissions'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 // The company's active AI description template.
@@ -29,6 +30,8 @@ export async function GET() {
 export async function PUT(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // The house-style template is shared agency-wide, so only managers set it.
+  if (!isManager(session.role)) return NextResponse.json({ error: 'Managers only' }, { status: 403 })
 
   let template: string | null = null
   try {

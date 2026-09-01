@@ -516,7 +516,8 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Description Templates */}
+      {/* Description Templates — managers only (shared across the agency) */}
+      {manager && (
       <div className="rounded-2xl bg-white overflow-hidden" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #EEF0F4' }}>
         <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid #EEF0F4' }}>
           <div>
@@ -605,6 +606,7 @@ export default function ProfilePage() {
           ))}
         </div>
       </div>
+      )}
 
     </div>
   )

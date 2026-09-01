@@ -14,6 +14,8 @@ import PropertyDetailModal from '@/components/modals/PropertyDetailModal'
 import ClientDetailModal from '@/components/modals/ClientDetailModal'
 import NewPropertyModal from '@/components/modals/NewPropertyModal'
 import NewClientModal from '@/components/modals/NewClientModal'
+import { useSession } from '@/hooks/use-session'
+import { isManager } from '@/lib/permissions'
 
 type Panel = 'listings' | 'clients' | 'deals' | 'volume' | null
 
@@ -52,6 +54,8 @@ export default function DashboardPage() {
   const [editClient, setEditClient]     = useState<Client | null>(null)
   const [toast, setToast]               = useState('')
   const [volumeYear, setVolumeYear]     = useState<number | null>(2026)
+  const { session } = useSession()
+  const manager = isManager(session?.role)
 
   // Pending agent-approval requests. /api/agents 403s for non-managers, so this
   // banner only ever shows for managers.
@@ -186,7 +190,8 @@ export default function DashboardPage() {
             {[
               { n: 1, title: 'Add your first listing', desc: 'Put a property on the board.', action: () => setNewPropOpen(true), cta: 'Add listing' },
               { n: 2, title: 'Add your first client', desc: 'Capture a buyer or renter brief.', action: () => setNewClientOpen(true), cta: 'Add client' },
-              { n: 3, title: 'Invite your team', desc: 'Agents join with your company domain.', href: '/settings', cta: 'Open settings' },
+              // Inviting the team is a manager job — agents don't see it.
+              ...(manager ? [{ n: 3, title: 'Invite your team', desc: 'Agents join with your company domain.', href: '/settings', cta: 'Open settings' }] : []),
             ].map(s => (
               <div key={s.n} className="rounded-xl p-4 flex flex-col" style={{ border: '1px solid #EEF0F4', background: '#F9FAFC' }}>
                 <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white mb-2" style={{ background: '#5E8FD6' }}>{s.n}</div>
