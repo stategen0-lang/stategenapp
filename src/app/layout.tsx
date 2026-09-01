@@ -15,7 +15,7 @@ const DESCRIPTION =
   "StateGen is the CRM built for Lebanese real estate agencies — smart property matching, a shared client & deal pipeline, and a WhatsApp assistant.";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://stategenapp.vercel.app"),
+  metadataBase: new URL("https://stategen.app"),
   title: {
     default: "StateGen — Real estate CRM",
     template: "%s · StateGen",
