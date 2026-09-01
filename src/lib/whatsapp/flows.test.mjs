@@ -9,8 +9,29 @@ import {
   CREATE_PROPERTY_STEPS, CREATE_CLIENT_STEPS, LISTING_INTRO, CLIENT_INTRO,
   seedContext, seedForm, derivedTitle, isStartListing, isStartClient,
   coerceType, extrasOf, answersOf, EXTRA_KEY,
-  renderForm, parseForm, missingMandatory,
+  renderForm, parseForm, missingMandatory, firstMissing, nextQuestion,
 } from './flows.ts'
+
+// ── conversational prompts ────────────────────────────────────────────────
+test('firstMissing: returns the first empty mandatory step, null when complete', () => {
+  assert.equal(firstMissing({}, CREATE_PROPERTY_STEPS).key, 'type')
+  assert.equal(firstMissing({ type: 'Villa' }, CREATE_PROPERTY_STEPS).key, 'transaction')
+  const full = { type: 'Villa', transaction: 'For Sale', location: 'Beirut', neighborhood: 'Hamra', price: 500000, ownerName: 'Joe', ownerContact: '03 1' }
+  assert.equal(firstMissing(full, CREATE_PROPERTY_STEPS), null)
+})
+
+test('nextQuestion: asks a natural question, prefixes the ack', () => {
+  const q = nextQuestion({}, CREATE_CLIENT_STEPS)
+  assert.match(q, /name/i)
+  assert.equal(q.includes('Copy this'), false)   // not the old form
+  const acked = nextQuestion({}, CREATE_CLIENT_STEPS, 'Got it.')
+  assert.match(acked, /^Got it\./)
+})
+
+test('nextQuestion: empty when nothing mandatory is missing', () => {
+  const full = { name: 'Joe', phone: '03 1', clientType: 'Buyer', propertyType: 'Appartement', location: 'Metn', budget: 500000 }
+  assert.equal(nextQuestion(full, CREATE_CLIENT_STEPS), '')
+})
 
 const propForm = (ctx = {}) => renderForm(LISTING_INTRO, CREATE_PROPERTY_STEPS, ctx)
 const parseProp = (t, base) => parseForm(t, CREATE_PROPERTY_STEPS, base)

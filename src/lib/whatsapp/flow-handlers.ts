@@ -7,10 +7,11 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
-  CREATE_PROPERTY_STEPS, CREATE_CLIENT_STEPS, LISTING_INTRO, CLIENT_INTRO,
-  seedContext, seedForm, renderForm, parseForm, missingMandatory,
-  derivedTitle, answersOf, extrasOf, type FlowStep, type FlowContext,
+  CREATE_PROPERTY_STEPS, CREATE_CLIENT_STEPS,
+  seedContext, seedForm, missingMandatory, firstMissing, nextQuestion,
+  derivedTitle, answersOf, extrasOf, EXTRA_KEY, type FlowStep, type FlowContext,
 } from '@/lib/whatsapp/flows'
+import { extractCreateFields } from '@/lib/whatsapp/flow-extract'
 import { buildUpdate, confirmationText, PROPERTY_FIELDS } from '@/lib/whatsapp/writes'
 import { stage, type Profile } from '@/lib/whatsapp/write-handlers'
 import type { IntentResult } from '@/lib/whatsapp/intent'
@@ -21,9 +22,20 @@ type FlowName = 'create_property' | 'create_client'
 
 interface FlowConfig {
   steps: FlowStep[]
-  intro: string
   noun: string   // "listing" / "client", for the cancel/help copy
   finish: (admin: SupabaseClient, profile: Profile, context: FlowContext) => Promise<string>
+}
+
+// Merge fields the agent just volunteered (AI-extracted from a free-text reply)
+// onto the running context, reusing the same seeders the opening message uses.
+function mergeExtracted(flow: FlowName, prev: FlowContext, fields: Record<string, unknown>): FlowContext {
+  if (!Object.keys(fields).length) return prev
+  if (flow === 'create_client') return { ...prev, ...seedForm(fields, CREATE_CLIENT_STEPS) }
+  const seeded = seedContext(fields)   // property: answers + an __extra bag
+  const extra = { ...extrasOf(prev), ...extrasOf(seeded) }
+  const merged: FlowContext = { ...prev, ...answersOf(seeded) }
+  if (Object.keys(extra).length) merged[EXTRA_KEY] = extra
+  return merged
 }
 
 async function clearFlow(admin: SupabaseClient, profileId: string) {
@@ -112,8 +124,13 @@ async function finishClient(admin: SupabaseClient, profile: Profile, context: Fl
 }
 
 const FLOWS: Record<FlowName, FlowConfig> = {
-  create_property: { steps: CREATE_PROPERTY_STEPS, intro: LISTING_INTRO, noun: 'listing', finish: finishProperty },
-  create_client:   { steps: CREATE_CLIENT_STEPS,   intro: CLIENT_INTRO,  noun: 'client',  finish: finishClient },
+  create_property: { steps: CREATE_PROPERTY_STEPS, noun: 'listing', finish: finishProperty },
+  create_client:   { steps: CREATE_CLIENT_STEPS,   noun: 'client',  finish: finishClient },
+}
+
+const INTRO: Record<FlowName, string> = {
+  create_property: "Let's add a listing.",
+  create_client: "Let's add a client.",
 }
 
 // ── Manager assigns the client to an agent (the call-center case) ──────────────
@@ -179,7 +196,7 @@ async function start(
   // (a manager is asked to pick the owning agent first).
   if (missingMandatory(context, cfg.steps).length === 0) return finishOrPickAgent(admin, profile, flow, context)
 
-  // Prefer the native Flow form when its ID is configured.
+  // Prefer the native Flow form when its ID is configured (dormant until then).
   const form = FLOW_FORM[flow]
   const flowId = process.env[form.envId]
   if (flowId) {
@@ -189,8 +206,14 @@ async function start(
     return { flow: { flowId, flowToken: flow, cta: form.cta, body: form.body, screen: FLOW_SCREEN } }
   }
 
-  await saveFlow(admin, profile, flow, context)
-  return renderForm(cfg.intro, cfg.steps, context)
+  // Conversational default: ask the first missing field in plain language, and
+  // remember which field we asked so the next reply is read as its answer.
+  const asked = firstMissing(context, cfg.steps)!
+  const ctx: FlowContext = { ...context, __asked: asked.key }
+  await saveFlow(admin, profile, flow, ctx)
+  const gotSome = Object.keys(context).some(k => k !== EXTRA_KEY)
+  const ack = gotSome ? `${INTRO[flow]} Got a few details already —` : INTRO[flow]
+  return nextQuestion(ctx, cfg.steps, ack)
 }
 
 /**
@@ -277,23 +300,39 @@ export async function continueFlow(
   if (/^help\b\??$/i.test(body.trim())) {
     const missing = missingMandatory(prev, cfg.steps).map(s => s.label)
     return [
-      `You're part-way through adding a ${cfg.noun}.`,
-      missing.length ? `Still required: ${missing.join(', ')}.` : 'All required fields are in — send the form back to save.',
-      '',
-      'Fill in the form and send it back, or reply "cancel" to stop.',
+      `We're adding a ${cfg.noun} together — just tell me the details in your own words.`,
+      missing.length ? `Still need: ${missing.join(', ')}.` : 'That\'s everything — reply "yes" to save.',
+      'Or reply "cancel" to stop.',
     ].join('\n')
   }
 
-  const { context, invalid } = parseForm(body, cfg.steps, prev)
-  const missing = missingMandatory(context, cfg.steps)
+  // Read the reply as natural language: pull whatever fields it mentions, then
+  // fall back to coercing the raw reply as the specific field we just asked for.
+  const askedKey = typeof prev.__asked === 'string' ? prev.__asked : undefined
+  const askedStep = askedKey ? cfg.steps.find(s => s.key === askedKey) : undefined
 
-  if (invalid.length || missing.length) {
-    await saveFlow(admin, profile, flow, context)
-    const problems: string[] = []
-    if (invalid.length) problems.push(`Couldn't read: ${invalid.join(', ')}.`)
-    if (missing.length) problems.push(`Still need: ${missing.map(s => s.label).join(', ')}.`)
-    return `${problems.join(' ')}\n\n${renderForm(cfg.intro, cfg.steps, context)}\n\nOr reply "cancel" to stop.`
+  const extracted = await extractCreateFields(flow, body, askedStep?.label)
+  let context = mergeExtracted(flow, prev, extracted)
+
+  const stillEmpty = (k: string) => context[k] === undefined || context[k] === null || context[k] === ''
+  if (askedStep && stillEmpty(askedStep.key)) {
+    const v = askedStep.coerce(body)
+    if (v !== null && v !== undefined) context = { ...context, [askedStep.key]: v }
   }
 
-  return finishOrPickAgent(admin, profile, flow, context)
+  const beforeMissing = missingMandatory(prev, cfg.steps).length
+  const missing = missingMandatory(context, cfg.steps)
+
+  if (missing.length === 0) {
+    delete context.__asked
+    return finishOrPickAgent(admin, profile, flow, context)
+  }
+
+  // Something is still missing — ask the next field. Acknowledge progress, or own
+  // it when we couldn't read the last answer (then we re-ask the same field).
+  const advanced = missing.length < beforeMissing || Boolean(askedStep && !stillEmpty(askedStep.key))
+  context.__asked = missing[0].key
+  await saveFlow(admin, profile, flow, context)
+  const ack = advanced ? 'Got it.' : "Sorry, I didn't catch that."
+  return nextQuestion(context, cfg.steps, ack)
 }
