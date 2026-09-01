@@ -23,7 +23,11 @@ function publicSiteUrl(domain: string | null | undefined): string {
   if (!domain || typeof window === 'undefined') return ''
   const host = window.location.host
   const onProd = host === 'stategen.app' || host.endsWith('.stategen.app')
-  return onProd ? `https://${domain}.stategen.app` : `${window.location.origin}/a/${domain}`
+  // The subdomain label can't contain a dot, so use the domain's first segment
+  // (myagency.com → myagency.stategen.app). Off-production, the /a/<domain> path
+  // still works.
+  const label = domain.split('.')[0]
+  return onProd ? `https://${label}.stategen.app` : `${window.location.origin}/a/${domain}`
 }
 
 function initialsOf(name: string) {
@@ -383,7 +387,7 @@ export default function ProfilePage() {
                     onClick={() => { try { navigator.clipboard.writeText(publicSiteUrl(brand.domain)); setCopiedSite(true); setTimeout(() => setCopiedSite(false), 1500) } catch { /* ignore */ } }}
                     className="text-xs font-bold px-3 py-2 rounded-lg text-white" style={{ background: '#0E1F3D' }}>{copiedSite ? 'Copied ✓' : 'Copy'}</button>
                 </div>
-                <p className="text-xs mt-1.5" style={{ color: SUB }}>All your listings + a contact form on your own <strong>{brand.domain}.stategen.app</strong> address. Share it anywhere — enquiries land in Clients.</p>
+                <p className="text-xs mt-1.5" style={{ color: SUB }}>All your listings + a contact form on your own <strong>{brand.domain.split('.')[0]}.stategen.app</strong> address. Share it anywhere — enquiries land in Clients.</p>
               </div>
             )}
 

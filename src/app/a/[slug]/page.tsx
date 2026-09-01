@@ -27,7 +27,16 @@ function readableOn(hex: string): string {
 
 async function loadSite(slug: string): Promise<{ site: Site; companyId: number } | null> {
   const admin = createAdminClient()
-  const { data: company } = await admin.from('Companies').select('*').eq('domain', slug).maybeSingle()
+  // A subdomain label (acme) must match a company whose domain is "acme" OR
+  // "acme.<tld>" (e.g. acme.com) — the domain carries a dot so agent emails stay
+  // valid, but the subdomain can't, so we match on the label prefix too. Sanitise
+  // the label to DNS-safe chars before it goes into the filter.
+  const safe = slug.toLowerCase().replace(/[^a-z0-9-]/g, '')
+  const { data: matches } = await admin
+    .from('Companies').select('*')
+    .or(`domain.eq.${safe},domain.ilike.${safe}.*`)
+    .limit(1)
+  const company = matches?.[0]
   if (!company) return null
   const c = company as Row
   const brand: Brand = {

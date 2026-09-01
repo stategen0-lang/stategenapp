@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { isManager } from '@/lib/permissions'
 import { agentLimitFor } from '@/lib/stripe-plans'
 import { seatsUsed } from '@/lib/seats'
+import { createAgentAccount } from '@/lib/agent-account'
 
 // Managers: agent approvals + team management.
 //
@@ -46,19 +47,37 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!isManager(session.role)) return NextResponse.json({ error: 'Managers only' }, { status: 403 })
 
-  let id: string, action: string
+  let id: string, action: string, fullName: string, password: string
   try {
     const body = await req.json()
     id = String(body.id ?? '')
     action = String(body.action ?? '')
+    fullName = String(body.fullName ?? '')
+    password = String(body.password ?? '')
   } catch {
     return NextResponse.json({ error: 'Invalid body' }, { status: 400 })
   }
-  if (!id || !['approve', 'reject', 'remove', 'promote', 'demote'].includes(action)) {
-    return NextResponse.json({ error: 'id and a valid action are required' }, { status: 400 })
-  }
 
   const admin = createAdminClient()
+
+  // ── create an agent directly (manager onboards without self-signup) ──────────
+  // Auto-approved and seat-checked inside createAgentAccount; returns the login
+  // the manager hands to the agent.
+  if (action === 'create') {
+    const { data: company } = await admin.from('Companies').select('id, Name, domain, Plan').eq('id', session.companyId).maybeSingle()
+    if (!company) return NextResponse.json({ error: 'Company not found.' }, { status: 404 })
+    const result = await createAgentAccount(admin, {
+      companyId: company.id as number, companyName: (company.Name as string) ?? 'your agency',
+      domain: (company.domain as string) ?? '', plan: (company.Plan as string) ?? null,
+      fullName, password, approved: true,
+    })
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
+    return NextResponse.json({ ok: true, action, agentCode: result.agentCode, email: result.email })
+  }
+
+  if (!id || !['approve', 'reject', 'remove', 'promote', 'demote', 'reset_password'].includes(action)) {
+    return NextResponse.json({ error: 'id and a valid action are required' }, { status: 400 })
+  }
 
   // The target must be in the manager's own company. Which roles are valid
   // targets depends on the action (agents for approve/reject/remove/promote,
@@ -70,6 +89,17 @@ export async function POST(req: NextRequest) {
     .maybeSingle()
   if (!target || target.company_id !== session.companyId) {
     return NextResponse.json({ error: 'That person is not in your company.' }, { status: 404 })
+  }
+
+  // ── reset a member's password ────────────────────────────────────────────────
+  // Agents sign in with a synthetic email (no inbox), so they can't self-reset —
+  // a manager sets a new temporary password and relays it. Works for any member
+  // of the company.
+  if (action === 'reset_password') {
+    if (password.length < 8) return NextResponse.json({ error: 'Password must be at least 8 characters.' }, { status: 400 })
+    const { error } = await admin.auth.admin.updateUserById(id, { password })
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ ok: true, action })
   }
 
   async function planLimit() {

@@ -100,6 +100,9 @@ export default function AgentSignupPage() {
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error || 'Signup failed — please try again.')
 
+      // The server assigns the final agent ID (regenerating on any collision),
+      // so show that on the confirmation rather than the locally-guessed one.
+      if (json.agentCode) setAgentCode(json.agentCode)
       setStep('pending')
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong.')

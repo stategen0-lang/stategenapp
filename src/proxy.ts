@@ -69,6 +69,7 @@ export async function proxy(request: NextRequest) {
   const isPublicPath =
     pathname.startsWith('/login') ||
     pathname.startsWith('/signup') ||
+    pathname.startsWith('/join/') ||
     pathname.startsWith('/reset-password') ||
     pathname.startsWith('/terms') ||
     pathname.startsWith('/privacy') ||
