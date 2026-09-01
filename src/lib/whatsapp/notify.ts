@@ -38,13 +38,13 @@ export async function notifyAgentNewClient(opts: NotifyOpts): Promise<{ notified
   if (!number || profile?.whatsapp_enabled === false) return { notified: false, reason: 'agent has no WhatsApp' }
 
   const templateName = process.env.WHATSAPP_NEW_CLIENT_TEMPLATE
-  const wa = waNumber(client.phone)   // the client's number, for the wa.me button
+  const wa = waNumber(client.phone)   // the client's number, for the chat button
   if (templateName && wa) {
     const lang = process.env.WHATSAPP_NEW_CLIENT_TEMPLATE_LANG || 'en'
-    // Body {{1}} is just the client data (the template supplies the framing);
-    // the dynamic URL button's {{1}} is the wa.me number, so a tap opens the
-    // client's chat in the AGENT'S own WhatsApp — the agent reaches out, the bot
-    // never messages the client.
+    // Body {{1}} is the client data; the client's phone also sits inside it so
+    // WhatsApp auto-links it. The dynamic URL button's {{1}} is the number, which
+    // resolves through /wa to the client's chat in the AGENT'S own WhatsApp — the
+    // agent reaches out, the bot never messages the client.
     const res = await sendTemplate(number, templateName, lang, [
       { type: 'body', parameters: [{ type: 'text', text: newClientCore(client) }] },
       { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: wa }] },
