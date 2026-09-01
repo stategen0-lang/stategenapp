@@ -2,7 +2,16 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { newClientLine } from './notify-copy.ts'
+import { newClientLine, newClientCore } from './notify-copy.ts'
+
+test('newClientCore: data only, no sentence framing (for the template {{1}})', () => {
+  const s = newClientCore({ name: 'Michel Tanios', phone: '+961 3 221 904', type: 'Buyer', budget: 700000, location: 'Metn' })
+  assert.match(s, /^Michel Tanios/)
+  assert.match(s, /\+961 3 221 904/)
+  assert.match(s, /\$700K/)
+  assert.equal(/New client for you|reach out/i.test(s), false)   // framing lives in the template
+  assert.equal(s.includes('\n'), false)
+})
 
 test('newClientLine: buyer with budget + location', () => {
   const s = newClientLine({ name: 'Michel Tanios', phone: '+961 3 221 904', type: 'Buyer', budget: 700000, location: 'Metn' })

@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendTemplate, sendText } from './cloud'
-import { newClientLine, type NewClientInfo } from './notify-copy'
+import { newClientLine, newClientCore, type NewClientInfo } from './notify-copy'
 
 // Notify the OWNING AGENT (on their own WhatsApp) that a client was assigned to
 // them, so they reach out. The bot never messages the client — this only ever
@@ -36,18 +36,18 @@ export async function notifyAgentNewClient(opts: NotifyOpts): Promise<{ notified
   const number = (profile?.whatsapp_number as string | undefined) ?? undefined
   if (!number || profile?.whatsapp_enabled === false) return { notified: false, reason: 'agent has no WhatsApp' }
 
-  const line = newClientLine(client)
-
   const templateName = process.env.WHATSAPP_NEW_CLIENT_TEMPLATE
   if (templateName) {
     const lang = process.env.WHATSAPP_NEW_CLIENT_TEMPLATE_LANG || 'en'
+    // The template supplies the "New client for you — … reach out" framing; the
+    // {{1}} variable is just the client data.
     const res = await sendTemplate(number, templateName, lang, [
-      { type: 'body', parameters: [{ type: 'text', text: line }] },
+      { type: 'body', parameters: [{ type: 'text', text: newClientCore(client) }] },
     ])
     return { notified: res.ok, reason: res.ok ? undefined : 'template send failed' }
   }
 
   // No template configured — try free text (only lands inside the 24h window).
-  const res = await sendText(number, line)
+  const res = await sendText(number, newClientLine(client))
   return { notified: res.ok, reason: res.ok ? undefined : 'no template; outside 24h window' }
 }

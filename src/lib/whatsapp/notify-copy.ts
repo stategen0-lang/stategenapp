@@ -19,9 +19,11 @@ function money(n: number | null | undefined, renter: boolean): string {
   return `$${n}`
 }
 
-/** One-line notification body. Single line (Meta template body params reject
- *  newlines) and kept well under the 1024-char template limit. */
-export function newClientLine(c: NewClientInfo): string {
+/** Just the client data — name, contact, and what they want — with NO sentence
+ *  framing. This is the {{1}} value for the approved template, whose fixed text
+ *  supplies the "New client for you — … reach out" wrapper (a Meta template
+ *  variable may not sit at the start or end, so the framing must be literal). */
+export function newClientCore(c: NewClientInfo): string {
   const renter = String(c.type ?? '').toLowerCase().startsWith('rent')
   const bits: string[] = []
   const type = (c.type ?? '').trim()
@@ -34,8 +36,13 @@ export function newClientLine(c: NewClientInfo): string {
   const phone = (c.phone ?? '').trim()
   const contact = phone ? ` (${phone})` : ''
   const name = (c.name ?? '').trim() || 'A new client'
-  const line = `New client for you: ${name}${contact}${detail}. Please reach out to introduce yourself.`
-  // Collapse any whitespace (incl. newlines from a pasted name) to single spaces
-  // — Meta rejects template body params that contain newlines/tabs.
-  return line.replace(/\s+/g, ' ').trim()
+  // Collapse whitespace (incl. newlines from a pasted name) — Meta rejects
+  // template body params that contain newlines/tabs.
+  return `${name}${contact}${detail}`.replace(/\s+/g, ' ').trim()
+}
+
+/** Full self-contained sentence — used for the free-text fallback (inside the
+ *  24h window), where there is no template to supply the framing. */
+export function newClientLine(c: NewClientInfo): string {
+  return `New client for you: ${newClientCore(c)}. Please reach out to introduce yourself.`
 }
