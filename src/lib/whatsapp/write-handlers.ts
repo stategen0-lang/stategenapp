@@ -26,6 +26,8 @@ import { splitClientRef } from '@/lib/whatsapp/client-ref'
 import type { ReminderAction } from '@/lib/whatsapp/replies'
 import { createListingAlerts } from '@/lib/alerts-server'
 import { applyOfferAction } from '@/lib/offers-server'
+import { notifyAgentNewClient } from '@/lib/whatsapp/notify'
+import { after } from 'next/server'
 
 export interface Profile {
   id: string
@@ -431,7 +433,29 @@ export async function applyPendingAction(
       const { data, error } = await admin.from(p.table).insert(insert).select('*').maybeSingle()
       if (error) throw error
       if (p.table === 'calendar_events') return `Saved — "${p.label}" is on your calendar.`
-      if (p.table === 'client_requests') return `Saved — ${p.label} added as a client.`
+      if (p.table === 'client_requests') {
+        // Same as the web path: ping the assigned agent to reach out, but only
+        // when it was assigned to someone OTHER than the person adding it (a
+        // manager assigning via WhatsApp). Deferred + non-fatal.
+        const ownerAgent = (p.extras?.agentId as string | undefined) ?? null
+        after(async () => {
+          try {
+            await notifyAgentNewClient({
+              companyId: profile.company_id,
+              ownerAgentCode: ownerAgent,
+              actorAgentCode: profile.agent_code,
+              client: {
+                name: p.columns['Client Name'] as string,
+                phone: p.columns['client phone'] as string | undefined,
+                type: p.extras?.type as string | undefined,
+                budget: p.columns.budget_max as number | undefined,
+                location: p.columns['prefered-location'] as string | undefined,
+              },
+            })
+          } catch { /* best-effort */ }
+        })
+        return `Saved — ${p.label} added as a client.`
+      }
 
       // A listing added from WhatsApp raises the same match alerts as one added
       // from the web form.

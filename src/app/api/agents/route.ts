@@ -91,11 +91,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'That person is not in your company.' }, { status: 404 })
   }
 
-  // ── reset a member's password ────────────────────────────────────────────────
+  // ── reset an AGENT's password ────────────────────────────────────────────────
   // Agents sign in with a synthetic email (no inbox), so they can't self-reset —
-  // a manager sets a new temporary password and relays it. Works for any member
-  // of the company.
+  // a manager sets a new temporary password and relays it. Restricted to agents:
+  // managers/owners have real emails and use "Forgot password", and this stops a
+  // manager from resetting the owner's (or a co-manager's) password.
   if (action === 'reset_password') {
+    if (target.role !== 'agent') {
+      return NextResponse.json({ error: 'Only agents can be reset here. Managers reset their own password via “Forgot password”.' }, { status: 403 })
+    }
     if (password.length < 8) return NextResponse.json({ error: 'Password must be at least 8 characters.' }, { status: 400 })
     const { error } = await admin.auth.admin.updateUserById(id, { password })
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })

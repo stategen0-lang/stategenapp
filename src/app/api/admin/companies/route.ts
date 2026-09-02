@@ -54,6 +54,10 @@ export async function POST(req: NextRequest) {
     const accessDays = Number(body.accessDays)   // 0/NaN → create pending
 
     if (!companyName || !domain || !email || !password) return NextResponse.json({ error: 'Missing required fields.' }, { status: 400 })
+    // The domain must look like a website (contain a dot): agent logins are the
+    // synthetic email <code>@<domain>, which is only valid with a TLD. The
+    // subdomain still uses just the first label (myagency.com → myagency.stategen.app).
+    if (!domain.includes('.')) return NextResponse.json({ error: 'Domain must look like a website, e.g. myagency.com (needed for agent logins).' }, { status: 400 })
     if (!planFor(planId)) return NextResponse.json({ error: 'Pick a plan.' }, { status: 400 })
     if (password.length < 8) return NextResponse.json({ error: 'Password must be at least 8 characters.' }, { status: 400 })
 
