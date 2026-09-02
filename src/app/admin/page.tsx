@@ -104,6 +104,14 @@ export default function AdminPage() {
   const [invForm, setInvForm] = useState({ planId: 'team', subtotal: '', discountPct: '', months: '1', method: '', note: '' })
   const [invBusy, setInvBusy] = useState(false)
   const [invErr, setInvErr] = useState('')
+  const [copiedInvId, setCopiedInvId] = useState<string | null>(null)
+
+  function copyInvoiceLink(iv: Invoice) {
+    try {
+      navigator.clipboard.writeText(`${window.location.origin}/invoice/${iv.id}`)
+      setCopiedInvId(iv.id); setTimeout(() => setCopiedInvId(c => (c === iv.id ? null : c)), 1500)
+    } catch { /* ignore */ }
+  }
 
   async function openInvoices(company: Company) {
     setInvoicesFor(company); setInvoices([]); setInvErr('')
@@ -717,6 +725,7 @@ export default function AdminPage() {
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={badge}>{iv.status}</span>
+                      <button onClick={() => copyInvoiceLink(iv)} className="text-xs font-bold px-2 py-1 rounded-lg" style={{ border: '1.5px solid #CFE0F5', background: '#F5F9FE', color: '#2E5288' }}>{copiedInvId === iv.id ? 'Copied ✓' : 'Share'}</button>
                       <button onClick={() => printInvoice(iv)} className="text-xs font-bold px-2 py-1 rounded-lg" style={{ border: '1.5px solid #D7DCE5', color: '#1A2B4A' }}>Print</button>
                       {iv.status === 'unpaid' && (
                         <>
