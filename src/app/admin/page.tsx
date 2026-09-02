@@ -44,6 +44,23 @@ interface Company {
   created_at: string
 }
 
+interface Invoice {
+  id: string
+  number: string | null
+  plan: string | null
+  subtotal: number | null
+  discount_pct: number | null
+  amount: number
+  currency: string
+  period_start: string | null
+  period_end: string | null
+  status: string
+  method: string | null
+  note: string | null
+  created_at: string
+  paid_at: string | null
+}
+
 export default function AdminPage() {
   const [pin, setPin] = useState('')
   const [unlocked, setUnlocked] = useState(false)
@@ -78,6 +95,101 @@ export default function AdminPage() {
       setForm({ companyName: '', domain: '', email: '', password: '', planId: 'team', activate: true })
     } catch { setCreateErr('Could not create the company.') }
     setCreateBusy(false)
+  }
+
+  // ── Invoices (per company) ──────────────────────────────────────────────────
+  const [invoicesFor, setInvoicesFor] = useState<Company | null>(null)
+  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [invLoading, setInvLoading] = useState(false)
+  const [invForm, setInvForm] = useState({ planId: 'team', subtotal: '', discountPct: '', months: '1', method: '', note: '' })
+  const [invBusy, setInvBusy] = useState(false)
+  const [invErr, setInvErr] = useState('')
+
+  async function openInvoices(company: Company) {
+    setInvoicesFor(company); setInvoices([]); setInvErr('')
+    const plan = PLANS.find(p => p.id === company.Plan) ?? PLANS[0]
+    setInvForm({ planId: plan.id, subtotal: String(plan.price), discountPct: '', months: '1', method: '', note: '' })
+    setInvLoading(true)
+    const r = await fetch(`/api/admin/invoices?companyId=${company.id}`).then(x => x.ok ? x.json() : null).catch(() => null)
+    setInvoices(r?.invoices ?? [])
+    setInvLoading(false)
+  }
+  function invTotal() {
+    const sub = Number(invForm.subtotal) || 0
+    const disc = Math.min(100, Math.max(0, Number(invForm.discountPct) || 0))
+    return Math.round(sub * (1 - disc / 100) * 100) / 100
+  }
+  async function createInvoice() {
+    if (!invoicesFor) return
+    setInvBusy(true); setInvErr('')
+    try {
+      const months = Math.max(1, Number(invForm.months) || 1)
+      const start = new Date()
+      const end = new Date(start); end.setMonth(end.getMonth() + months)
+      const r = await fetch('/api/admin/invoices', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyId: invoicesFor.id, plan: invForm.planId,
+          subtotal: Number(invForm.subtotal) || 0,
+          discount_pct: Number(invForm.discountPct) || 0,
+          period_start: start.toISOString().slice(0, 10),
+          period_end: end.toISOString().slice(0, 10),
+          method: invForm.method || null, note: invForm.note || null,
+        }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { setInvErr(j.error || 'Could not create the invoice.'); return }
+      setInvoices(prev => [j.invoice, ...prev])
+    } finally { setInvBusy(false) }
+  }
+  async function setInvoiceStatus(id: string, status: 'paid' | 'void') {
+    const r = await fetch('/api/admin/invoices', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, status }),
+    })
+    if (r.ok) {
+      setInvoices(prev => prev.map(iv => iv.id === id ? { ...iv, status, paid_at: status === 'paid' ? new Date().toISOString() : null } : iv))
+      // Paying activates the company through the invoice's period end — reflect
+      // that in the company row without a full reload.
+      if (status === 'paid' && invoicesFor) {
+        const iv = invoices.find(x => x.id === id)
+        if (iv?.period_end) {
+          setCompanies(prev => prev.map(co => co.id === invoicesFor.id
+            ? { ...co, 'is active': true, access_status: 'active', access_until: new Date(iv.period_end as string).toISOString() }
+            : co))
+        }
+      }
+    }
+  }
+  function printInvoice(inv: Invoice) {
+    const c = invoicesFor
+    const w = window.open('', '_blank', 'width=820,height=940')
+    if (!w) return
+    const money = (n: number) => `$${Number(n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    const sub = inv.subtotal ?? inv.amount
+    const disc = inv.discount_pct ?? 0
+    const esc = (s: string) => String(s ?? '').replace(/[<>&]/g, m => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[m] as string))
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(inv.number ?? 'Invoice')}</title>
+      <style>body{font-family:-apple-system,Segoe UI,sans-serif;color:#14223F;max-width:640px;margin:40px auto;padding:0 24px}
+      h1{font-size:22px;margin:0}.muted{color:#7A8499}.row{display:flex;justify-content:space-between;padding:6px 0}
+      table{width:100%;border-collapse:collapse;margin-top:24px}td,th{text-align:left;padding:10px 0;border-bottom:1px solid #EEF0F4}
+      .r{text-align:right}.tot{font-size:18px;font-weight:800}.badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:12px;font-weight:700}</style></head><body>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div><h1>StateGen</h1><p class="muted" style="margin:4px 0 0">Real estate CRM</p></div>
+        <div style="text-align:right"><p style="margin:0;font-weight:800">${esc(inv.number ?? '')}</p>
+        <p class="muted" style="margin:4px 0 0">${new Date(inv.created_at).toLocaleDateString()}</p>
+        <span class="badge" style="background:${inv.status === 'paid' ? '#E3F4EA' : inv.status === 'void' ? '#F1F1F1' : '#FBEFD6'};color:${inv.status === 'paid' ? '#1F7A4D' : inv.status === 'void' ? '#777' : '#9A6516'}">${inv.status.toUpperCase()}</span></div>
+      </div>
+      <div style="margin-top:24px"><p class="muted" style="margin:0">Billed to</p><p style="margin:4px 0 0;font-weight:700">${esc(c?.Name ?? '')}</p><p class="muted" style="margin:2px 0 0">${esc(c?.domain ?? '')}</p></div>
+      <table><tr><th>Description</th><th class="r">Amount</th></tr>
+        <tr><td>${esc((inv.plan ?? '').charAt(0).toUpperCase() + (inv.plan ?? '').slice(1))} plan${inv.period_start && inv.period_end ? ` · ${inv.period_start} → ${inv.period_end}` : ''}</td><td class="r">${money(sub)}</td></tr>
+        ${disc > 0 ? `<tr><td>Discount (${disc}%)</td><td class="r" style="color:#1F7A4D">-${money(sub - inv.amount)}</td></tr>` : ''}
+        <tr><td class="tot">Total due</td><td class="r tot">${money(inv.amount)}</td></tr></table>
+      ${inv.note ? `<p class="muted" style="margin-top:20px">${esc(inv.note)}</p>` : ''}
+      ${inv.method ? `<p class="muted" style="margin-top:8px">Payment method: ${esc(inv.method)}</p>` : ''}
+      <p class="muted" style="margin-top:40px;font-size:12px">Thank you.</p>
+      </body></html>`)
+    w.document.close(); w.focus(); setTimeout(() => w.print(), 250)
   }
 
   // Per-company agent list
@@ -331,6 +443,14 @@ export default function AdminPage() {
                           </span>
                         </div>
 
+                        <button
+                          onClick={() => openInvoices(company)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+                          style={{ background: '#F1EDF9', color: '#5B3AA2' }}
+                        >
+                          Invoices
+                        </button>
+
                         {isActive ? (
                           <div className="flex gap-2">
                             {/* Extend button */}
@@ -530,6 +650,83 @@ export default function AdminPage() {
                 {createBusy ? 'Creating…' : 'Create company'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Invoices ── */}
+      {invoicesFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(14,31,61,0.45)' }} onClick={e => e.target === e.currentTarget && setInvoicesFor(null)}>
+          <div className="w-full max-w-lg max-h-[88vh] overflow-y-auto rounded-2xl bg-white p-5" style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <p className="text-base font-bold" style={{ color: '#1A2B4A' }}>Invoices</p>
+                <p className="text-xs" style={{ color: '#9AA3B2' }}>{invoicesFor.Name} · {invoicesFor.domain}</p>
+              </div>
+              <button onClick={() => setInvoicesFor(null)} className="text-lg leading-none" style={{ color: '#9AA3B2' }}>✕</button>
+            </div>
+
+            {/* New invoice */}
+            <div className="rounded-xl p-3" style={{ background: '#FAFBFC', border: '1px solid #EEF0F4' }}>
+              <p className="text-xs font-bold mb-2" style={{ color: '#1A2B4A' }}>New invoice</p>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-xs" style={{ color: '#6A7488' }}>Plan
+                  <select value={invForm.planId} onChange={e => { const p = PLANS.find(x => x.id === e.target.value) ?? PLANS[0]; setInvForm(f => ({ ...f, planId: p.id, subtotal: String(p.price) })) }} className="mt-1 w-full rounded-lg px-2 py-1.5 text-sm" style={{ border: '1.5px solid #D7DCE5', color: '#1A2B4A' }}>
+                    {PLANS.map(p => <option key={p.id} value={p.id}>{p.name} (${p.price})</option>)}
+                  </select>
+                </label>
+                <label className="text-xs" style={{ color: '#6A7488' }}>Months
+                  <input type="number" min="1" value={invForm.months} onChange={e => setInvForm(f => ({ ...f, months: e.target.value }))} className="mt-1 w-full rounded-lg px-2 py-1.5 text-sm" style={{ border: '1.5px solid #D7DCE5', color: '#1A2B4A' }} />
+                </label>
+                <label className="text-xs" style={{ color: '#6A7488' }}>Subtotal (USD)
+                  <input type="number" value={invForm.subtotal} onChange={e => setInvForm(f => ({ ...f, subtotal: e.target.value }))} className="mt-1 w-full rounded-lg px-2 py-1.5 text-sm" style={{ border: '1.5px solid #D7DCE5', color: '#1A2B4A' }} />
+                </label>
+                <label className="text-xs" style={{ color: '#6A7488' }}>Discount %
+                  <input type="number" min="0" max="100" value={invForm.discountPct} onChange={e => setInvForm(f => ({ ...f, discountPct: e.target.value }))} placeholder="0" className="mt-1 w-full rounded-lg px-2 py-1.5 text-sm" style={{ border: '1.5px solid #D7DCE5', color: '#1A2B4A' }} />
+                </label>
+                <label className="text-xs col-span-2" style={{ color: '#6A7488' }}>Method (optional)
+                  <input value={invForm.method} onChange={e => setInvForm(f => ({ ...f, method: e.target.value }))} placeholder="bank transfer / cash / OMT" className="mt-1 w-full rounded-lg px-2 py-1.5 text-sm" style={{ border: '1.5px solid #D7DCE5', color: '#1A2B4A' }} />
+                </label>
+                <label className="text-xs col-span-2" style={{ color: '#6A7488' }}>Note (optional)
+                  <input value={invForm.note} onChange={e => setInvForm(f => ({ ...f, note: e.target.value }))} className="mt-1 w-full rounded-lg px-2 py-1.5 text-sm" style={{ border: '1.5px solid #D7DCE5', color: '#1A2B4A' }} />
+                </label>
+              </div>
+              <div className="flex items-center justify-between mt-3">
+                <p className="text-sm" style={{ color: '#1A2B4A' }}>Total: <span className="font-extrabold">${invTotal().toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>{Number(invForm.discountPct) > 0 && <span className="text-xs ml-1" style={{ color: '#1F7A4D' }}>({invForm.discountPct}% off)</span>}</p>
+                <button onClick={createInvoice} disabled={invBusy} className="px-3 py-1.5 rounded-lg text-xs font-bold text-white disabled:opacity-50" style={{ background: '#0E1F3D' }}>{invBusy ? 'Creating…' : 'Create invoice'}</button>
+              </div>
+              {invErr && <p className="text-xs mt-2" style={{ color: '#A23434' }}>{invErr}</p>}
+            </div>
+
+            {/* Existing invoices */}
+            <div className="mt-4 space-y-2">
+              {invLoading ? (
+                <p className="text-xs text-center py-4" style={{ color: '#9AA3B2' }}>Loading…</p>
+              ) : invoices.length === 0 ? (
+                <p className="text-xs text-center py-4" style={{ color: '#9AA3B2' }}>No invoices yet.</p>
+              ) : invoices.map(iv => {
+                const badge = iv.status === 'paid' ? { background: '#E3F4EA', color: '#1F7A4D' } : iv.status === 'void' ? { background: '#F1F1F1', color: '#777' } : { background: '#FBEFD6', color: '#9A6516' }
+                return (
+                  <div key={iv.id} className="rounded-xl p-3 flex items-center justify-between gap-3" style={{ border: '1px solid #EEF0F4' }}>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold" style={{ color: '#1A2B4A' }}>{iv.number} · ${Number(iv.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}{(iv.discount_pct ?? 0) > 0 && <span className="text-xs ml-1" style={{ color: '#1F7A4D' }}>({iv.discount_pct}% off)</span>}</p>
+                      <p className="text-xs" style={{ color: '#9AA3B2' }}>{iv.plan} · {iv.period_start} → {iv.period_end}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={badge}>{iv.status}</span>
+                      <button onClick={() => printInvoice(iv)} className="text-xs font-bold px-2 py-1 rounded-lg" style={{ border: '1.5px solid #D7DCE5', color: '#1A2B4A' }}>Print</button>
+                      {iv.status === 'unpaid' && (
+                        <>
+                          <button onClick={() => setInvoiceStatus(iv.id, 'paid')} className="text-xs font-bold px-2 py-1 rounded-lg text-white" style={{ background: '#1B8A4B' }}>Mark paid</button>
+                          <button onClick={() => setInvoiceStatus(iv.id, 'void')} className="text-xs font-bold px-2 py-1 rounded-lg" style={{ border: '1.5px solid #F3D7D7', background: '#FDF5F5', color: '#A23434' }}>Void</button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <p className="text-xs mt-3" style={{ color: '#9AA3B2' }}>Marking an invoice paid activates the company through its period end.</p>
           </div>
         </div>
       )}
