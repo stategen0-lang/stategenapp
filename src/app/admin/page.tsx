@@ -114,8 +114,10 @@ export default function AdminPage() {
     setInvoices(r?.invoices ?? [])
     setInvLoading(false)
   }
+  // subtotal field = price per month; the period length multiplies it.
+  function invMonths() { return Math.max(1, Number(invForm.months) || 1) }
   function invTotal() {
-    const sub = Number(invForm.subtotal) || 0
+    const sub = (Number(invForm.subtotal) || 0) * invMonths()
     const disc = Math.min(100, Math.max(0, Number(invForm.discountPct) || 0))
     return Math.round(sub * (1 - disc / 100) * 100) / 100
   }
@@ -123,14 +125,15 @@ export default function AdminPage() {
     if (!invoicesFor) return
     setInvBusy(true); setInvErr('')
     try {
-      const months = Math.max(1, Number(invForm.months) || 1)
+      const months = invMonths()
       const start = new Date()
       const end = new Date(start); end.setMonth(end.getMonth() + months)
       const r = await fetch('/api/admin/invoices', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           companyId: invoicesFor.id, plan: invForm.planId,
-          subtotal: Number(invForm.subtotal) || 0,
+          // Send the full-period pre-discount subtotal (price/month × months).
+          subtotal: (Number(invForm.subtotal) || 0) * months,
           discount_pct: Number(invForm.discountPct) || 0,
           period_start: start.toISOString().slice(0, 10),
           period_end: end.toISOString().slice(0, 10),
@@ -678,7 +681,7 @@ export default function AdminPage() {
                 <label className="text-xs" style={{ color: '#6A7488' }}>Months
                   <input type="number" min="1" value={invForm.months} onChange={e => setInvForm(f => ({ ...f, months: e.target.value }))} className="mt-1 w-full rounded-lg px-2 py-1.5 text-sm" style={{ border: '1.5px solid #D7DCE5', color: '#1A2B4A' }} />
                 </label>
-                <label className="text-xs" style={{ color: '#6A7488' }}>Subtotal (USD)
+                <label className="text-xs" style={{ color: '#6A7488' }}>Price / month (USD)
                   <input type="number" value={invForm.subtotal} onChange={e => setInvForm(f => ({ ...f, subtotal: e.target.value }))} className="mt-1 w-full rounded-lg px-2 py-1.5 text-sm" style={{ border: '1.5px solid #D7DCE5', color: '#1A2B4A' }} />
                 </label>
                 <label className="text-xs" style={{ color: '#6A7488' }}>Discount %
@@ -692,7 +695,7 @@ export default function AdminPage() {
                 </label>
               </div>
               <div className="flex items-center justify-between mt-3">
-                <p className="text-sm" style={{ color: '#1A2B4A' }}>Total: <span className="font-extrabold">${invTotal().toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>{Number(invForm.discountPct) > 0 && <span className="text-xs ml-1" style={{ color: '#1F7A4D' }}>({invForm.discountPct}% off)</span>}</p>
+                <p className="text-sm" style={{ color: '#1A2B4A' }}>Total: <span className="font-extrabold">${invTotal().toLocaleString('en-US', { minimumFractionDigits: 2 })}</span> <span className="text-xs" style={{ color: '#9AA3B2' }}>({invMonths()} mo{Number(invForm.discountPct) > 0 ? ` · ${invForm.discountPct}% off` : ''})</span></p>
                 <button onClick={createInvoice} disabled={invBusy} className="px-3 py-1.5 rounded-lg text-xs font-bold text-white disabled:opacity-50" style={{ background: '#0E1F3D' }}>{invBusy ? 'Creating…' : 'Create invoice'}</button>
               </div>
               {invErr && <p className="text-xs mt-2" style={{ color: '#A23434' }}>{invErr}</p>}
