@@ -118,7 +118,7 @@ export function quickIntent(raw: string | null | undefined): IntentResult | null
   // noun: "schedule a call" books one, "my schedule" asks for the list. This
   // needs a leading command verb AND a calendar noun, so the query form can't
   // match it. The listing exclusion keeps "add listing" out.
-  if (/^(add|book|schedule|set up|put in|create)\b/i.test(text)
+  if ((/^(add|book|schedule|set up|put in|create)\b/i.test(text) || /^remind\s+me\s+to\b/i.test(text))
       && /\b(event|viewing|meeting|call|appointment|follow[- ]?up|reminder to)\b/i.test(text)
       && !/\b(listing|propert)/i.test(text)) {
     return { intent: 'create_event', notes: text }

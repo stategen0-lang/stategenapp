@@ -8,6 +8,17 @@ import {
 } from './replies.ts'
 
 // ── reminder replies (the spec's done / snooze 3d / not interested) ─────────
+test('parseReminderReply: "remind me to <task>" is NOT a snooze (new reminder)', () => {
+  // The real bug: "remind me to call jess in 42 minutes" snoozed the wrong client.
+  for (const s of ['remind me to call jess in 42 minutes', 'Remind me to email Sara tomorrow', 'remind me to follow up with Joe']) {
+    assert.equal(parseReminderReply(s).action, 'unknown', s)
+  }
+})
+test('parseReminderReply: a plain snooze still works', () => {
+  assert.equal(parseReminderReply('snooze 3d').action, 'snooze')
+  assert.equal(parseReminderReply('remind me tomorrow').action, 'snooze')
+  assert.equal(parseReminderReply('remind me later').action, 'snooze')
+})
 test('parseReminderReply: done variants', () => {
   for (const s of ['done', 'Done', 'called', 'called him', 'spoke to them', 'contacted', 'finished']) {
     assert.equal(parseReminderReply(s).action, 'done', s)

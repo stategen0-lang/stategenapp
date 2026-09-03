@@ -8,6 +8,26 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { parseWhen, parseDay, parseTime, describeWhen } from './when.ts'
+
+// ── relative offsets ("in 42 minutes") ──────────────────────────────────────
+test('parseWhen: "in 42 minutes" is now + 42 min (not all-day)', () => {
+  const now = new Date('2026-09-03T09:58:00Z')
+  const w = parseWhen('remind me to call jess in 42 minutes', now)
+  assert.ok(w, 'should parse')
+  assert.equal(w.allDay, false)
+  assert.equal(w.start.getTime(), now.getTime() + 42 * 60_000)
+})
+test('parseWhen: "in 2 hours" / "in an hour" / "in half an hour"', () => {
+  const now = new Date('2026-09-03T09:00:00Z')
+  assert.equal(parseWhen('call in 2 hours', now).start.getTime(), now.getTime() + 2 * 3_600_000)
+  assert.equal(parseWhen('ping me in an hour', now).start.getTime(), now.getTime() + 3_600_000)
+  assert.equal(parseWhen('in half an hour', now).start.getTime(), now.getTime() + 1_800_000)
+})
+test('parseWhen: "in 3 days" is still a calendar day, not a relative instant', () => {
+  const now = new Date('2026-09-03T09:00:00Z')
+  const w = parseWhen('in 3 days', now)
+  assert.equal(w.allDay, true)   // day offset, handled by parseDay
+})
 import { wallClock, toInstant, APP_TIMEZONE } from './timezone.ts'
 
 // Wednesday 22 July 2026, 10:00 in the agency's zone (Asia/Beirut).

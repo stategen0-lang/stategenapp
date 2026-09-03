@@ -64,6 +64,11 @@ export function parseReminderReply(raw: string | null | undefined): ReminderRepl
   const text = (raw ?? '').trim()
   if (!text) return { action: 'unknown' }
 
+  // "remind me TO <task>" is a NEW reminder to schedule ("remind me to call Jess
+  // in 42 minutes"), never a snooze of the current follow-up — even though it
+  // contains "remind me". Hand it to intent classification (→ create_event).
+  if (/\bremind\s+me\s+to\b/i.test(text)) return { action: 'unknown' }
+
   // A fresh command ("book a viewing tomorrow", "set X's budget…") is never a
   // reminder reply, even if it contains a date word. This stopped a real bug:
   // "book a viewing tomorrow at 3pm" was read as "snooze until tomorrow".

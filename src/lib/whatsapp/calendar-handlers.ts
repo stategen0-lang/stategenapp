@@ -48,8 +48,10 @@ function zonedRange(e: { starts_at: string; ends_at: string }): string {
 export function eventTitle(text: string, matchedWhen: string, kindLabel = 'Event'): string {
   let s = String(text ?? '').trim()
 
-  // Remove the leading command ("set up" before "set" so it isn't half-stripped).
-  s = s.replace(/^(add|book|schedule|set up|set|put in|create|arrange|plan|organi[sz]e)\s+(an?\s+)?/i, '')
+  // Remove the leading command ("set up" before "set" so it isn't half-stripped;
+  // "remind me to" for the "remind me to call Jess" phrasing).
+  s = s.replace(/^remind\s+me\s+to\s+/i, '')
+       .replace(/^(add|book|schedule|set up|set|put in|create|arrange|plan|organi[sz]e)\s+(an?\s+)?/i, '')
   // Remove the date/time words we consumed.
   for (const word of matchedWhen.split(/\s+/).filter(Boolean)) {
     s = s.replace(new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'ig'), ' ')
