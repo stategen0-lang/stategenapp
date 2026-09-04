@@ -9,7 +9,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { canSeeClientPII, isManager, maskClientName } from '@/lib/permissions'
 import { dbRowToClient, dbRowToProperty } from '@/lib/db-mappers'
 import { matchProperties } from '@/lib/matching'
-import { formatPrice } from '@/lib/data'
+import { formatPrice, type Property } from '@/lib/data'
 import type { IntentResult } from '@/lib/whatsapp/intent'
 import { splitClientRef } from '@/lib/whatsapp/client-ref'
 import { makeShareToken, shareSecret } from '@/lib/share'
@@ -101,6 +101,17 @@ export async function handleQueryClient(
   const visible = canSeeClientPII(session, clientAgent(row))
   const c = dbRowToClient(row, 0)
 
+  // The responsible agent's NAME is safe to show (it's a colleague, not client
+  // PII) and lets whoever's asking know who to coordinate with.
+  const ownerCode = clientAgent(row)
+  let ownerName: string | null = null
+  if (ownerCode) {
+    const { data: ap } = await admin
+      .from('Profiles').select('Full_name')
+      .eq('company_id', profile.company_id).eq('agent_code', ownerCode).maybeSingle()
+    ownerName = (ap?.Full_name as string) ?? null
+  }
+
   // Another agent's client: requirements are useful, contact details are not shared.
   const lines = [
     visible ? c.name : maskClientName(c.id),
@@ -114,6 +125,7 @@ export async function handleQueryClient(
     c.req.parkings ? `Parking: ${c.req.parkings}` : null,
     `Status: ${c.status}`,
     row.lead_score != null ? `Lead score: ${row.lead_score}/100` : null,
+    ownerName ? `Agent: ${ownerName}` : null,
     visible ? null : '(Another agent\'s client — contact details hidden)',
   ].filter(Boolean)
 
@@ -148,17 +160,38 @@ export async function handleQueryProperty(
     ].join('\n')
   }
 
-  // Otherwise run the real matching engine, so WhatsApp and the app agree.
+  const price = (p: Property) => p.transaction === 'For Rent' ? `${formatPrice(p.rent)}/mo` : formatPrice(p.price)
+
+  // No budget and no area → just the most recent listings.
   if (!intent.budget && !intent.location) {
     const available = properties.filter(p => p.status !== 'Sold').slice(0, 5)
     return [
       `${properties.length} listings. Most recent:`,
-      ...available.map(p => `• #${p.id} ${p.title} — ${p.transaction === 'For Rent' ? `${formatPrice(p.rent)}/mo` : formatPrice(p.price)}`),
+      ...available.map(p => `• #${p.id} ${p.title} — ${price(p)}`),
       '',
       'Add a budget or area to narrow it down, e.g. "what matches 500k in Beirut".',
     ].join('\n')
   }
 
+  // A location scopes the search STRICTLY to that area or city. "Listings in
+  // Achrafieh" means Achrafieh — not the matcher's neighbouring-area suggestions.
+  let pool = properties
+  if (intent.location) {
+    const loc = intent.location.toLowerCase()
+    pool = properties.filter(p => p.district.toLowerCase().includes(loc) || p.city.toLowerCase().includes(loc))
+    if (!pool.length) return `No listings in ${intent.location}.`
+  }
+
+  // Location only (no budget) → list what's there, no fuzzy matching.
+  if (!intent.budget) {
+    const available = pool.filter(p => p.status !== 'Sold').slice(0, 8)
+    return [
+      `${available.length} listing${available.length === 1 ? '' : 's'} in ${intent.location}:`,
+      ...available.map(p => `• #${p.id} ${p.title} — ${price(p)} · ${p.district}`),
+    ].join('\n')
+  }
+
+  // Budget present → rank within the (location-scoped) pool with the real matcher.
   const criteria = {
     budget: intent.budget ?? 0,
     type: 'Buyer' as const,
@@ -173,17 +206,17 @@ export async function handleQueryProperty(
     },
   }
 
-  const matches = matchProperties(criteria, properties).slice(0, 5)
+  const matches = matchProperties(criteria, pool).slice(0, 5)
   if (!matches.length) {
     const what = [intent.budget ? formatPrice(intent.budget) : null, intent.location].filter(Boolean).join(' in ')
-    return `Nothing matches ${what}.\n\nThe matcher only suggests listings within ±50% of budget and in the same or a neighbouring area.`
+    return `Nothing matches ${what}.\n\nThe matcher only suggests listings within ±50% of budget${intent.location ? ` in ${intent.location}` : ''}.`
   }
 
   const header = `${matches.length} match${matches.length > 1 ? 'es' : ''} for ${[intent.budget ? formatPrice(intent.budget) : null, intent.location].filter(Boolean).join(' in ')}:`
   return [
     header,
     ...matches.map(({ property: p, score }) =>
-      `• #${p.id} ${p.title} — ${p.transaction === 'For Rent' ? `${formatPrice(p.rent)}/mo` : formatPrice(p.price)} · ${p.district} · ${Math.round(score.total)}% match`),
+      `• #${p.id} ${p.title} — ${price(p)} · ${p.district} · ${Math.round(score.total)}% match`),
   ].join('\n')
 }
 

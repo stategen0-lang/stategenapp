@@ -162,6 +162,12 @@ export async function stageLogOffer(admin: SupabaseClient, profile: Profile, int
   const found = await resolveClient(admin, profile, intent.clientName)
   if (found.ok) return logOfferForClient(admin, profile, found.row, resume)
   if (found.candidates && found.candidates.length > 1) return savePick(admin, profile, found.candidates, resume)
+  // No client named at all → offer-specific guidance (an offer is logged against
+  // a client's deal, so we need who + which listing), echoing the amount we read.
+  if (!intent.clientName) {
+    const amt = amount >= 1_000_000 ? `${amount / 1_000_000}m` : amount >= 1000 ? `${Math.round(amount / 1000)}k` : String(amount)
+    return `Got a ${amt} offer. Who made it, and on which listing? Reply like: "offer ${amt} from Sara on #23".`
+  }
   return found.message
 }
 

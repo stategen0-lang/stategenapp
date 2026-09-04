@@ -125,7 +125,7 @@ Intents:
 - create_client: wants to add a new client/lead/buyer/renter ("add a client", "new buyer Ahmed"), OR is forwarding a prospective client's own enquiry — a message that gives a person's name and/or phone number together with what property they're after. A property need with a name or phone attached is a new client to register, NOT a search (query_property).
 - share_listing: wants a shareable public link to a listing to forward to a client ("send me the link for #23", "share property 23")
 - describe_property: wants an AI-written listing description for a property ("write a description for #23", "describe listing 23")
-- log_offer: log an offer or counter-offer on a deal ("offer 450k from Joe on #23", "counter Joe 470k", "buyer offered 500k on #12"). Put the amount in fields.amount (plain USD number). A CLIENT's offer is side "buyer" (default); the OWNER/agency countering is side "owner" ("counter" = owner).
+- log_offer: log an offer or counter-offer on a deal ("offer 450k from Joe on #23", "counter Joe 470k", "buyer offered 500k on #12"). ANY message about an offer being made, added, or put in ("offered X", "add the offer", "put in an offer", "a client offered X", "counter") is log_offer — NOT a property search — even when it has NO listing number and NO client name; just extract fields.amount. When two amounts appear (an offer and the asking price), the OFFER is the amount next to "offer/offered"; put that in fields.amount. A CLIENT's offer is side "buyer" (default); the OWNER/agency countering is side "owner" ("counter" = owner).
 - query_offers: asking where a negotiation stands ("offers on #23", "what's the offer on #12", "where does the negotiation stand for Joe")
 - accept_offer: accept the current offer, closing the deal won ("accept Joe's offer", "accept the offer on #23")
 - reject_offer: reject the current offer ("reject Joe's offer", "turn down the offer on #23")
@@ -146,7 +146,10 @@ For update_client, update_property and create_property, put the changes in "fiel
 using ONLY these key names (anything else is discarded):
 - client: budget, status, location, beds, phone, rating
   status must be one of: Searching, Viewing, Negotiating, Closed, Inactive
-- property: status, price, rent, size, beds, baths, title, location, neighborhood, notes
+- property: type, transaction, status, price, rent, size, beds, baths, title, location, neighborhood, ownerName, ownerContact, notes
+  type is the property type ("apartment","villa","office","shop","land","building","chalet","showroom") — extract it whenever named
+  transaction is "For Sale" or "For Rent" (a sale price or "for sale"/"selling" → For Sale; "for rent"/monthly → For Rent)
+  ownerName and ownerContact are the owner's name and phone when given ("owner Joe Khoury 03 123456" → ownerName "Joe Khoury", ownerContact "03 123456")
   status must be one of: Available, Reserved, Sold, Rented
   "location" is the city, "neighborhood" is the area within it
 For create_client, put fields using ONLY these keys: name, phone,
@@ -173,6 +176,8 @@ Examples (note the typos and varied phrasing):
 "offer 450k from Joe on #23" -> {"intent":"log_offer","clientName":"Joe","propertyId":23,"fields":{"amount":450000}}
 "counter joe 470k" -> {"intent":"log_offer","clientName":"Joe","fields":{"amount":470000,"side":"owner"}}
 "buyer offered 500k on #12 from Maya" -> {"intent":"log_offer","clientName":"Maya","propertyId":12,"fields":{"amount":500000}}
+"a client offered 280k for the 3 bed apartment in hamra, add the offer" -> {"intent":"log_offer","fields":{"amount":280000}}
+"add the offer, 300k from a buyer" -> {"intent":"log_offer","fields":{"amount":300000}}
 "offers on #23" -> {"intent":"query_offers","propertyId":23}
 "where does the negotiation stand for joe" -> {"intent":"query_offers","clientName":"Joe"}
 "accept joes offer" -> {"intent":"accept_offer","clientName":"Joe"}
@@ -182,7 +187,7 @@ Examples (note the typos and varied phrasing):
 "whats in negotiation" -> {"intent":"query_pipeline","fields":{"stage":"negotiating"}}
 "show me my pipeline" -> {"intent":"query_pipeline"}
 "prop 23 is sold" -> {"intent":"update_property","propertyId":23,"fields":{"status":"Sold"}}
-"add listing: 3 bed apartment in Hamra, Beirut, 450k, 180 sqm" -> {"intent":"create_property","fields":{"title":"3 bed apartment","beds":3,"neighborhood":"Hamra","location":"Beirut","price":450000,"size":180}}
+"add listing 3 bed apartment in Hamra, Beirut, for sale, 450k, 180 sqm, owner Joe Khoury 03 123456" -> {"intent":"create_property","fields":{"title":"3 bed apartment","type":"apartment","transaction":"For Sale","beds":3,"neighborhood":"Hamra","location":"Beirut","price":450000,"size":180,"ownerName":"Joe Khoury","ownerContact":"03 123456"}}
 "book a viewing with ahmed tomorow at 3pm" -> {"intent":"create_event","clientName":"Ahmed","notes":"viewing tomorrow at 3pm"}
 "whats on today" -> {"intent":"query_schedule"}
 "whats new" -> {"intent":"query_activity"}
