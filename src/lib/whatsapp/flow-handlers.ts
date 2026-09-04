@@ -9,7 +9,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   CREATE_PROPERTY_STEPS, CREATE_CLIENT_STEPS,
   seedContext, seedForm, missingMandatory, firstMissing, nextQuestion,
-  derivedTitle, answersOf, extrasOf, EXTRA_KEY, type FlowStep, type FlowContext,
+  derivedTitle, answersOf, extrasOf, EXTRA_KEY, isStartListing, isStartClient,
+  type FlowStep, type FlowContext,
 } from '@/lib/whatsapp/flows'
 import { extractCreateFields } from '@/lib/whatsapp/flow-extract'
 import { buildUpdate, confirmationText, PROPERTY_FIELDS } from '@/lib/whatsapp/writes'
@@ -254,6 +255,16 @@ export function startCreateClientFlow(admin: SupabaseClient, profile: Profile, i
 
 // ── Continuing whichever flow is open ─────────────────────────────────────────
 
+// Requests that should pull the agent OUT of a half-finished create flow rather
+// than being read as a field answer. Kept to clear command/query phrasings that
+// a listing/client field value would never look like (a value is "villa",
+// "450k", "Joe Khoury" — never "show me…" or "book a meeting…").
+const BREAKS_FLOW = /^(show me\b|info on\b|who ?is\b|who'?s\b|what'?s (on|new|in)\b|whats (on|new)\b|what matches\b|my schedule\b|send me\b|write (a )?descri|book\s+(a|an)?\s*(viewing|meeting|call|appointment)|schedule\s+(a|an)?\s*(viewing|meeting|call)|remind me to\b|move \S+ to\b|mark \S+ (as|sold|rented)\b|offers? on\b|help\s*\??$)/i
+function breaksFlow(body: string): boolean {
+  const s = body.trim()
+  return isStartListing(s) || isStartClient(s) || BREAKS_FLOW.test(s)
+}
+
 export async function continueFlow(
   admin: SupabaseClient, profile: Profile, body: string,
 ): Promise<string | null> {
@@ -277,9 +288,17 @@ export async function continueFlow(
   // "cancel" (not "stop" — a bare STOP is the global opt-out handled upstream)
   // aborts the flow. The prompts tell the agent to reply "cancel", so this stays
   // in step with them.
-  if (/^(cancel|abort|nevermind|never mind|quit)\b/i.test(body.trim())) {
+  if (/^(cancel|abort|nevermind|never mind|quit|stop it)\b/i.test(body.trim())) {
     await clearFlow(admin, profile.id)
     return `Cancelled — the ${cfg.noun} was not saved.`
+  }
+
+  // Escape hatch: a clearly different request abandons a half-finished flow (so
+  // an unanswered "add a listing" doesn't swallow every later message). Clear it
+  // and return null so the webhook reprocesses the message from scratch.
+  if (breaksFlow(body)) {
+    await clearFlow(admin, profile.id)
+    return null
   }
 
   const prev = (state.context ?? {}) as FlowContext

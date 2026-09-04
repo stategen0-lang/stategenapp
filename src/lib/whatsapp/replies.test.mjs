@@ -19,6 +19,17 @@ test('parseReminderReply: a plain snooze still works', () => {
   assert.equal(parseReminderReply('remind me tomorrow').action, 'snooze')
   assert.equal(parseReminderReply('remind me later').action, 'snooze')
 })
+test('parseReminderReply: "called/spoke to <NAME>" is feedback, NOT a done', () => {
+  // The bug: "called Sara, not ready yet" marked the wrong (current) reminder done.
+  for (const s of ['spoke to Ahmed, he wants a viewing Saturday', 'called Sara, not ready yet', 'contacted Joe Khoury', 'spoke to Michel about the villa']) {
+    assert.equal(parseReminderReply(s).action, 'unknown', s)
+  }
+})
+test('parseReminderReply: bare / pronoun completions are still done', () => {
+  for (const s of ['done', 'did it', 'finished', 'called', 'called him', 'spoke to them', 'contacted', 'reached out']) {
+    assert.equal(parseReminderReply(s).action, 'done', s)
+  }
+})
 test('parseReminderReply: done variants', () => {
   for (const s of ['done', 'Done', 'called', 'called him', 'spoke to them', 'contacted', 'finished']) {
     assert.equal(parseReminderReply(s).action, 'done', s)

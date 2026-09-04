@@ -213,16 +213,21 @@ export function nextQuestion(context: FlowContext, steps: FlowStep[], ack?: stri
  * back unknown, so the flow silently failed to start. Phrasings this obvious
  * shouldn't depend on a model round-trip.
  */
+// A scheduling message ("add a viewing … about the villa in Metn") names a
+// property type but is an EVENT, not a new listing/client — exclude it so it
+// isn't misrouted into a create flow.
+const SCHEDULING = /\b(viewing|showing|meeting|appointment)\b/i
+
 export function isStartListing(text: string | null | undefined): boolean {
   const s = (text ?? '').trim()
-  if (!s) return false
+  if (!s || SCHEDULING.test(s)) return false
   return /^(i (want|need|would like) to\s+)?(add|create|list|post|register)\b[^.!?]*\b(listing|property|properties|apartment|appartement|flat|villa|office|shop|chalet|building|land|house)\b/i.test(s)
 }
 
 /** Does this message plainly ask to add a client/lead/buyer/renter? */
 export function isStartClient(text: string | null | undefined): boolean {
   const s = (text ?? '').trim()
-  if (!s) return false
+  if (!s || SCHEDULING.test(s)) return false
   return /^(i (want|need|would like) to\s+)?(add|create|register|new|save)\b[^.!?]*\b(client|customer|lead|buyer|renter|tenant)\b/i.test(s)
 }
 

@@ -19,8 +19,19 @@ export interface ParsedWhen {
   matched: string
 }
 
-const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
-const DAY_ABBR = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
+// Full name + common abbreviations and typos (agents type fast). Longest-first so
+// the regex captures the fuller spelling for clean title-stripping. Each stays a
+// whole word (\b-bounded) so "wed" can't match "wedding", "mon" can't match
+// "money", etc.
+const DAY_VARIANTS = [
+  ['sunday', 'sund', 'sun'],
+  ['monday', 'mond', 'mon'],
+  ['tuesday', 'tuesdy', 'tuesda', 'tuesd', 'tues', 'tue'],
+  ['wednesday', 'wednsday', 'wensday', 'wednes', 'weds', 'wed'],
+  ['thursday', 'thursdy', 'thursd', 'thurs', 'thur', 'thu'],
+  ['friday', 'fryday', 'frid', 'fri'],
+  ['saturday', 'saturdy', 'saturd', 'satur', 'sat'],
+]
 const MONTHS = [
   'january', 'february', 'march', 'april', 'may', 'june',
   'july', 'august', 'september', 'october', 'november', 'december',
@@ -124,10 +135,10 @@ export function parseDay(text: string, now: Date): ParsedDay | null {
 
   // Day names: "saturday", "next saturday", "this saturday".
   for (let i = 0; i < 7; i++) {
-    const re = new RegExp(`\\b(next\\s+|this\\s+)?(${DAY_NAMES[i]}|${DAY_ABBR[i]})\\b`)
+    const re = new RegExp(`\\b(next\\s+|nxt\\s+|this\\s+)?(${DAY_VARIANTS[i].join('|')})\\b`)
     const m = s.match(re)
     if (!m) continue
-    const wantsNext = /next/.test(m[1] ?? '')
+    const wantsNext = /next|nxt/.test(m[1] ?? '')
     let delta = (i - dayOfWeek(today) + 7) % 7
     // A bare day name means the next one that hasn't happened; "next X" always
     // skips a week when X is today or already this week.

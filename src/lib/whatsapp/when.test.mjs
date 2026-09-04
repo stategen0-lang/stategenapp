@@ -23,6 +23,22 @@ test('parseWhen: "in 2 hours" / "in an hour" / "in half an hour"', () => {
   assert.equal(parseWhen('ping me in an hour', now).start.getTime(), now.getTime() + 3_600_000)
   assert.equal(parseWhen('in half an hour', now).start.getTime(), now.getTime() + 1_800_000)
 })
+test('parseDay: tolerates day typos/abbreviations ("nxt tuesdy", "thurs", "weds")', () => {
+  const now = new Date('2026-09-04T09:00:00Z')
+  const dow = (d) => new Date(Date.UTC(d.year, d.month - 1, d.day)).getUTCDay()
+  const t = parseDay('nxt tuesdy', now)
+  assert.ok(t, 'nxt tuesdy should parse')
+  assert.equal(dow(t.date), 2, 'Tuesday')
+  assert.equal(dow(parseDay('thurs', now).date), 4, 'Thursday')
+  assert.equal(dow(parseDay('weds', now).date), 3, 'Wednesday')
+  assert.equal(dow(parseDay('fri', now).date), 5, 'Friday')
+})
+test('parseDay: day abbreviations do not match ordinary words', () => {
+  const now = new Date('2026-09-04T09:00:00Z')
+  assert.equal(parseDay('at the wedding', now), null)   // "wed" must not match "wedding"
+  assert.equal(parseDay('need the money', now), null)   // "mon" must not match "money"
+})
+
 test('parseWhen: "in 3 days" is still a calendar day, not a relative instant', () => {
   const now = new Date('2026-09-03T09:00:00Z')
   const w = parseWhen('in 3 days', now)
