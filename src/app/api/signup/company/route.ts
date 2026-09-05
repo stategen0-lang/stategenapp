@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { planFor } from '@/lib/stripe-plans'
+import { generateAgentCode } from '@/lib/agent-code'
 
 // Company signup — manual billing (no Stripe).
 //
@@ -65,11 +66,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: companyErr.message }, { status: 500 })
     }
 
+    // Managers work deals themselves, so give the owner an agent_code too — it's
+    // what lets them OWN listings/clients and receive referral commission.
     const { error: profileErr } = await admin.from('Profiles').insert({
       id: created.user.id,
       company_id: company.id,
       Full_name: `${companyName} Manager`,
       role: 'owner',
+      agent_code: generateAgentCode(companyName || 'Manager'),
       approved: true,
     })
     if (profileErr) {

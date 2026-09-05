@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/session'
 import { canEditProperty, isManager, owns, type Session } from '@/lib/permissions'
 import { createListingAlerts } from '@/lib/alerts-server'
+import { ensureManagerAgentCode } from '@/lib/ensure-manager-code'
 
 // The listing agent's code lives in the property's Amenities JSON.
 function propertyAgent(row: Record<string, unknown>): string | null {
@@ -51,8 +52,14 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const supabase = await createClient()
 
-    // An agent's new listing is always filed under their own code.
-    if (!isManager(session.role) && session.agentCode) body.agentId = session.agentCode
+    // A new listing is always filed under its creator's own code — an agent's,
+    // or a manager's (managers work deals too; mint their code if missing so it's
+    // never stamped to a phantom demo agent).
+    let ownCode = session.agentCode
+    if (!ownCode && isManager(session.role)) {
+      ownCode = await ensureManagerAgentCode(createAdminClient(), session.companyId, session.userId, session.fullName)
+    }
+    if (ownCode) body.agentId = ownCode
 
     // Pack extra UI fields that don't have dedicated DB columns into Amenities JSON
     const extras = {

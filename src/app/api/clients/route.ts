@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse, after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { recalculateScores } from '@/lib/score-engine'
 import { getSession } from '@/lib/session'
 import { canSeeClientPII, canEditClient, isManager, maskClientName } from '@/lib/permissions'
 import { notifyAgentNewClient } from '@/lib/whatsapp/notify'
+import { ensureManagerAgentCode } from '@/lib/ensure-manager-code'
 
 
 // The owning agent code lives in the client's notes JSON.
@@ -160,11 +162,19 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const supabase = await createClient()
 
-    // An agent always creates clients under their own code — they cannot file
-    // a client under someone else. Managers may assign explicitly.
-    const ownerAgent = isManager(session.role)
-      ? (body.agentId ?? null)
-      : (session.agentCode ?? body.agentId ?? null)
+    // An agent always creates clients under their own code. A manager may assign
+    // to any agent — but if they don't pick one, the client is theirs (managers
+    // work deals too), so mint their code if it's missing.
+    let ownerAgent: string | null
+    if (isManager(session.role)) {
+      let managerCode = session.agentCode
+      if (!managerCode) {
+        managerCode = await ensureManagerAgentCode(createAdminClient(), session.companyId, session.userId, session.fullName)
+      }
+      ownerAgent = body.agentId || managerCode || null
+    } else {
+      ownerAgent = session.agentCode ?? body.agentId ?? null
+    }
 
     // Pack extra UI fields into notes JSON
     const extras = {

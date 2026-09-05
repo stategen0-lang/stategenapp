@@ -60,6 +60,13 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
   const [agentOptions, setAgentOptions] = useState<{ code: string; name: string }[]>([])
   const [assignedAgent, setAssignedAgent] = useState<string>(initial?.agentId ?? '')
 
+  // A manager who also works as an agent owns their new clients by default — the
+  // dropdown starts on themselves, and they can reassign to another agent.
+  useEffect(() => {
+    if (!editing && manager && !assignedAgent && session?.agentCode) setAssignedAgent(session.agentCode)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manager, session?.agentCode, editing])
+
   useEffect(() => {
     if (!manager) return
     let alive = true
