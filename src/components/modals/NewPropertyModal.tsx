@@ -45,6 +45,7 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
     advancedPayment: (initial?.advancedPayment ?? '') as AdvancedPayment | '',
     aiDescription: initial?.aiDescription ?? '',
     notes: initial?.notes ?? '',
+    referredBy: initial?.referredBy ?? '',
     ownerName: initial?.ownerName ?? '',
     ownerContact: initial?.ownerContact ?? '',
   })
@@ -219,6 +220,7 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
       agentId,
       aiDescription: form.aiDescription || undefined,
       notes: form.notes || undefined,
+      referredBy: form.referredBy.trim() || undefined,
       ownerName: form.ownerName.trim() || undefined,
       ownerContact: form.ownerContact.trim() || undefined,
       documentPath: docPath || undefined,
@@ -503,6 +505,14 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
               placeholder="Private notes for the team…"
               onClick={() => setTemplateOpen(false)}
             />
+          </div>
+
+          {/* Referred by — partner company/agent, for co-brokering */}
+          <div>
+            <label className={label} style={labelStyle}>
+              Referred by <span style={{ color: '#B0B8C8', fontWeight: 400 }}>(partner company or agent)</span>
+            </label>
+            <input className={inp} style={inpStyle} value={form.referredBy} onChange={e => set('referredBy', e.target.value)} placeholder="e.g. Prime Realty / Karim H." />
           </div>
 
           {/* Photos */}

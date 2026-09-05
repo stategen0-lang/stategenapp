@@ -73,6 +73,9 @@ export interface Property {
   video?: string
   aiDescription?: string
   notes?: string
+  /** Partner company/agent who referred this listing (for co-brokering). Internal
+   *  — visible to the team, never published to the public page. */
+  referredBy?: string
   // Private to the assigned agent + managers — never shown to other agents or
   // published to the public microsite.
   ownerName?: string

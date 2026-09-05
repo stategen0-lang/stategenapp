@@ -36,6 +36,7 @@ export function dbRowToProperty(row: Record<string, unknown>, idx: number): Prop
     furnishing: extras.furnishing as Property['furnishing'] | undefined,
     mapUrl: extras.mapUrl as string | undefined,
     video: extras.video as string | undefined,
+    referredBy: extras.referredBy as string | undefined,
     // Private fields — mapped here so the owning agent/managers can see them;
     // callers that serve other agents or the public must strip them.
     ownerName: extras.ownerName as string | undefined,

@@ -215,6 +215,7 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
                 ...(p.buildingAge ? [{ label: 'Building Age', value: `${p.buildingAge} yrs` }] : []),
                 ...(p.needsRenovation ? [{ label: 'Renovation', value: 'Needed' }] : []),
                 ...(p.advancedPayment ? [{ label: 'Advanced pay', value: p.advancedPayment }] : []),
+                ...(p.referredBy ? [{ label: 'Referred by', value: p.referredBy }] : []),
               ].map(({ label, value }) => (
                 <div key={label} className="rounded-xl p-3" style={{ background: '#F7F8FB' }}>
                   <p className="text-xs" style={{ color: '#9AA3B2' }}>{label}</p>
