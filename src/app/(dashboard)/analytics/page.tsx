@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { TrendingUp, DollarSign, Percent, Wallet, Trophy, HandCoins, Home, Users, ArrowUp, ArrowDown } from 'lucide-react'
+import { TrendingUp, DollarSign, Percent, Wallet, Trophy, HandCoins, Home, Users, ArrowUp, ArrowDown, Activity } from 'lucide-react'
 import { formatPrice } from '@/lib/data'
 import { useCachedFetch } from '@/hooks/use-cached-fetch'
 import type {
@@ -71,11 +71,20 @@ export default function AnalyticsPage() {
 
   return (
     <div className="max-w-4xl mx-auto p-4 md:p-6" style={{ fontFamily: 'var(--font-public-sans), -apple-system, BlinkMacSystemFont, sans-serif' }}>
-      <div className="mb-5">
-        <h1 className="text-xl md:text-2xl font-bold" style={{ color: H, letterSpacing: '-0.3px' }}>Analytics</h1>
-        <p className="text-sm mt-0.5" style={{ color: SUB }}>
-          {manager ? 'Your whole agency — revenue, commissions, and performance.' : 'Your performance this period.'}
-        </p>
+      <div className="mb-5 flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-xl md:text-2xl font-bold" style={{ color: H, letterSpacing: '-0.3px' }}>Analytics</h1>
+          <p className="text-sm mt-0.5" style={{ color: SUB }}>
+            {manager ? 'Your whole agency — revenue, commissions, and performance.' : 'Your performance this period.'}
+          </p>
+        </div>
+        {manager && (
+          <a href="/reports/activity"
+            className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold shrink-0"
+            style={{ background: '#0E1F3D', color: '#fff' }}>
+            <Activity className="h-4 w-4" /> Agent activity log
+          </a>
+        )}
       </div>
 
       {/* Money KPIs */}

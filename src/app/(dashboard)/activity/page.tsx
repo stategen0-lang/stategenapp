@@ -16,6 +16,9 @@ const KIND_BG: Record<ActivityKind, string> = {
   deal_moved: '#FBF0DA',
   deal_won: '#E3F4EA',
   deal_lost: '#FBE7E7',
+  offer_logged: '#FBF0DA',
+  event_scheduled: '#EAF0FA',
+  client_referred: '#EDEAFA',
 }
 
 // Bucket items under Today / Yesterday / a date, for a readable feed.

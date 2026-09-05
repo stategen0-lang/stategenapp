@@ -4,8 +4,40 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  listingItem, clientItem, dealMoveItem, mergeActivity, activityLine, activityAgo,
+  listingItem, clientItem, dealMoveItem, offerItem, eventItem, mergeActivity, activityLine, activityAgo,
+  summarizeByAgent,
 } from './activity.ts'
+
+test('offerItem / eventItem: kind, key, summary', () => {
+  const o = offerItem({ id: '9', at: '2026-09-01T10:00:00Z', amount: 480000, side: 'buyer', clientName: 'Joe', agentCode: 'a2', agentName: 'Rami' })
+  assert.equal(o.kind, 'offer_logged')
+  assert.equal(o.id, 'offer:9')
+  assert.match(o.summary, /Offer logged: \$480K/)
+  assert.match(o.detail, /on Joe/)
+  const c = offerItem({ id: '10', at: '2026-09-01T10:00:00Z', amount: 500000, side: 'owner', clientName: 'Joe', agentCode: 'a2', agentName: 'Rami' })
+  assert.match(c.summary, /Counter logged/)
+
+  const e = eventItem({ id: '3', at: '2026-09-01T10:00:00Z', eventKind: 'viewing', title: 'Achrafieh flat', agentCode: 'a2', agentName: 'Rami' })
+  assert.equal(e.kind, 'event_scheduled')
+  assert.match(e.summary, /Scheduled viewing: Achrafieh flat/)
+})
+
+test('summarizeByAgent: counts per kind, busiest first', () => {
+  const items = [
+    listingItem({ id: 1, at: '2026-09-01T10:00:00Z', title: 'A', agentCode: 'a1', agentName: 'Lara' }),
+    listingItem({ id: 2, at: '2026-09-01T11:00:00Z', title: 'B', agentCode: 'a1', agentName: 'Lara' }),
+    clientItem({ id: 3, at: '2026-09-01T12:00:00Z', name: 'C', agentCode: 'a1', agentName: 'Lara' }),
+    clientItem({ id: 4, at: '2026-09-01T12:00:00Z', name: 'D', agentCode: 'a2', agentName: 'Rami' }),
+  ]
+  const rows = summarizeByAgent(items)
+  assert.equal(rows.length, 2)
+  assert.equal(rows[0].agentName, 'Lara')     // 3 actions → first
+  assert.equal(rows[0].total, 3)
+  assert.equal(rows[0].counts.listing_added, 2)
+  assert.equal(rows[0].counts.client_added, 1)
+  assert.equal(rows[1].agentName, 'Rami')
+  assert.equal(rows[1].total, 1)
+})
 
 test('listingItem / clientItem: kind, key, summary', () => {
   const l = listingItem({ id: 12, at: '2026-08-27T10:00:00Z', title: 'Raouché Flat', where: 'Raouché, Beirut', agentCode: 'a1', agentName: 'Lara' })
