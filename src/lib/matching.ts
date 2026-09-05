@@ -73,6 +73,16 @@ export function scoreLocation(propLoc: string, clientLoc: string): number {
   return LOCATION_EXCLUDE
 }
 
+// A client's areas: the explicit list when present, else the single location.
+// Scores the property against each and keeps the best (an exact hit in any one
+// requested area should win). No areas at all → no constraint.
+export function scoreLocationMulti(propLoc: string, req: { location: string; locations?: string[] }): number {
+  const areas = (req.locations && req.locations.length ? req.locations : [req.location])
+    .map(norm).filter(Boolean)
+  if (!areas.length) return 100
+  return Math.max(...areas.map(a => scoreLocation(propLoc, a)))
+}
+
 export function scoreBedrooms(propBeds: number, clientBeds: number): number {
   if (!clientBeds) return 100
   const d = Math.abs(propBeds - clientBeds)
@@ -118,7 +128,8 @@ export function computeScore(prop: Property, client: ClientLike): ScoreResult {
   const wantTxn = client.req.transaction
     || (client.type === 'Renter' ? 'For Rent' : client.type === 'Buyer' ? 'For Sale' : '')
   const txnOk = !wantTxn || prop.transaction === wantTxn
-  const rawLoc = scoreLocation(`${prop.district} ${prop.city}`, client.req.location)
+  // A client can be open to several areas — score against the best-matching one.
+  const rawLoc = scoreLocationMulti(`${prop.district} ${prop.city}`, client.req)
   const b  = rawBudget === BUDGET_EXCLUDE ? 0 : rawBudget
   const l  = rawLoc === LOCATION_EXCLUDE ? 0 : rawLoc
   const t  = typeOk ? 100 : 0

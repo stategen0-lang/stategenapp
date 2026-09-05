@@ -31,6 +31,7 @@ export function dbRowToProperty(row: Record<string, unknown>, idx: number): Prop
     aiDescription: extras.aiDescription as string | undefined,
     parkings: extras.parkings as number | undefined,
     buildingAge: extras.buildingAge as number | undefined,
+    floor: extras.floor as Property['floor'] | undefined,
     needsRenovation: !!(extras.needsRenovation),
     terrace: !!(extras.terrace),
     amenities: Array.isArray(extras.amenities) ? (extras.amenities as string[]).filter(a => typeof a === 'string') : [],
@@ -58,19 +59,33 @@ export function dbRowToClient(row: Record<string, unknown>, idx: number): Client
   // every match on the type filter — so ignore anything that isn't a real type.
   const VALID_REQ_TYPES = new Set(['Appartement', 'Duplex', 'Studio', 'Villa', 'Chalet', 'Standalone', 'Building', 'Land', 'Shop', 'Office', 'Showroom', 'Restaurant', 'Garage', 'Warehouse'])
   const reqType = VALID_REQ_TYPES.has(String(reqExtras.type)) ? (reqExtras.type as ClientReq['type']) : ''
+  const reqLocations = Array.isArray(reqExtras.locations)
+    ? (reqExtras.locations as string[]).filter(l => typeof l === 'string' && l.trim())
+    : []
   const req: ClientReq = {
     transaction: (row['payment_terms'] as ClientReq['transaction']) ?? '',
     type: reqType,
+    // The column holds the display string; the array (for matching) lives in the
+    // notes blob. Older rows have only the column — fall back to splitting it.
     location: (row['prefered-location'] as string) ?? '',
+    locations: reqLocations.length
+      ? reqLocations
+      : ((row['prefered-location'] as string) || '').split(',').map(s => s.trim()).filter(Boolean),
     priceMin: (row['budget_min'] as number) ?? 0,
     priceMax: (row['budget_max'] as number) ?? 0,
     beds: (row['bedrooms'] as number) ?? 0,
     baths: (reqExtras.baths as number) ?? 0,
     size: (reqExtras.size as number) ?? 0,
     parkings: reqExtras.parkings as number | undefined,
-    garden: false,
-    balcony: false,
-    notes: '',
+    // These live in the notes blob and were previously not read back on edit.
+    garden: !!reqExtras.garden,
+    balcony: !!reqExtras.balcony,
+    view: (reqExtras.view as string) ?? '',
+    furnishing: reqExtras.furnishing as ClientReq['furnishing'],
+    buildingAge: reqExtras.buildingAge as number | undefined,
+    floor: reqExtras.floor as ClientReq['floor'],
+    advancedPayment: reqExtras.advancedPayment as boolean | undefined,
+    notes: (reqExtras.notes as string) ?? '',
   }
   return {
     id: (row.id as number) ?? idx,

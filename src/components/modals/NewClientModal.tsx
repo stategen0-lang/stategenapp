@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import {
   Client, ClientType, ClientStatus, ClientReq,
   PROPERTIES, CURRENT_AGENT_ID, formatPrice, CLIENT_TAG_PRESETS, tagStyle,
-  PROPERTY_TYPES, propertyTypeLabel
+  PROPERTY_TYPES, propertyTypeLabel, FURNISHINGS, FLOORS
 } from '@/lib/data'
 import { matchProperties, MATCH_THRESHOLD, PropertyMatch } from '@/lib/matching'
 import { dbRowToProperty } from '@/lib/db-mappers'
@@ -21,8 +21,9 @@ interface Props {
 let _nextId = 200
 
 const emptyReq = (): ClientReq => ({
-  transaction: '', type: '', location: '', priceMin: 0, priceMax: 0,
-  beds: 0, baths: 0, size: 0, garden: false, balcony: false, notes: '',
+  transaction: '', type: '', location: '', locations: [], priceMin: 0, priceMax: 0,
+  beds: 0, baths: 0, size: 0, garden: false, balcony: false,
+  view: '', furnishing: '', floor: '', notes: '',
 })
 
 export default function NewClientModal({ onClose, onSaved, matchThreshold = MATCH_THRESHOLD, initial }: Props) {
@@ -38,6 +39,14 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
   const [type, setType] = useState<ClientType>(initial?.type ?? 'Buyer')
   const [budget, setBudget] = useState<string>(initial?.budget ? String(initial.budget) : '')
   const [req, setReq] = useState<ClientReq>(initial?.req ? { ...emptyReq(), ...initial.req } : emptyReq())
+  // Areas the client is open to. Seeded from the array, or an older single/joined
+  // location string.
+  const [locations, setLocations] = useState<string[]>(
+    initial?.req?.locations?.length
+      ? initial.req.locations
+      : (initial?.req?.location ? initial.req.location.split(',').map(s => s.trim()).filter(Boolean) : [])
+  )
+  const [locationInput, setLocationInput] = useState('')
   const [tags, setTags] = useState<string[]>(initial?.tags ?? [])
   const [tagInput, setTagInput] = useState('')
   const [saving, setSaving] = useState(false)
@@ -74,6 +83,25 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
     setReq(r => ({ ...r, [k]: v }))
   }
 
+  function addLocation() {
+    const v = locationInput.trim()
+    if (!v) return
+    setLocations(prev => prev.some(l => l.toLowerCase() === v.toLowerCase()) ? prev : [...prev, v].slice(0, 10))
+    setLocationInput('')
+  }
+  function removeLocation(l: string) {
+    setLocations(prev => prev.filter(x => x !== l))
+  }
+
+  // Fold the pending typed location in, and mirror the areas into both the
+  // display string (comma-joined) and the array used for matching.
+  function reqWithLocations(): ClientReq {
+    const extra = locationInput.trim()
+    const all = extra && !locations.some(l => l.toLowerCase() === extra.toLowerCase())
+      ? [...locations, extra] : locations
+    return { ...req, location: all.join(', '), locations: all }
+  }
+
   function toggleTag(t: string) {
     const v = t.trim().slice(0, 24)
     if (!v) return
@@ -100,7 +128,7 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
     } catch { /* keep demo fallback */ }
     // Transaction is implied by client type (Buyer→For Sale, Renter→For Rent) —
     // there's no separate field to fill.
-    const reqForMatch = { ...req, transaction: (type === 'Renter' ? 'For Rent' : 'For Sale') as ClientReq['transaction'] }
+    const reqForMatch = { ...reqWithLocations(), transaction: (type === 'Renter' ? 'For Rent' : 'For Sale') as ClientReq['transaction'] }
     setMatches(matchProperties({ req: reqForMatch, budget: parseInt(budget) || 0, type }, pool, matchThreshold))
     setFinding(false)
     setStep(2)
@@ -140,7 +168,7 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
       budget: budgetNum,
       agentId,
       status,
-      req: { ...req, priceMin: budgetNum, priceMax: budgetNum, transaction: (type === 'Renter' ? 'For Rent' : 'For Sale') as ClientReq['transaction'] },
+      req: { ...reqWithLocations(), priceMin: budgetNum, priceMax: budgetNum, transaction: (type === 'Renter' ? 'For Rent' : 'For Sale') as ClientReq['transaction'] },
       tags,
     }
     let savedId = initial?.id ?? ++_nextId
@@ -221,9 +249,29 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
                     {PROPERTY_TYPES.map(t => <option key={t} value={t}>{propertyTypeLabel(t)}</option>)}
                   </select>
                 </div>
-                <div>
-                  <label className={label} style={labelStyle}>Location</label>
-                  <input className={inp} style={inpStyle} value={req.location} onChange={e => setR('location', e.target.value)} placeholder="Beirut, Metn…" />
+                <div className="col-span-2">
+                  <label className={label} style={labelStyle}>
+                    Locations <span style={{ color: '#9AA3B2', fontWeight: 400 }}>(add one or more areas)</span>
+                  </label>
+                  {locations.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {locations.map(l => (
+                        <span key={l} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: '#EAF0FA', color: '#2E5288' }}>
+                          {l}
+                          <button type="button" onClick={() => removeLocation(l)} style={{ color: '#2E5288' }} className="leading-none">✕</button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <input
+                    className={inp}
+                    style={inpStyle}
+                    value={locationInput}
+                    onChange={e => setLocationInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addLocation() } }}
+                    onBlur={addLocation}
+                    placeholder="e.g. Achrafieh + Enter"
+                  />
                 </div>
                 <div className="col-span-2">
                   <label className={label} style={labelStyle}>
@@ -242,6 +290,28 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
                 <div>
                   <label className={label} style={labelStyle}>Min size (m²)</label>
                   <input className={inp} style={inpStyle} type="number" value={req.size || ''} onChange={e => setR('size', parseInt(e.target.value) || 0)} placeholder="100" />
+                </div>
+                <div>
+                  <label className={label} style={labelStyle}>View</label>
+                  <input className={inp} style={inpStyle} value={req.view ?? ''} onChange={e => setR('view', e.target.value)} placeholder="Sea, Mountain…" />
+                </div>
+                <div>
+                  <label className={label} style={labelStyle}>Furnishing</label>
+                  <select className={inp} style={inpStyle} value={req.furnishing ?? ''} onChange={e => setR('furnishing', e.target.value)}>
+                    <option value="">Any</option>
+                    {FURNISHINGS.map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={label} style={labelStyle}>Max building age (yrs)</label>
+                  <input className={inp} style={inpStyle} type="number" value={req.buildingAge || ''} onChange={e => setR('buildingAge', parseInt(e.target.value) || 0)} placeholder="e.g. 10" />
+                </div>
+                <div>
+                  <label className={label} style={labelStyle}>Floor</label>
+                  <select className={inp} style={inpStyle} value={req.floor ?? ''} onChange={e => setR('floor', e.target.value)}>
+                    <option value="">Any</option>
+                    {FLOORS.map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
                 </div>
               </div>
 

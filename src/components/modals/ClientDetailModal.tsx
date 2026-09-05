@@ -186,6 +186,10 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
                   { label: 'Bedrooms',    value: c.req.beds ? String(c.req.beds) : '—' },
                   { label: 'Bathrooms',   value: c.req.baths ? String(c.req.baths) : '—' },
                   { label: 'Min Size',    value: c.req.size ? `${c.req.size} m²` : '—' },
+                  ...(c.req.view ? [{ label: 'View', value: c.req.view }] : []),
+                  ...(c.req.furnishing ? [{ label: 'Furnishing', value: c.req.furnishing }] : []),
+                  ...(c.req.buildingAge ? [{ label: 'Max age', value: `${c.req.buildingAge} yrs` }] : []),
+                  ...(c.req.floor ? [{ label: 'Floor', value: c.req.floor }] : []),
                   { label: 'Garden',      value: c.req.garden  ? 'Required' : 'No pref' },
                   { label: 'Balcony',     value: c.req.balcony ? 'Required' : 'No pref' },
                   ...(c.req.transaction === 'For Rent' || c.type === 'Renter'

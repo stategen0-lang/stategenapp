@@ -25,6 +25,9 @@ export type Transaction = 'For Sale' | 'For Rent'
 export type PropertyStatus = 'Available' | 'Pending' | 'Sold' | 'Reserved'
 export type AdvancedPayment = '3 months' | '6 months' | '1 year'
 export type Furnishing = 'Furnished' | 'Semi-furnished' | 'Unfurnished'
+export const FURNISHINGS: Furnishing[] = ['Furnished', 'Semi-furnished', 'Unfurnished']
+export type Floor = 'Ground level' | 'Mid floor' | 'Last floor'
+export const FLOORS: Floor[] = ['Ground level', 'Mid floor', 'Last floor']
 
 // Tick-box amenities stored as free arrays (so the list can grow without a
 // migration). Garden/Balcony/Terrace keep their own booleans for backward
@@ -75,6 +78,7 @@ export interface Property {
   view: string
   parkings?: number
   buildingAge?: number
+  floor?: Floor
   needsRenovation?: boolean
   terrace?: boolean
   amenities?: string[]
@@ -132,7 +136,8 @@ export type ClientStatus = 'Searching' | 'Negotiation' | 'Signed' | 'Viewing'
 export interface ClientReq {
   transaction: Transaction | ''
   type: PropertyType | ''
-  location: string
+  location: string            // display string (all areas, comma-joined)
+  locations?: string[]        // the areas the client is open to (for matching)
   priceMin: number
   priceMax: number
   beds: number
@@ -141,6 +146,10 @@ export interface ClientReq {
   parkings?: number
   garden: boolean
   balcony: boolean
+  view?: string               // preferred view (Sea, Mountain…)
+  furnishing?: Furnishing | ''
+  buildingAge?: number        // max acceptable building age (yrs)
+  floor?: Floor | ''
   advancedPayment?: boolean   // renter can pay advanced (optional)
   notes: string
 }

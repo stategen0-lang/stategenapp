@@ -2,13 +2,11 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { Sparkles, Loader2, ImagePlus, ChevronDown, ChevronLeft, ChevronRight, FileText, X, MapPin, Video } from 'lucide-react'
-import { Property, PropertyType, Transaction, PropertyStatus, AdvancedPayment, Furnishing, AgentId, CURRENT_AGENT_ID, PROPERTY_TYPES, propertyTypeLabel, PROPERTY_AMENITIES, BUILDING_FEATURES } from '@/lib/data'
+import { Property, PropertyType, Transaction, PropertyStatus, AdvancedPayment, Furnishing, Floor, AgentId, CURRENT_AGENT_ID, PROPERTY_TYPES, propertyTypeLabel, PROPERTY_AMENITIES, BUILDING_FEATURES, FURNISHINGS, FLOORS } from '@/lib/data'
 import { useSession } from '@/hooks/use-session'
 import { DescriptionTemplate, loadTemplates } from '@/lib/templates'
 import { createClient as createSupabaseBrowser } from '@/lib/supabase/client'
 import { VIDEO_BUCKET, MAX_VIDEO_BYTES } from '@/lib/upload'
-
-const FURNISHINGS: Furnishing[] = ['Furnished', 'Semi-furnished', 'Unfurnished']
 
 
 interface Props {
@@ -35,6 +33,7 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
     baths: initial?.baths ? String(initial.baths) : '',
     parkings: initial?.parkings ? String(initial.parkings) : '',
     buildingAge: initial?.buildingAge ? String(initial.buildingAge) : '',
+    floor: (initial?.floor ?? '') as Floor | '',
     needsRenovation: initial?.needsRenovation ?? false,
     garden: initial?.garden ?? false,
     balcony: initial?.balcony ?? false,
@@ -277,6 +276,7 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
       parkings: parseInt(form.parkings) || undefined,
       buildingAge: parseInt(form.buildingAge) || undefined,
       needsRenovation: form.needsRenovation || undefined,
+      floor: form.floor || undefined,
       garden: form.garden,
       balcony: form.balcony,
       terrace: form.terrace,
@@ -432,6 +432,15 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
               <label className={label} style={labelStyle}>Building Age (yrs)</label>
               <input className={inp} style={inpStyle} type="number" value={form.buildingAge} onChange={e => set('buildingAge', e.target.value)} placeholder="e.g. 15" />
             </div>
+          </div>
+
+          {/* Floor */}
+          <div>
+            <label className={label} style={labelStyle}>Floor</label>
+            <select className={inp} style={inpStyle} value={form.floor} onChange={e => set('floor', e.target.value)}>
+              <option value="">—</option>
+              {FLOORS.map(f => <option key={f} value={f}>{f}</option>)}
+            </select>
           </div>
 
           {/* Property features */}

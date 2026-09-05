@@ -213,6 +213,7 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
                 ...(p.furnishing ? [{ label: 'Furnishing', value: p.furnishing }] : []),
                 ...(p.parkings ? [{ label: 'Parking', value: String(p.parkings) }] : []),
                 ...(p.buildingAge ? [{ label: 'Building Age', value: `${p.buildingAge} yrs` }] : []),
+                ...(p.floor ? [{ label: 'Floor', value: p.floor }] : []),
                 ...(p.needsRenovation ? [{ label: 'Renovation', value: 'Needed' }] : []),
                 ...(p.advancedPayment ? [{ label: 'Advanced pay', value: p.advancedPayment }] : []),
                 ...(p.referredBy ? [{ label: 'Referred by', value: p.referredBy }] : []),
