@@ -26,6 +26,17 @@ export type PropertyStatus = 'Available' | 'Pending' | 'Sold' | 'Reserved'
 export type AdvancedPayment = '3 months' | '6 months' | '1 year'
 export type Furnishing = 'Furnished' | 'Semi-furnished' | 'Unfurnished'
 
+// Tick-box amenities stored as free arrays (so the list can grow without a
+// migration). Garden/Balcony/Terrace keep their own booleans for backward
+// compatibility and matching; these are the extras.
+export const PROPERTY_AMENITIES = [
+  'Pool', "Helper's Room", 'Air Conditioning', 'Credit Facilities',
+]
+export const BUILDING_FEATURES = [
+  'Concierge', '24/7 Security', 'Elevator', 'Gym', 'Shared Pool',
+  'Shared Spaces', 'Storage Room', 'Generator', 'Water Well', 'Solar Panels',
+]
+
 // The one canonical list of listing types, in the order shown in every picker.
 // Kept here so the web modals, the client "looking for" picker and the microsite
 // filter never drift apart. (The WhatsApp coercion whitelist in
@@ -66,6 +77,8 @@ export interface Property {
   buildingAge?: number
   needsRenovation?: boolean
   terrace?: boolean
+  amenities?: string[]
+  buildingFeatures?: string[]
   furnishing?: Furnishing
   /** Google Maps link / pin to the exact spot. */
   mapUrl?: string

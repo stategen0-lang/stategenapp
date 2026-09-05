@@ -130,7 +130,14 @@ export default async function ListingPage({ params }: { params: Promise<{ token:
     listing.buildingAge ? { label: 'Building age', value: `${listing.buildingAge} yr` } : null,
   ].filter((f): f is { label: string; value: string } => f !== null)
 
-  const amenities = [listing.garden && 'Garden', listing.balcony && 'Balcony'].filter(Boolean) as string[]
+  const amenities = [
+    listing.garden && 'Garden',
+    listing.balcony && 'Balcony',
+    listing.terrace && 'Terrace',
+    listing.furnishing,
+    ...listing.amenities,
+    ...listing.buildingFeatures,
+  ].filter(Boolean) as string[]
 
   // The agency's accent threads through the whole page; StateGen navy is the
   // fallback so an unbranded listing still looks intentional.

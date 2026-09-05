@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { Sparkles, Loader2, ImagePlus, ChevronDown, ChevronLeft, ChevronRight, FileText, X, MapPin, Video } from 'lucide-react'
-import { Property, PropertyType, Transaction, PropertyStatus, AdvancedPayment, Furnishing, AgentId, CURRENT_AGENT_ID, PROPERTY_TYPES, propertyTypeLabel } from '@/lib/data'
+import { Property, PropertyType, Transaction, PropertyStatus, AdvancedPayment, Furnishing, AgentId, CURRENT_AGENT_ID, PROPERTY_TYPES, propertyTypeLabel, PROPERTY_AMENITIES, BUILDING_FEATURES } from '@/lib/data'
 import { useSession } from '@/hooks/use-session'
 import { DescriptionTemplate, loadTemplates } from '@/lib/templates'
 import { createClient as createSupabaseBrowser } from '@/lib/supabase/client'
@@ -52,6 +52,8 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
     ownerContact: initial?.ownerContact ?? '',
   })
   const [photos, setPhotos] = useState<string[]>(initial?.photos ?? [])
+  const [amenities, setAmenities] = useState<string[]>(initial?.amenities ?? [])
+  const [buildingFeatures, setBuildingFeatures] = useState<string[]>(initial?.buildingFeatures ?? [])
   const [uploading, setUploading] = useState(false)
   const [photoError, setPhotoError] = useState('')
   // Private document: path lives in the private bucket; we keep the display name.
@@ -83,6 +85,11 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
 
   function set(k: string, v: string | boolean) {
     setForm(f => ({ ...f, [k]: v }))
+  }
+
+  // Toggle a value in one of the amenity arrays.
+  function toggleIn(setter: React.Dispatch<React.SetStateAction<string[]>>, value: string) {
+    setter(prev => prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value])
   }
 
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId)
@@ -252,6 +259,8 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
       garden: form.garden,
       balcony: form.balcony,
       terrace: form.terrace,
+      amenities,
+      buildingFeatures,
       furnishing: form.furnishing || undefined,
       view: form.view,
       mapUrl: form.mapUrl.trim() || undefined,
@@ -422,6 +431,58 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
               <input type="checkbox" checked={form.needsRenovation} onChange={e => set('needsRenovation', e.target.checked)} className="rounded" />
               Needs Renovation
             </label>
+          </div>
+
+          {/* Property features (amenities) */}
+          <div>
+            <label className={label} style={labelStyle}>Property features</label>
+            <div className="flex gap-2 flex-wrap">
+              {PROPERTY_AMENITIES.map(a => {
+                const on = amenities.includes(a)
+                return (
+                  <button
+                    key={a}
+                    type="button"
+                    onClick={() => toggleIn(setAmenities, a)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors"
+                    style={{
+                      border: on ? '1.5px solid #2E5288' : '1.5px solid #EEF0F4',
+                      background: on ? '#EAF0FA' : '#F7F8FB',
+                      color: on ? '#2E5288' : '#6A7488',
+                    }}
+                  >
+                    <span className="w-4 h-4 rounded flex items-center justify-center text-[10px] text-white" style={{ background: on ? '#2E5288' : '#fff', border: on ? 'none' : '1.5px solid #C4CAD6' }}>{on ? '✓' : ''}</span>
+                    {a}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Building features */}
+          <div>
+            <label className={label} style={labelStyle}>Building features</label>
+            <div className="flex gap-2 flex-wrap">
+              {BUILDING_FEATURES.map(a => {
+                const on = buildingFeatures.includes(a)
+                return (
+                  <button
+                    key={a}
+                    type="button"
+                    onClick={() => toggleIn(setBuildingFeatures, a)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors"
+                    style={{
+                      border: on ? '1.5px solid #2E5288' : '1.5px solid #EEF0F4',
+                      background: on ? '#EAF0FA' : '#F7F8FB',
+                      color: on ? '#2E5288' : '#6A7488',
+                    }}
+                  >
+                    <span className="w-4 h-4 rounded flex items-center justify-center text-[10px] text-white" style={{ background: on ? '#2E5288' : '#fff', border: on ? 'none' : '1.5px solid #C4CAD6' }}>{on ? '✓' : ''}</span>
+                    {a}
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
           {/* Furnishing — tick boxes, single choice */}

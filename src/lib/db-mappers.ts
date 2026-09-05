@@ -33,6 +33,8 @@ export function dbRowToProperty(row: Record<string, unknown>, idx: number): Prop
     buildingAge: extras.buildingAge as number | undefined,
     needsRenovation: !!(extras.needsRenovation),
     terrace: !!(extras.terrace),
+    amenities: Array.isArray(extras.amenities) ? (extras.amenities as string[]).filter(a => typeof a === 'string') : [],
+    buildingFeatures: Array.isArray(extras.buildingFeatures) ? (extras.buildingFeatures as string[]).filter(a => typeof a === 'string') : [],
     furnishing: extras.furnishing as Property['furnishing'] | undefined,
     mapUrl: extras.mapUrl as string | undefined,
     video: extras.video as string | undefined,

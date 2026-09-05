@@ -224,6 +224,17 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
               ))}
             </div>
 
+            {/* Amenities & building features */}
+            {[...(p.amenities ?? []), ...(p.buildingFeatures ?? [])].length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {[...(p.amenities ?? []), ...(p.buildingFeatures ?? [])].map(f => (
+                  <span key={f} className="text-xs font-semibold px-3 py-1.5 rounded-full" style={{ background: '#EAF0FA', color: '#2E5288' }}>
+                    {f}
+                  </span>
+                ))}
+              </div>
+            )}
+
             {/* Video walkthrough */}
             {p.video && (
               <div className="rounded-xl overflow-hidden" style={{ background: '#000' }}>

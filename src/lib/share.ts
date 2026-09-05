@@ -76,6 +76,10 @@ export interface PublicListing {
   buildingAge?: number
   garden: boolean
   balcony: boolean
+  terrace: boolean
+  furnishing?: string
+  amenities: string[]
+  buildingFeatures: string[]
   view: string
   status: string
   photos: string[]
@@ -106,6 +110,10 @@ export function publicListing(p: Property, description: string): PublicListing {
     buildingAge: p.buildingAge,
     garden: p.garden,
     balcony: p.balcony,
+    terrace: !!p.terrace,
+    furnishing: p.furnishing,
+    amenities: Array.isArray(p.amenities) ? p.amenities : [],
+    buildingFeatures: Array.isArray(p.buildingFeatures) ? p.buildingFeatures : [],
     view: p.view,
     status: p.status,
     photos: Array.isArray(p.photos) ? p.photos : [],
