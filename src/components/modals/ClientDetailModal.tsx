@@ -15,9 +15,11 @@ interface Props {
   onClose: () => void
   onStatusChange?: (id: number, status: ClientStatus) => void
   onEdit?: (c: Client) => void
+  /** Called after the client is transferred to another agent, so the list can refresh. */
+  onReferred?: () => void
 }
 
-export default function ClientDetailModal({ client: c, agent, onClose, onStatusChange, onEdit }: Props) {
+export default function ClientDetailModal({ client: c, agent, onClose, onStatusChange, onEdit, onReferred }: Props) {
   const [status, setStatus] = useState<ClientStatus>(c.status)
   const [saving, setSaving] = useState(false)
   const [rating, setRating] = useState<number>(c.agentRating ?? 3)
@@ -27,6 +29,48 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
   const tc = CLIENT_TYPE_STYLE[c.type]
   const band = BAND_STYLE[scoreBand(leadScore)]
   const [stackedProperty, setStackedProperty] = useState<Property | null>(null)
+
+  // Refer/transfer to another agent.
+  const [referOpen, setReferOpen] = useState(false)
+  const [agents, setAgents] = useState<{ code: string; name: string }[]>([])
+  const [referTo, setReferTo] = useState('')
+  const [referBusy, setReferBusy] = useState(false)
+  const [referError, setReferError] = useState('')
+  const [referDone, setReferDone] = useState('')
+
+  async function openRefer() {
+    setReferOpen(true); setReferError(''); setReferDone('')
+    try {
+      const r = await fetch('/api/company/agents')
+      if (!r.ok) return
+      const d = await r.json()
+      const opts = Object.entries((d.agents ?? {}) as Record<string, { name: string }>)
+        .map(([code, a]) => ({ code, name: a.name }))
+        .filter(o => o.code !== c.agentId)   // not the current owner
+        .sort((x, y) => x.name.localeCompare(y.name))
+      setAgents(opts)
+    } catch { /* leave empty; user sees "no other agents" */ }
+  }
+
+  async function handleRefer() {
+    if (!referTo) { setReferError('Choose an agent to refer to.'); return }
+    setReferBusy(true); setReferError('')
+    try {
+      const r = await fetch('/api/clients/refer', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: c.id, toAgent: referTo }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) { setReferError(d.error || 'Could not refer this client.'); setReferBusy(false); return }
+      const toName = agents.find(a => a.code === referTo)?.name || 'the agent'
+      setReferDone(`Referred to ${toName}. They've been notified on WhatsApp.`)
+      setReferBusy(false)
+      onReferred?.()
+      setTimeout(() => onClose(), 1400)
+    } catch {
+      setReferError('Network error. Please try again.'); setReferBusy(false)
+    }
+  }
 
   // The agent's 1-5 star gut-feel rating — 20% of the lead score. Saving it
   // recalculates the score server-side; the fresh value comes back in the reply.
@@ -106,6 +150,15 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {!c.masked && (
+                <button
+                  onClick={() => (referOpen ? setReferOpen(false) : openRefer())}
+                  className="h-7 px-3 rounded-full text-xs font-semibold"
+                  style={{ background: '#E7F3EC', color: '#1F7A4D' }}
+                >
+                  Refer
+                </button>
+              )}
               {onEdit && (
                 <button
                   onClick={() => onEdit(c)}
@@ -120,6 +173,50 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
           </div>
 
           <div className="p-5 space-y-4 overflow-y-auto max-h-[80vh] md:max-h-[70vh]">
+            {/* Refer / transfer panel */}
+            {referOpen && (
+              <div className="rounded-xl p-4" style={{ background: '#F1F8F3', border: '1px solid #CDE7D6' }}>
+                <p className="text-xs font-bold mb-1" style={{ color: '#1F7A4D' }}>Refer this client to another agent</p>
+                <p className="text-xs mb-2.5" style={{ color: '#6A7488' }}>
+                  Ownership moves to them; you stay recorded as the referrer for commission, and they&apos;re notified on WhatsApp.
+                </p>
+                {referDone ? (
+                  <p className="text-sm font-semibold" style={{ color: '#1F7A4D' }}>✓ {referDone}</p>
+                ) : (
+                  <>
+                    <div className="flex gap-2">
+                      <select
+                        value={referTo}
+                        onChange={e => setReferTo(e.target.value)}
+                        className="flex-1 rounded-xl px-3 py-2 text-sm outline-none"
+                        style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: '#14223F' }}
+                      >
+                        <option value="">Choose an agent…</option>
+                        {agents.map(a => <option key={a.code} value={a.code}>{a.name}</option>)}
+                      </select>
+                      <button
+                        onClick={handleRefer}
+                        disabled={referBusy || !referTo}
+                        className="rounded-xl px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+                        style={{ background: '#1F7A4D' }}
+                      >
+                        {referBusy ? 'Referring…' : 'Refer'}
+                      </button>
+                    </div>
+                    {agents.length === 0 && <p className="text-xs mt-2" style={{ color: '#9AA3B2' }}>No other agents to refer to.</p>}
+                    {referError && <p className="text-xs mt-2" style={{ color: '#A23434' }}>{referError}</p>}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Referred-by badge */}
+            {c.referredByName && (
+              <p className="text-xs" style={{ color: '#6A7488' }}>
+                Referred by <span style={{ fontWeight: 700, color: '#14223F' }}>{c.referredByName}</span> · they receive the referral commission
+              </p>
+            )}
+
             {/* Contact info */}
             <div className="grid grid-cols-2 gap-3">
               <div>

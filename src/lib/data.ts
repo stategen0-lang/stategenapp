@@ -168,6 +168,10 @@ export interface Client {
   agentRating?: number   // agent's 1-5 star gut-feel rating
   masked?: boolean       // another agent's client: name/phone hidden, read-only
   tags?: string[]        // free-form labels for grouping (Hot / Investor / …)
+  // Set when the client was referred/transferred from another agent — that agent
+  // gets the referral commission. Code is the referrer's agent_code.
+  referredBy?: string
+  referredByName?: string
 }
 
 // Suggested client tags. Agents can also type their own — these are just the

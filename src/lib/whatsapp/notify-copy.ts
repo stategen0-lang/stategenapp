@@ -9,6 +9,7 @@ export interface NewClientInfo {
   type?: string | null          // "Buyer" | "Renter"
   budget?: number | null
   location?: string | null
+  referredByName?: string | null // set on a transfer — who referred this client
 }
 
 function money(n: number | null | undefined, renter: boolean): string {
@@ -32,6 +33,8 @@ export function newClientCore(c: NewClientInfo): string {
   if (m) bits.push(m)
   const loc = (c.location ?? '').trim()
   if (loc) bits.push(`in ${loc}`)
+  const ref = (c.referredByName ?? '').trim()
+  if (ref) bits.push(`referred by ${ref}`)
   const detail = bits.length ? ` — ${bits.join(', ')}` : ''
   const phone = (c.phone ?? '').trim()
   const contact = phone ? ` (${phone})` : ''

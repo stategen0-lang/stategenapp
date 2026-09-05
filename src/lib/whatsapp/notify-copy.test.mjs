@@ -13,6 +13,11 @@ test('newClientCore: data only, no sentence framing (for the template {{1}})', (
   assert.equal(s.includes('\n'), false)
 })
 
+test('newClientCore: includes the referrer on a transfer', () => {
+  const s = newClientCore({ name: 'Michel Tanios', type: 'Buyer', budget: 700000, location: 'Metn', referredByName: 'Rami Saad' })
+  assert.match(s, /referred by Rami Saad/)
+})
+
 test('newClientLine: buyer with budget + location', () => {
   const s = newClientLine({ name: 'Michel Tanios', phone: '+961 3 221 904', type: 'Buyer', budget: 700000, location: 'Metn' })
   assert.match(s, /Michel Tanios/)

@@ -103,5 +103,7 @@ export function dbRowToClient(row: Record<string, unknown>, idx: number): Client
     agentRating: Number(row['agent_rating'] ?? 3),
     masked: row['masked'] === true,
     tags: Array.isArray(extras.tags) ? (extras.tags as string[]).filter(t => typeof t === 'string') : [],
+    referredBy: extras.referredBy as string | undefined,
+    referredByName: extras.referredByName as string | undefined,
   }
 }

@@ -279,6 +279,7 @@ export default function ClientsPage() {
           onClose={() => setDetailId(null)}
           onEdit={detailClient.masked ? undefined : c => { setDetailId(null); setEditClient(c) }}
           onStatusChange={(id, status) => setList(prev => prev.map(x => x.id === id ? { ...x, status } : x))}
+          onReferred={() => { reloadClients(); showToast('Client referred') }}
         />
       )}
       {addOpen && (
