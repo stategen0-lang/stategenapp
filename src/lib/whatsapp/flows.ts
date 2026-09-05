@@ -22,13 +22,18 @@ import { toMoney, toCount, toText, toEnum, PROPERTY_FIELDS, PROPERTY_TYPES, TRAN
  * and had to guess the app's internal spelling — which happened on the first
  * real listing anyone tried to add over WhatsApp.
  */
+// Only maps words that AREN'T themselves listing types. Studio, Duplex and
+// Showroom used to live here (→ Appartement/Villa/Shop) but are now real types
+// of their own, so they're matched exactly instead (exact match runs first in
+// coerceType) — leaving them here would wrongly rewrite "duplex in Achrafieh".
 const TYPE_SYNONYMS: Record<string, string> = {
   apartment: 'Appartement', appartment: 'Appartement', apt: 'Appartement',
-  flat: 'Appartement', condo: 'Appartement', studio: 'Appartement',
-  house: 'Villa', home: 'Villa', duplex: 'Villa',
-  store: 'Shop', retail: 'Shop', showroom: 'Shop',
+  flat: 'Appartement', condo: 'Appartement',
+  house: 'Villa', home: 'Villa',
+  store: 'Shop', retail: 'Shop',
   plot: 'Land', terrain: 'Land',
   offices: 'Office', chalets: 'Chalet', buildings: 'Building',
+  warehouses: 'Warehouse', depot: 'Warehouse', garages: 'Garage',
 }
 
 export function coerceType(v: unknown): string | null {

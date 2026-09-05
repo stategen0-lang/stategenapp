@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { MessageCircle, Link2 } from 'lucide-react'
+import { MessageCircle, Link2, MapPin, Play, FileText, Phone } from 'lucide-react'
 import { Property, Agent, Client, TYPE_GRADIENTS, statusStyle, formatPrice, buildDesc, getAgent } from '@/lib/data'
 import MatchCards from '@/components/matching/MatchCards'
 import OffersSection from '@/components/offers/OffersSection'
@@ -209,6 +209,8 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
                 { label: 'View',      value: p.view || '—' },
                 { label: 'Garden',    value: p.garden ? 'Yes' : 'No' },
                 { label: 'Balcony',   value: p.balcony ? 'Yes' : 'No' },
+                ...(p.terrace ? [{ label: 'Terrace', value: 'Yes' }] : []),
+                ...(p.furnishing ? [{ label: 'Furnishing', value: p.furnishing }] : []),
                 ...(p.parkings ? [{ label: 'Parking', value: String(p.parkings) }] : []),
                 ...(p.buildingAge ? [{ label: 'Building Age', value: `${p.buildingAge} yrs` }] : []),
                 ...(p.needsRenovation ? [{ label: 'Renovation', value: 'Needed' }] : []),
@@ -220,6 +222,67 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
                 </div>
               ))}
             </div>
+
+            {/* Map + video links */}
+            {(p.mapUrl || p.video) && (
+              <div className="flex flex-wrap gap-2">
+                {p.mapUrl && (
+                  <a
+                    href={p.mapUrl} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold"
+                    style={{ background: '#EAF0FA', color: '#2E5288' }}
+                  >
+                    <MapPin className="h-3.5 w-3.5" /> View on map
+                  </a>
+                )}
+                {p.video && (
+                  <a
+                    href={p.video} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold"
+                    style={{ background: '#FAE8E3', color: '#C04A20' }}
+                  >
+                    <Play className="h-3.5 w-3.5" /> Watch video
+                  </a>
+                )}
+              </div>
+            )}
+
+            {/* Private — only reaches the owning agent + managers (the server
+                strips these fields for everyone else, so their mere presence
+                means the viewer is allowed to see them). */}
+            {(p.ownerName || p.ownerContact || p.documentPath) && (
+              <div className="rounded-xl p-3" style={{ background: '#FBF6EE', border: '1px solid #EFE2CC' }}>
+                <p className="text-[11px] font-bold mb-1.5" style={{ color: '#8A5A24' }}>🔒 Private — you & managers</p>
+                {(p.ownerName || p.ownerContact) && (
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold truncate" style={{ color: '#14223F' }}>{p.ownerName || 'Owner'}</p>
+                      {p.ownerContact && <p className="text-xs" style={{ color: '#6A7488' }}>{p.ownerContact}</p>}
+                    </div>
+                    {p.ownerContact && (
+                      <div className="flex gap-1.5 shrink-0">
+                        <a href={`tel:${p.ownerContact.replace(/[^\d+]/g, '')}`} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-white" style={{ background: '#2E5288' }}>
+                          <Phone className="h-3 w-3" /> Call
+                        </a>
+                        <a href={`https://wa.me/${p.ownerContact.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-white" style={{ background: '#25D366' }}>
+                          <MessageCircle className="h-3 w-3" /> WhatsApp
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {p.documentPath && (
+                  <a
+                    href={`/api/properties/document?id=${p.id}`} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-2 mt-2 px-3 py-2 rounded-lg text-sm font-medium"
+                    style={{ background: '#fff', border: '1px solid #EFE2CC', color: '#14223F' }}
+                  >
+                    <FileText className="h-4 w-4 shrink-0" style={{ color: '#2E5288' }} />
+                    <span className="truncate flex-1">{p.documentName || 'Open document'}</span>
+                  </a>
+                )}
+              </div>
+            )}
 
             <div className="flex items-center gap-3 pt-2" style={{ borderTop: '1px solid #EEF0F4' }}>
               <div

@@ -2,15 +2,14 @@
 
 import { useEffect, useState } from 'react'
 import {
-  Client, ClientType, ClientStatus, ClientReq, PropertyType,
-  PROPERTIES, CURRENT_AGENT_ID, formatPrice, CLIENT_TAG_PRESETS, tagStyle
+  Client, ClientType, ClientStatus, ClientReq,
+  PROPERTIES, CURRENT_AGENT_ID, formatPrice, CLIENT_TAG_PRESETS, tagStyle,
+  PROPERTY_TYPES, propertyTypeLabel
 } from '@/lib/data'
 import { matchProperties, MATCH_THRESHOLD, PropertyMatch } from '@/lib/matching'
 import { dbRowToProperty } from '@/lib/db-mappers'
 import { useSession } from '@/hooks/use-session'
 import { isManager } from '@/lib/permissions'
-
-const PROPERTY_TYPES: PropertyType[] = ['Appartement', 'Shop', 'Office', 'Building', 'Villa', 'Land', 'Showroom', 'Restaurant']
 
 interface Props {
   onClose: () => void
@@ -219,7 +218,7 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
                   <label className={label} style={labelStyle}>Property type</label>
                   <select className={inp} style={inpStyle} value={req.type} onChange={e => setR('type', e.target.value)}>
                     <option value="">Any</option>
-                    {PROPERTY_TYPES.map(t => <option key={t}>{t}</option>)}
+                    {PROPERTY_TYPES.map(t => <option key={t} value={t}>{propertyTypeLabel(t)}</option>)}
                   </select>
                 </div>
                 <div>

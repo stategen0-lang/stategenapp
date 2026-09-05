@@ -51,6 +51,20 @@ test('coerceType: English spellings, common words, canonical, nonsense', () => {
   assert.equal(coerceType('spaceship'), null)
 })
 
+test('coerceType: the new listing types are recognised, even inside a phrase', () => {
+  // These used to be synonyms of other types; they are now types in their own
+  // right and must map to themselves, not be rewritten.
+  assert.equal(coerceType('studio'), 'Studio')
+  assert.equal(coerceType('duplex'), 'Duplex')
+  assert.equal(coerceType('showroom'), 'Showroom')
+  assert.equal(coerceType('chalet'), 'Chalet')
+  assert.equal(coerceType('standalone'), 'Standalone')
+  assert.equal(coerceType('garage'), 'Garage')
+  assert.equal(coerceType('warehouse'), 'Warehouse')
+  assert.equal(coerceType('duplex in Achrafieh'), 'Duplex')
+  assert.equal(coerceType('nice studio near Hamra'), 'Studio')
+})
+
 // ── The listing form ────────────────────────────────────────────────────────
 test('renderForm: lists every field with a required/optional tag', () => {
   const form = propForm()

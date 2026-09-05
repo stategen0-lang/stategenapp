@@ -2,12 +2,25 @@ import { NextRequest, NextResponse, after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/session'
-import { canEditProperty, isManager } from '@/lib/permissions'
+import { canEditProperty, isManager, owns, type Session } from '@/lib/permissions'
 import { createListingAlerts } from '@/lib/alerts-server'
 
 // The listing agent's code lives in the property's Amenities JSON.
 function propertyAgent(row: Record<string, unknown>): string | null {
   try { return (JSON.parse((row.Amenities as string) || '{}').agentId as string) ?? null } catch { return null }
+}
+
+// Owner name/contact and the private document are confidential to the listing's
+// own agent and managers. Everyone else in the company shares the inventory but
+// must not receive these — so we strip them from the raw row before it leaves
+// the server, not just hide them in the UI (which the network tab would expose).
+function stripPrivateFields(row: Record<string, unknown>, session: Session): Record<string, unknown> {
+  if (isManager(session.role) || owns(session, propertyAgent(row))) return row
+  try {
+    const ex = JSON.parse((row.Amenities as string) || '{}')
+    delete ex.ownerName; delete ex.ownerContact; delete ex.documentPath; delete ex.documentName
+    return { ...row, Amenities: JSON.stringify(ex) }
+  } catch { return row }
 }
 
 export async function GET() {
@@ -23,7 +36,8 @@ export async function GET() {
       .order('created_at', { ascending: false })
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ properties: data ?? [] })
+    const rows = (data ?? []).map(r => stripPrivateFields(r as Record<string, unknown>, session))
+    return NextResponse.json({ properties: rows })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
@@ -46,13 +60,23 @@ export async function POST(req: NextRequest) {
       transaction: body.transaction,
       garden: body.garden,
       balcony: body.balcony,
+      terrace: body.terrace,
+      furnishing: body.furnishing,
       view: body.view,
+      mapUrl: body.mapUrl,
+      video: body.video,
       rent: body.rent,
       advancedPayment: body.advancedPayment,
       agentId: body.agentId,
       notes: body.notes,
       aiDescription: body.aiDescription,
       parkings: body.parkings,
+      buildingAge: body.buildingAge,
+      needsRenovation: body.needsRenovation,
+      ownerName: body.ownerName,
+      ownerContact: body.ownerContact,
+      documentPath: body.documentPath,
+      documentName: body.documentName,
       status: body.status,
     }
 
@@ -117,7 +141,11 @@ export async function PATCH(req: NextRequest) {
       transaction: body.transaction,
       garden: body.garden,
       balcony: body.balcony,
+      terrace: body.terrace,
+      furnishing: body.furnishing,
       view: body.view,
+      mapUrl: body.mapUrl,
+      video: body.video,
       rent: body.rent,
       advancedPayment: body.advancedPayment,
       agentId: body.agentId,
@@ -126,6 +154,10 @@ export async function PATCH(req: NextRequest) {
       parkings: body.parkings,
       buildingAge: body.buildingAge,
       needsRenovation: body.needsRenovation,
+      ownerName: body.ownerName,
+      ownerContact: body.ownerContact,
+      documentPath: body.documentPath,
+      documentName: body.documentName,
       status: body.status,
     }
 

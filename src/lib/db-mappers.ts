@@ -32,6 +32,16 @@ export function dbRowToProperty(row: Record<string, unknown>, idx: number): Prop
     parkings: extras.parkings as number | undefined,
     buildingAge: extras.buildingAge as number | undefined,
     needsRenovation: !!(extras.needsRenovation),
+    terrace: !!(extras.terrace),
+    furnishing: extras.furnishing as Property['furnishing'] | undefined,
+    mapUrl: extras.mapUrl as string | undefined,
+    video: extras.video as string | undefined,
+    // Private fields — mapped here so the owning agent/managers can see them;
+    // callers that serve other agents or the public must strip them.
+    ownerName: extras.ownerName as string | undefined,
+    ownerContact: extras.ownerContact as string | undefined,
+    documentPath: extras.documentPath as string | undefined,
+    documentName: extras.documentName as string | undefined,
     photos: (() => { try { return JSON.parse(row.Photos as string || '[]') } catch { return [] } })(),
   }
 }
@@ -43,7 +53,7 @@ export function dbRowToClient(row: Record<string, unknown>, idx: number): Client
   // req.type must be a PROPERTY type (Appartement/Villa/…). Older imports wrongly
   // stored a transaction ("For Sale"/"For Rent") here, which then hard-excluded
   // every match on the type filter — so ignore anything that isn't a real type.
-  const VALID_REQ_TYPES = new Set(['Appartement', 'Shop', 'Office', 'Building', 'Villa', 'Land', 'Showroom', 'Restaurant'])
+  const VALID_REQ_TYPES = new Set(['Appartement', 'Duplex', 'Studio', 'Villa', 'Chalet', 'Standalone', 'Building', 'Land', 'Shop', 'Office', 'Showroom', 'Restaurant', 'Garage', 'Warehouse'])
   const reqType = VALID_REQ_TYPES.has(String(reqExtras.type)) ? (reqExtras.type as ClientReq['type']) : ''
   const req: ClientReq = {
     transaction: (row['payment_terms'] as ClientReq['transaction']) ?? '',

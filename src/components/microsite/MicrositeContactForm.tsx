@@ -2,8 +2,7 @@
 
 import { useState } from 'react'
 import { CheckCircle2 } from 'lucide-react'
-
-const PROPERTY_TYPES = ['Appartement', 'Villa', 'Office', 'Shop', 'Land', 'Building', 'Showroom', 'Restaurant']
+import { PROPERTY_TYPES, propertyTypeLabel } from '@/lib/data'
 
 export default function MicrositeContactForm({ slug, accent, onAccent, agency }: { slug: string; accent: string; onAccent: string; agency: string }) {
   const [f, setF] = useState({ name: '', phone: '', clientType: 'buyer', propertyType: '', location: '', budget: '', message: '', company: '' })
@@ -51,7 +50,7 @@ export default function MicrositeContactForm({ slug, accent, onAccent, agency }:
         </select>
         <select className={inp} style={inpStyle} value={f.propertyType} onChange={set('propertyType')}>
           <option value="">Any type</option>
-          {PROPERTY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+          {PROPERTY_TYPES.map(t => <option key={t} value={t}>{propertyTypeLabel(t)}</option>)}
         </select>
         <input className={inp} style={inpStyle} placeholder="Area (e.g. Achrafieh)" value={f.location} onChange={set('location')} />
         <input className={`${inp} col-span-2`} style={inpStyle} type="number" inputMode="numeric" placeholder="Budget (USD)" value={f.budget} onChange={set('budget')} />

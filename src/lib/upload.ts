@@ -66,6 +66,48 @@ function randomId(): string {
 
 export const PHOTO_BUCKET = 'property-photos'
 
+// ── Private documents ────────────────────────────────────────────────────────
+//
+// Owner-facing paperwork (title deeds, contracts, ID scans) is confidential, so
+// it lives in a SEPARATE, private bucket — never the public photo bucket. It is
+// only ever served through a permission-checked, short-lived signed URL, so a
+// leaked path alone grants nothing.
+
+export const DOC_BUCKET = 'property-documents'
+
+/** Documents can be a little larger than photos (scanned contracts). */
+export const MAX_DOC_BYTES = 10 * 1024 * 1024   // 10 MB
+
+/** Accepted document formats: PDF, Word (.doc/.docx) and any image. */
+const DOC_SIGNATURES: { ext: string; mime: string; test: (b: Uint8Array) => boolean }[] = [
+  { ext: 'pdf',  mime: 'application/pdf', test: b => b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46 },
+  // Legacy Office (.doc/.xls): OLE compound-file header.
+  { ext: 'doc',  mime: 'application/msword', test: b => b[0] === 0xd0 && b[1] === 0xcf && b[2] === 0x11 && b[3] === 0xe0 },
+  // Modern Office (.docx) is a ZIP ("PK"). We can't tell it from a plain zip by
+  // bytes alone, but the bucket is private and access is permission-gated, so we
+  // accept the zip signature and label it .docx.
+  { ext: 'docx', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', test: b => b[0] === 0x50 && b[1] === 0x4b && (b[2] === 0x03 || b[2] === 0x05 || b[2] === 0x07) },
+]
+
+/** Validate a document upload by size and true type (image, PDF or Word). */
+export function validateDocument(bytes: Uint8Array): ValidationResult {
+  if (!bytes.length) return { ok: false, error: 'The file is empty.' }
+  if (bytes.length > MAX_DOC_BYTES) {
+    return { ok: false, error: `File is too large (max ${Math.round(MAX_DOC_BYTES / 1024 / 1024)} MB).` }
+  }
+  const img = sniffImage(bytes)
+  if (img) return { ok: true, ext: img.ext, mime: img.mime }
+  const hit = DOC_SIGNATURES.find(s => s.test(bytes))
+  if (hit) return { ok: true, ext: hit.ext, mime: hit.mime }
+  return { ok: false, error: 'Unsupported file. Upload a PDF, Word document, or image.' }
+}
+
+/** Storage path for a private document, scoped and randomised like a photo. */
+export function documentPath(companyId: number, ext: string, rand: string = randomId()): string {
+  const safeExt = /^[a-z0-9]+$/.test(ext) ? ext : 'bin'
+  return `company-${companyId}/${rand}.${safeExt}`
+}
+
 /** A photo already living in our Storage bucket (vs. a legacy base64 blob). */
 export function isStoredPhoto(url: string): boolean {
   return typeof url === 'string' && url.includes(`/storage/v1/object/public/${PHOTO_BUCKET}/`)
