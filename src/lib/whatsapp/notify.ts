@@ -54,5 +54,6 @@ export async function notifyAgentNewClient(opts: NotifyOpts): Promise<{ notified
 
   // No template, or no client phone for the button → free text (24h window only).
   const res = await sendText(number, newClientLine(client))
-  return { notified: res.ok, reason: res.ok ? undefined : 'no template / no client phone' }
+  if (!res.ok) console.warn('[notify] free-text send failed:', res.error)
+  return { notified: res.ok, reason: res.ok ? undefined : (res.error ?? 'no template / no client phone') }
 }

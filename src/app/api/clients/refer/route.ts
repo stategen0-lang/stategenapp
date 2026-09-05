@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
     try { notesObj = JSON.parse((row.notes as string) || '{}') } catch {}
     after(async () => {
       try {
-        await notifyAgentNewClient({
+        const res = await notifyAgentNewClient({
           companyId,
           ownerAgentCode: toAgent,
           actorAgentCode: referrer,
@@ -95,7 +95,8 @@ export async function POST(req: NextRequest) {
             referredByName,
           },
         })
-      } catch { /* notification is best-effort */ }
+        if (!res.notified) console.warn('[refer] new agent not notified:', res.reason)
+      } catch (e) { console.error('[refer notify] threw', e) }
     })
 
     return NextResponse.json({ ok: true, toAgent, toAgentName: nameOf(toAgent), referredByName })
