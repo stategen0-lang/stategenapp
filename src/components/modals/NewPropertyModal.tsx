@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Sparkles, Loader2, ImagePlus, ChevronDown, ChevronLeft, ChevronRight, FileText, X } from 'lucide-react'
+import { Sparkles, Loader2, ImagePlus, ChevronDown, ChevronLeft, ChevronRight, FileText, X, MapPin } from 'lucide-react'
 import { Property, PropertyType, Transaction, PropertyStatus, AdvancedPayment, Furnishing, AgentId, CURRENT_AGENT_ID, PROPERTY_TYPES, propertyTypeLabel } from '@/lib/data'
 import { useSession } from '@/hooks/use-session'
 import { DescriptionTemplate, loadTemplates } from '@/lib/templates'
@@ -411,14 +411,6 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
             </div>
           </div>
 
-          {/* Exact location — Google Maps link */}
-          <div>
-            <label className={label} style={labelStyle}>
-              Exact location <span style={{ color: '#B0B8C8', fontWeight: 400 }}>(Google Maps link)</span>
-            </label>
-            <input className={inp} style={inpStyle} value={form.mapUrl} onChange={e => set('mapUrl', e.target.value)} placeholder="Paste a Google Maps pin link…" />
-          </div>
-
           {/* AI Description */}
           <div>
             <label className={label} style={labelStyle}>
@@ -593,6 +585,37 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
               <div>
                 <label className={label} style={labelStyle}>Owner number</label>
                 <input className={inp} style={inpStyle} value={form.ownerContact} onChange={e => set('ownerContact', e.target.value)} placeholder="e.g. 03 123 456" />
+              </div>
+            </div>
+
+            {/* Exact location — Google Maps link (private) */}
+            <div className="mt-3">
+              <label className={label} style={labelStyle}>
+                Exact location <span style={{ color: '#B0B8C8', fontWeight: 400 }}>(Google Maps link)</span>
+              </label>
+              <div className="flex gap-2">
+                <input
+                  className={inp} style={inpStyle} value={form.mapUrl}
+                  onChange={e => set('mapUrl', e.target.value)}
+                  placeholder="Paste a Google Maps pin link…"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const q = form.mapUrl.trim()
+                    // Open the pasted pin if there is one, otherwise a Maps search
+                    // for the address so the agent can grab the pin and paste it.
+                    const addr = [form.district, form.city].filter(Boolean).join(', ')
+                    const url = q
+                      ? (/^https?:\/\//i.test(q) ? q : `https://www.google.com/maps/search/${encodeURIComponent(q)}`)
+                      : `https://www.google.com/maps/search/${encodeURIComponent(addr || 'Lebanon')}`
+                    window.open(url, '_blank', 'noopener')
+                  }}
+                  className="flex items-center gap-1.5 px-3 rounded-xl text-xs font-semibold shrink-0"
+                  style={{ background: '#EAF0FA', color: '#2E5288' }}
+                >
+                  <MapPin className="h-3.5 w-3.5" /> Open
+                </button>
               </div>
             </div>
 

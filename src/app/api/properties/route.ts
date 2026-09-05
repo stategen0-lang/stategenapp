@@ -18,7 +18,7 @@ function stripPrivateFields(row: Record<string, unknown>, session: Session): Rec
   if (isManager(session.role) || owns(session, propertyAgent(row))) return row
   try {
     const ex = JSON.parse((row.Amenities as string) || '{}')
-    delete ex.ownerName; delete ex.ownerContact; delete ex.documentPath; delete ex.documentName
+    delete ex.ownerName; delete ex.ownerContact; delete ex.documentPath; delete ex.documentName; delete ex.mapUrl
     return { ...row, Amenities: JSON.stringify(ex) }
   } catch { return row }
 }

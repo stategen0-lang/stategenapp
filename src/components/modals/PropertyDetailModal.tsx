@@ -223,34 +223,23 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
               ))}
             </div>
 
-            {/* Map + video links */}
-            {(p.mapUrl || p.video) && (
+            {/* Video link (public-safe) */}
+            {p.video && (
               <div className="flex flex-wrap gap-2">
-                {p.mapUrl && (
-                  <a
-                    href={p.mapUrl} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold"
-                    style={{ background: '#EAF0FA', color: '#2E5288' }}
-                  >
-                    <MapPin className="h-3.5 w-3.5" /> View on map
-                  </a>
-                )}
-                {p.video && (
-                  <a
-                    href={p.video} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold"
-                    style={{ background: '#FAE8E3', color: '#C04A20' }}
-                  >
-                    <Play className="h-3.5 w-3.5" /> Watch video
-                  </a>
-                )}
+                <a
+                  href={p.video} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold"
+                  style={{ background: '#FAE8E3', color: '#C04A20' }}
+                >
+                  <Play className="h-3.5 w-3.5" /> Watch video
+                </a>
               </div>
             )}
 
             {/* Private — only reaches the owning agent + managers (the server
                 strips these fields for everyone else, so their mere presence
                 means the viewer is allowed to see them). */}
-            {(p.ownerName || p.ownerContact || p.documentPath) && (
+            {(p.ownerName || p.ownerContact || p.documentPath || p.mapUrl) && (
               <div className="rounded-xl p-3" style={{ background: '#FBF6EE', border: '1px solid #EFE2CC' }}>
                 <p className="text-[11px] font-bold mb-1.5" style={{ color: '#8A5A24' }}>🔒 Private — you & managers</p>
                 {(p.ownerName || p.ownerContact) && (
@@ -270,6 +259,16 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
                       </div>
                     )}
                   </div>
+                )}
+                {p.mapUrl && (
+                  <a
+                    href={p.mapUrl} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-2 mt-2 px-3 py-2 rounded-lg text-sm font-medium"
+                    style={{ background: '#fff', border: '1px solid #EFE2CC', color: '#14223F' }}
+                  >
+                    <MapPin className="h-4 w-4 shrink-0" style={{ color: '#2E5288' }} />
+                    <span className="truncate flex-1">Open exact location</span>
+                  </a>
                 )}
                 {p.documentPath && (
                   <a
