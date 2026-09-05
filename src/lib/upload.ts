@@ -108,6 +108,35 @@ export function documentPath(companyId: number, ext: string, rand: string = rand
   return `company-${companyId}/${rand}.${safeExt}`
 }
 
+// ── Walkthrough videos ───────────────────────────────────────────────────────
+//
+// Raw phone videos are far too big for a server upload (a Serverless Function
+// caps the request body at ~4.5 MB), so videos go straight from the browser to
+// Storage via a signed upload URL — our server only mints the token, it never
+// carries the bytes. The bucket is public so the file plays from a plain URL.
+
+export const VIDEO_BUCKET = 'property-videos'
+
+/** A generous cap for a short walkthrough clip. */
+export const MAX_VIDEO_BYTES = 150 * 1024 * 1024   // 150 MB
+
+/** Container formats phones actually produce. */
+export const VIDEO_MIME_TYPES = [
+  'video/mp4', 'video/quicktime', 'video/webm', 'video/x-m4v',
+  'video/3gpp', 'video/x-matroska',
+]
+const VIDEO_EXTS = new Set(['mp4', 'mov', 'webm', 'm4v', '3gp', 'mkv'])
+
+/** Keep only an extension we recognise, defaulting to mp4. */
+export function safeVideoExt(ext: string): string {
+  const e = ext.toLowerCase().replace(/[^a-z0-9]/g, '')
+  return VIDEO_EXTS.has(e) ? e : 'mp4'
+}
+
+export function videoPath(companyId: number, ext: string, rand: string = randomId()): string {
+  return `company-${companyId}/${rand}.${safeVideoExt(ext)}`
+}
+
 /** A photo already living in our Storage bucket (vs. a legacy base64 blob). */
 export function isStoredPhoto(url: string): boolean {
   return typeof url === 'string' && url.includes(`/storage/v1/object/public/${PHOTO_BUCKET}/`)

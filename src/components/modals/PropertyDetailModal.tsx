@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { MessageCircle, Link2, MapPin, Play, FileText, Phone } from 'lucide-react'
+import { MessageCircle, Link2, MapPin, FileText, Phone } from 'lucide-react'
 import { Property, Agent, Client, TYPE_GRADIENTS, statusStyle, formatPrice, buildDesc, getAgent } from '@/lib/data'
 import MatchCards from '@/components/matching/MatchCards'
 import OffersSection from '@/components/offers/OffersSection'
@@ -224,16 +224,11 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
               ))}
             </div>
 
-            {/* Video link (public-safe) */}
+            {/* Video walkthrough */}
             {p.video && (
-              <div className="flex flex-wrap gap-2">
-                <a
-                  href={p.video} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold"
-                  style={{ background: '#FAE8E3', color: '#C04A20' }}
-                >
-                  <Play className="h-3.5 w-3.5" /> Watch video
-                </a>
+              <div className="rounded-xl overflow-hidden" style={{ background: '#000' }}>
+                {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                <video src={p.video} controls playsInline preload="metadata" className="w-full" style={{ maxHeight: 280 }} />
               </div>
             )}
 

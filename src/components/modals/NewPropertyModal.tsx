@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Sparkles, Loader2, ImagePlus, ChevronDown, ChevronLeft, ChevronRight, FileText, X, MapPin } from 'lucide-react'
+import { Sparkles, Loader2, ImagePlus, ChevronDown, ChevronLeft, ChevronRight, FileText, X, MapPin, Video } from 'lucide-react'
 import { Property, PropertyType, Transaction, PropertyStatus, AdvancedPayment, Furnishing, AgentId, CURRENT_AGENT_ID, PROPERTY_TYPES, propertyTypeLabel } from '@/lib/data'
 import { useSession } from '@/hooks/use-session'
 import { DescriptionTemplate, loadTemplates } from '@/lib/templates'
+import { createClient as createSupabaseBrowser } from '@/lib/supabase/client'
+import { VIDEO_BUCKET, MAX_VIDEO_BYTES } from '@/lib/upload'
 
 const FURNISHINGS: Furnishing[] = ['Furnished', 'Semi-furnished', 'Unfurnished']
 
@@ -58,6 +60,10 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
   const [docUploading, setDocUploading] = useState(false)
   const [docError, setDocError] = useState('')
   const docInputRef = useRef<HTMLInputElement>(null)
+  // Video: uploaded straight to Storage (form.video holds the resulting URL).
+  const [videoUploading, setVideoUploading] = useState(false)
+  const [videoError, setVideoError] = useState('')
+  const videoInputRef = useRef<HTMLInputElement>(null)
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -165,6 +171,40 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
     } finally {
       setDocUploading(false)
       if (docInputRef.current) docInputRef.current.value = ''
+    }
+  }
+
+  // Video — uploaded straight from the phone to Storage via a signed URL, so a
+  // large raw clip never hits the (4.5 MB) server request limit.
+  async function handleVideoFile(files: FileList | null) {
+    const file = files?.[0]
+    if (!file) return
+    setVideoError('')
+    if (!file.type.startsWith('video/')) { setVideoError('Please choose a video file.'); return }
+    if (file.size > MAX_VIDEO_BYTES) {
+      setVideoError(`Video is too large (max ${Math.round(MAX_VIDEO_BYTES / 1024 / 1024)} MB). Trim it and try again.`)
+      return
+    }
+    setVideoUploading(true)
+    try {
+      const ext = (file.name.split('.').pop() || 'mp4')
+      // 1) Ask our server for a one-time signed upload URL.
+      const res = await fetch('/api/upload/video', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ext }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.token) { setVideoError(data.error || 'Could not start the upload.'); return }
+      // 2) Send the file straight to Storage (bypasses the server body limit).
+      const sb = createSupabaseBrowser()
+      const { error } = await sb.storage.from(VIDEO_BUCKET).uploadToSignedUrl(data.path, data.token, file)
+      if (error) { setVideoError('Upload failed. Please try again.'); return }
+      set('video', data.url)
+    } catch {
+      setVideoError('Network error. Try again.')
+    } finally {
+      setVideoUploading(false)
+      if (videoInputRef.current) videoInputRef.current.value = ''
     }
   }
 
@@ -572,12 +612,45 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
             )}
           </div>
 
-          {/* Video — a URL (walkthrough link or uploaded file) */}
+          {/* Video — a walkthrough clip uploaded from the phone */}
           <div>
             <label className={label} style={labelStyle}>
-              Video <span style={{ color: '#B0B8C8', fontWeight: 400 }}>(link — YouTube, Drive, Instagram…)</span>
+              Video <span style={{ color: '#B0B8C8', fontWeight: 400 }}>(a walkthrough clip, max {Math.round(MAX_VIDEO_BYTES / 1024 / 1024)} MB)</span>
             </label>
-            <input className={inp} style={inpStyle} value={form.video} onChange={e => set('video', e.target.value)} placeholder="Paste a video link…" />
+            {form.video ? (
+              <div className="rounded-xl overflow-hidden" style={{ border: '1.5px solid #EEF0F4', background: '#000' }}>
+                {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                <video src={form.video} controls className="w-full" style={{ maxHeight: 200 }} />
+                <button
+                  type="button"
+                  onClick={() => set('video', '')}
+                  className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-semibold"
+                  style={{ background: '#F7F8FB', color: '#A23434' }}
+                >
+                  <X className="h-3.5 w-3.5" /> Remove video
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => videoInputRef.current?.click()}
+                disabled={videoUploading}
+                className="flex items-center justify-center gap-2 w-full rounded-xl py-3 text-sm font-medium transition-colors hover:bg-blue-50 disabled:opacity-50"
+                style={{ border: '1.5px dashed #C4CAD6', color: '#7A8499' }}
+              >
+                {videoUploading
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading…</>
+                  : <><Video className="h-4 w-4" /> Upload a video</>}
+              </button>
+            )}
+            <input
+              ref={videoInputRef}
+              type="file"
+              accept="video/*"
+              className="hidden"
+              onChange={e => handleVideoFile(e.target.files)}
+            />
+            {videoError && <p className="text-xs mt-1.5" style={{ color: '#A23434' }}>{videoError}</p>}
           </div>
 
           {/* ── Private section — assigned agent + managers only ── */}
@@ -683,7 +756,7 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
             </button>
             <button
               onClick={() => handleSave(dupes.length > 0)}
-              disabled={!form.title || !form.city || uploading || docUploading || saving}
+              disabled={!form.title || !form.city || uploading || docUploading || videoUploading || saving}
               className="flex-1 rounded-xl py-2 text-sm font-bold text-white disabled:opacity-50"
               style={{ background: dupes.length > 0 ? '#9A6516' : '#0E1F3D' }}
             >
