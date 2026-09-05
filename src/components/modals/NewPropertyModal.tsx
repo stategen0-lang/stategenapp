@@ -92,6 +92,27 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
     setter(prev => prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value])
   }
 
+  // A single tick-box chip, shared by the boolean features and the array-backed
+  // amenities so they all look and behave the same.
+  function featureChip(labelText: string, on: boolean, onClick: () => void) {
+    return (
+      <button
+        key={labelText}
+        type="button"
+        onClick={onClick}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors"
+        style={{
+          border: on ? '1.5px solid #2E5288' : '1.5px solid #EEF0F4',
+          background: on ? '#EAF0FA' : '#F7F8FB',
+          color: on ? '#2E5288' : '#6A7488',
+        }}
+      >
+        <span className="w-4 h-4 rounded flex items-center justify-center text-[10px] text-white" style={{ background: on ? '#2E5288' : '#fff', border: on ? 'none' : '1.5px solid #C4CAD6' }}>{on ? '✓' : ''}</span>
+        {labelText}
+      </button>
+    )
+  }
+
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId)
 
   async function handleAiDescription() {
@@ -413,49 +434,15 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
             </div>
           </div>
 
-          {/* Features */}
-          <div className="flex gap-4 pt-1 flex-wrap">
-            <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: '#14223F' }}>
-              <input type="checkbox" checked={form.garden} onChange={e => set('garden', e.target.checked)} className="rounded" />
-              Garden
-            </label>
-            <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: '#14223F' }}>
-              <input type="checkbox" checked={form.balcony} onChange={e => set('balcony', e.target.checked)} className="rounded" />
-              Balcony
-            </label>
-            <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: '#14223F' }}>
-              <input type="checkbox" checked={form.terrace} onChange={e => set('terrace', e.target.checked)} className="rounded" />
-              Terrace
-            </label>
-            <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: '#14223F' }}>
-              <input type="checkbox" checked={form.needsRenovation} onChange={e => set('needsRenovation', e.target.checked)} className="rounded" />
-              Needs Renovation
-            </label>
-          </div>
-
-          {/* Property features (amenities) */}
+          {/* Property features */}
           <div>
             <label className={label} style={labelStyle}>Property features</label>
             <div className="flex gap-2 flex-wrap">
-              {PROPERTY_AMENITIES.map(a => {
-                const on = amenities.includes(a)
-                return (
-                  <button
-                    key={a}
-                    type="button"
-                    onClick={() => toggleIn(setAmenities, a)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors"
-                    style={{
-                      border: on ? '1.5px solid #2E5288' : '1.5px solid #EEF0F4',
-                      background: on ? '#EAF0FA' : '#F7F8FB',
-                      color: on ? '#2E5288' : '#6A7488',
-                    }}
-                  >
-                    <span className="w-4 h-4 rounded flex items-center justify-center text-[10px] text-white" style={{ background: on ? '#2E5288' : '#fff', border: on ? 'none' : '1.5px solid #C4CAD6' }}>{on ? '✓' : ''}</span>
-                    {a}
-                  </button>
-                )
-              })}
+              {featureChip('Garden', form.garden, () => set('garden', !form.garden))}
+              {featureChip('Balcony', form.balcony, () => set('balcony', !form.balcony))}
+              {featureChip('Terrace', form.terrace, () => set('terrace', !form.terrace))}
+              {featureChip('Needs Renovation', form.needsRenovation, () => set('needsRenovation', !form.needsRenovation))}
+              {PROPERTY_AMENITIES.map(a => featureChip(a, amenities.includes(a), () => toggleIn(setAmenities, a)))}
             </div>
           </div>
 
@@ -463,25 +450,7 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
           <div>
             <label className={label} style={labelStyle}>Building features</label>
             <div className="flex gap-2 flex-wrap">
-              {BUILDING_FEATURES.map(a => {
-                const on = buildingFeatures.includes(a)
-                return (
-                  <button
-                    key={a}
-                    type="button"
-                    onClick={() => toggleIn(setBuildingFeatures, a)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors"
-                    style={{
-                      border: on ? '1.5px solid #2E5288' : '1.5px solid #EEF0F4',
-                      background: on ? '#EAF0FA' : '#F7F8FB',
-                      color: on ? '#2E5288' : '#6A7488',
-                    }}
-                  >
-                    <span className="w-4 h-4 rounded flex items-center justify-center text-[10px] text-white" style={{ background: on ? '#2E5288' : '#fff', border: on ? 'none' : '1.5px solid #C4CAD6' }}>{on ? '✓' : ''}</span>
-                    {a}
-                  </button>
-                )
-              })}
+              {BUILDING_FEATURES.map(a => featureChip(a, buildingFeatures.includes(a), () => toggleIn(setBuildingFeatures, a)))}
             </div>
           </div>
 
