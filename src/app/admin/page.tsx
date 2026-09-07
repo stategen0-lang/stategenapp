@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Building2, Lock, CheckCircle2, XCircle, Clock, ChevronDown, ChevronRight, User, Calendar } from 'lucide-react'
 
-const ADMIN_PIN = 'sg2026'
 
 const QUICK = [
   { label: '30 days', days: 30 },
@@ -73,9 +72,14 @@ export default function AdminPage() {
     return () => document.removeEventListener('mousedown', onDown)
   }, [])
 
-  function handlePin(e: React.FormEvent) {
+  async function handlePin(e: React.FormEvent) {
     e.preventDefault()
-    if (pin === ADMIN_PIN) { setUnlocked(true); setPinError(false) }
+    const res = await fetch('/api/admin/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin }),
+    })
+    if (res.ok) { setUnlocked(true); setPinError(false) }
     else setPinError(true)
   }
 

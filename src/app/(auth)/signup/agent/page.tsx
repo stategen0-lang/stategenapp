@@ -23,6 +23,7 @@ export default function AgentSignupPage() {
   const [step, setStep]         = useState<Step>('form')
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState<string | null>(null)
+  const [consent, setConsent]   = useState(false)
 
   const [domain, setDomain]     = useState('')
   const [companyName, setCompanyName] = useState('')
@@ -329,13 +330,23 @@ export default function AgentSignupPage() {
               </div>
             </div>
 
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} className="mt-0.5 shrink-0" required />
+              <span className="text-xs" style={{ color: '#7A8499' }}>
+                I agree to the{' '}
+                <a href="/terms" target="_blank" className="underline" style={{ color: '#5E8FD6' }}>Terms of Service</a>
+                {' '}and{' '}
+                <a href="/privacy" target="_blank" className="underline" style={{ color: '#5E8FD6' }}>Privacy Policy</a>.
+              </span>
+            </label>
+
             {error && (
               <p className="text-xs px-3 py-2 rounded-lg" style={{ background: '#FBE7E7', color: '#A23434' }}>{error}</p>
             )}
 
             <button
               type="submit"
-              disabled={loading || !domainValid || slots?.full === true}
+              disabled={loading || !domainValid || slots?.full === true || !consent}
               className="w-full py-3 rounded-xl text-sm font-semibold text-white transition-opacity disabled:opacity-50"
               style={{ background: '#0E1F3D' }}
             >

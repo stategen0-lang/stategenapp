@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 }
 
 const UPDATED = 'July 31, 2026'
-const CONTACT = 'stategen0@gmail.com'
+const CONTACT = 'support@stategenapp.com'
 
 export default function PrivacyPage() {
   return (

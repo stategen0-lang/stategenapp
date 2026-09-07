@@ -15,6 +15,7 @@ export default function CompanySignupPage() {
   const [confirm, setConfirm]         = useState('')
   const [loading, setLoading]         = useState(false)
   const [error, setError]             = useState<string | null>(null)
+  const [consent, setConsent]         = useState(false)
 
   const inp = 'w-full pl-10 pr-4 py-2.5 text-sm outline-none transition-colors'
   const inpStyle = { border: '1.5px solid #D7DCE5', borderRadius: '10px', color: '#14223F', fontFamily: 'inherit', background: '#fff' }
@@ -144,9 +145,20 @@ export default function CompanySignupPage() {
               </div>
             </div>
 
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} className="mt-0.5 shrink-0" required />
+              <span className="text-xs" style={{ color: '#7A8499' }}>
+                I agree to the{' '}
+                <a href="/terms" target="_blank" className="underline" style={{ color: '#5E8FD6' }}>Terms of Service</a>
+                {' '}and{' '}
+                <a href="/privacy" target="_blank" className="underline" style={{ color: '#5E8FD6' }}>Privacy Policy</a>.
+                I understand my data will be used to operate the StateGen platform.
+              </span>
+            </label>
+
             {error && <p className="text-xs px-3 py-2 rounded-lg" style={{ background: '#FBE7E7', color: '#A23434' }}>{error}</p>}
 
-            <button type="submit" disabled={loading} className="w-full py-3 rounded-xl text-sm font-semibold text-white transition-opacity disabled:opacity-60" style={{ background: '#0E1F3D' }}>
+            <button type="submit" disabled={loading || !consent} className="w-full py-3 rounded-xl text-sm font-semibold text-white transition-opacity disabled:opacity-60" style={{ background: '#0E1F3D' }}>
               {loading ? 'Creating account…' : 'Create Account →'}
             </button>
           </form>

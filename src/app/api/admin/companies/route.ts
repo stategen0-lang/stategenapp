@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { checkAdminAuth } from '@/lib/admin-auth'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const deny = checkAdminAuth(req)
+  if (deny) return deny
   try {
     const supabase = createAdminClient()
     const { data, error } = await supabase
@@ -16,6 +19,8 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
+  const deny = checkAdminAuth(req)
+  if (deny) return deny
   try {
     const { id, active, access_until } = await req.json()
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
