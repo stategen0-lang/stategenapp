@@ -1,6 +1,6 @@
-import { NextRequest } from 'next/server'
+import { NextRequest, after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { verifySignature, twimlMessage } from '@/lib/whatsapp/twilio'
+import { verifyMetaSignature, parseInbound, verifyToken, sendReply, replyText, type BotReply, type InboundMessage } from '@/lib/whatsapp/cloud'
 import { normalizePhone } from '@/lib/whatsapp/phone'
 import { parseConfirmation, parseReminderReply } from '@/lib/whatsapp/replies'
 import { classifyIntent, Intent } from '@/lib/whatsapp/intent'
@@ -9,35 +9,15 @@ import {
   stageClientUpdate, stagePropertyUpdate, stageFeedback, stageDescribeProperty,
   applyPendingAction, handleReminderReply,
 } from '@/lib/whatsapp/write-handlers'
-import { startCreatePropertyFlow, startCreateClientFlow, continueFlow } from '@/lib/whatsapp/flow-handlers'
+import { startCreatePropertyFlow, startCreateClientFlow, continueFlow, handleFlowSubmission } from '@/lib/whatsapp/flow-handlers'
 import { stageDealMove, handleQueryPipeline } from '@/lib/whatsapp/pipeline-handlers'
 import { isStartListing, isStartClient } from '@/lib/whatsapp/flows'
 import { parseConnect, isStopMessage, normalizeCode, pairingExpired } from '@/lib/whatsapp/pairing'
-import { handleAgentActivity, handleOverdueReminders } from '@/lib/whatsapp/manager-handlers'
-import { stageCreateEvent, handleQuerySchedule } from '@/lib/whatsapp/calendar-handlers'
+import { handleAgentActivity, handleOverdueReminders, handleActivityFeed } from '@/lib/whatsapp/manager-handlers'
+import { stageLogOffer, stageResolveOffer, handleQueryOffers, continueOfferPick } from '@/lib/whatsapp/offer-handlers'
+import { continuePhotoCollection } from '@/lib/whatsapp/photo-handlers'
+import { stageCreateEvent, continueEventFlow, handleQuerySchedule } from '@/lib/whatsapp/calendar-handlers'
 import type { SupabaseClient } from '@supabase/supabase-js'
-
-// Twilio posts form-encoded data and expects TwiML back.
-const XML = { 'Content-Type': 'text/xml; charset=utf-8' }
-
-function reply(body: string) {
-  return new Response(twimlMessage(body), { status: 200, headers: XML })
-}
-
-/**
- * The public URL Twilio signed. Behind Vercel's proxy the internal request URL
- * is http and carries the internal host, so the signature must be checked
- * against the forwarded values instead.
- */
-function originOf(req: NextRequest): string {
-  const proto = req.headers.get('x-forwarded-proto') ?? 'https'
-  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? ''
-  return `${proto}://${host}`
-}
-
-function publicUrl(req: NextRequest): string {
-  return `${originOf(req)}${req.nextUrl.pathname}${req.nextUrl.search}`
-}
 
 interface Profile {
   id: string
@@ -58,12 +38,23 @@ async function log(
     direction: 'inbound' | 'outbound'
     message: string
     intent?: string | null
+    wa_message_id?: string | null
   },
 ): Promise<string | null> {
   try {
     const { data } = await admin.from('whatsapp_logs').insert(row).select('id').maybeSingle()
     return (data?.id as string) ?? null
   } catch {
+    // The wa_message_id column may not exist yet (migration 013). Retry without
+    // it so logging — and therefore replies — never break on a schema lag.
+    if ('wa_message_id' in row) {
+      const { wa_message_id: _omit, ...rest } = row
+      void _omit
+      try {
+        const { data } = await admin.from('whatsapp_logs').insert(rest).select('id').maybeSingle()
+        return (data?.id as string) ?? null
+      } catch { return null }
+    }
     return null   // logging must never break a reply
   }
 }
@@ -81,7 +72,7 @@ async function route(
   profile: Profile,
   body: string,
   origin: string,
-): Promise<{ intent: Intent | 'confirm_pending'; answer: string }> {
+): Promise<{ intent: Intent | 'confirm_pending'; answer: BotReply }> {
   // A write waiting on "yes" outranks anything a model might infer.
   const { data: pending } = await admin
     .from('pending_actions')
@@ -106,10 +97,20 @@ async function route(
     }
   }
 
+  // A pending "which client?" pick (e.g. mid-offer) — a numeric reply picks the
+  // client and continues the offer, rather than being re-read as a new message.
+  const pickAnswer = await continueOfferPick(admin, profile, body)
+  if (pickAnswer !== null) return { intent: 'log_offer', answer: pickAnswer }
+
   // Mid-flow, per the spec's router: an agent answering "Villa" to "what type?"
   // must not have that re-read as a fresh intent.
   const flowAnswer = await continueFlow(admin, profile, body)
   if (flowAnswer !== null) return { intent: 'create_property', answer: flowAnswer }
+
+  // An event waiting on a time: the agent's "tomorrow at 3pm" reply completes the
+  // booking rather than being read as a brand-new message.
+  const eventAnswer = await continueEventFlow(admin, profile, body)
+  if (eventAnswer !== null) return { intent: 'create_event', answer: eventAnswer }
 
   // "done" / "snooze 3d" / "not interested" only mean what they appear to while
   // a reminder is outstanding; otherwise this returns null and the message
@@ -144,7 +145,12 @@ async function route(
     case 'query_property': return { intent, answer: await handleQueryProperty(admin, profile, result) }
     case 'share_listing':  return { intent, answer: await handleShareListing(admin, profile, result, origin) }
     case 'describe_property': return { intent, answer: await stageDescribeProperty(admin, profile, result) }
+    case 'log_offer':      return { intent, answer: await stageLogOffer(admin, profile, result) }
+    case 'query_offers':   return { intent, answer: await handleQueryOffers(admin, profile, result) }
+    case 'accept_offer':   return { intent, answer: await stageResolveOffer(admin, profile, result, 'accept') }
+    case 'reject_offer':   return { intent, answer: await stageResolveOffer(admin, profile, result, 'reject') }
     case 'query_agents':   return { intent, answer: await handleAgentActivity(admin, profile) }
+    case 'query_activity': return { intent, answer: await handleActivityFeed(admin, profile) }
     case 'query_overdue':  return { intent, answer: await handleOverdueReminders(admin, profile) }
     case 'query_schedule': return { intent, answer: await handleQuerySchedule(admin, profile, body) }
     // Dates are inferred from prose, so this stages a confirmation like every
@@ -220,74 +226,102 @@ async function optOut(admin: SupabaseClient, profile: Profile): Promise<string> 
   return "You've been unsubscribed and won't get more messages here. To reconnect, open Settings → WhatsApp in the app and tap Connect."
 }
 
-export async function POST(req: NextRequest) {
-  const authToken = process.env.TWILIO_AUTH_TOKEN
-  if (!authToken) {
-    console.error('[whatsapp] TWILIO_AUTH_TOKEN is not set')
-    return new Response('Not configured', { status: 500 })
-  }
-
-  // ── Read the form body into a plain object (needed for the signature) ──────
-  const form = await req.formData()
-  const params: Record<string, string> = {}
-  for (const [k, v] of form.entries()) params[k] = typeof v === 'string' ? v : ''
-
-  // ── Authenticate the request ──────────────────────────────────────────────
-  // Without this, anyone who learns the URL could forge `From` and impersonate
-  // an agent, gaining full read/write access to that company's data.
-  const signature = req.headers.get('x-twilio-signature')
-  if (!verifySignature(authToken, signature, publicUrl(req), params)) {
-    console.warn('[whatsapp] rejected request with an invalid signature')
-    return new Response('Invalid signature', { status: 403 })
-  }
-
-  const from = params.From ?? ''
-  const body = (params.Body ?? '').trim()
+/**
+ * Resolve the sender, run the router, send the reply, and log both directions.
+ * Runs under `after()` — off the response path — because the Cloud API is
+ * asynchronous: we ack Meta's webhook with a fast 200 (below) and deliver the
+ * answer with a separate Graph call here, so Grok/template latency can't cause a
+ * webhook timeout or retry.
+ */
+async function handleInbound(
+  inbound: InboundMessage,
+  phone: string,
+  body: string,
+  inboundLogId: string | null,
+  origin: string,
+): Promise<void> {
   const admin = createAdminClient()
 
-  // ── Identify the agent by the number they messaged from ───────────────────
-  const phone = normalizePhone(from)
   const { data: profile } = await admin
     .from('Profiles')
     .select('id, company_id, role, agent_code, Full_name, whatsapp_number, whatsapp_enabled')
     .eq('whatsapp_number', phone)
     .maybeSingle<Profile>()
 
-  if (!profile) {
-    // An unknown number is either someone connecting ("connect <code>") or a
-    // stranger. Everything else gets pointed at the in-app connect flow.
-    const paired = await tryPair(admin, phone, body)
-    await log(admin, { from_number: phone, direction: 'inbound', message: body, intent: paired ? 'connect' : 'unregistered' })
-    return reply(paired ?? 'This number isn\'t connected to StateGen. Open the app → Settings → WhatsApp and tap Connect to link it.')
+  // The inbound row was already created (for dedupe) in POST; here we stamp it
+  // with the resolved company/profile/intent. Never breaks a reply.
+  const stamp = async (fields: Record<string, unknown>) => {
+    if (!inboundLogId) return
+    try { await admin.from('whatsapp_logs').update(fields).eq('id', inboundLogId) } catch { /* never break a reply */ }
   }
+
+  // Helper: send a reply (text or interactive buttons) and log the outbound row.
+  const answerWith = async (reply: BotReply, intent: string, p?: Profile) => {
+    const sent = await sendReply(inbound.from, reply)
+    if (!sent.ok) console.error('[whatsapp] reply send failed', sent.error)
+    await log(admin, {
+      company_id: p?.company_id ?? null,
+      profile_id: p?.id ?? null,
+      from_number: phone,
+      direction: 'outbound',
+      message: replyText(reply),
+      intent,
+    })
+  }
+
+  if (!profile) {
+    // Unknown number. The ONLY message we answer from an unregistered number is a
+    // genuine "connect <code>" pairing attempt — every other message is ignored
+    // silently, so the bot never replies to strangers, wrong numbers, or spam.
+    const paired = await tryPair(admin, phone, body)
+    if (paired === null) {
+      await stamp({ intent: 'ignored_unregistered' })
+      return
+    }
+    await stamp({ intent: 'connect' })
+    await answerWith(paired, 'connect')
+    return
+  }
+
+  await stamp({ company_id: profile.company_id, profile_id: profile.id })
 
   // A connected user texting STOP opts out (Meta requires honouring this), and
   // an account whose assistant is paused gets a short notice instead of replies.
   if (isStopMessage(body)) {
-    await log(admin, { company_id: profile.company_id, profile_id: profile.id, from_number: phone, direction: 'inbound', message: body, intent: 'opt_out' })
-    return reply(await optOut(admin, profile))
+    await stamp({ intent: 'opt_out' })
+    await answerWith(await optOut(admin, profile), 'opt_out', profile)
+    return
   }
   if (profile.whatsapp_enabled === false) {
-    await log(admin, { company_id: profile.company_id, profile_id: profile.id, from_number: phone, direction: 'inbound', message: body, intent: 'disabled' })
-    return reply('The WhatsApp assistant is turned off for your account. Turn it back on in Settings → WhatsApp.')
+    await stamp({ intent: 'disabled' })
+    await answerWith('The WhatsApp assistant is turned off for your account. Turn it back on in Settings → WhatsApp.', 'disabled', profile)
+    return
   }
 
-  // Logged before routing so an inbound message survives even if a handler
-  // throws; the resolved intent is written back onto this row afterwards.
-  const inboundLogId = await log(admin, {
-    company_id: profile.company_id,
-    profile_id: profile.id,
-    from_number: phone,
-    direction: 'inbound',
-    message: body,
-  })
+  // Just added a listing? A photo now gets attached to it; "done" or any other
+  // message ends the window (and, if it wasn't a photo, routes normally below).
+  const photoReply = await continuePhotoCollection(admin, profile, inbound)
+  if (photoReply !== null) {
+    await stamp({ intent: 'collect_photo' })
+    await answerWith(photoReply, 'collect_photo', profile)
+    return
+  }
 
-  // ── Route ─────────────────────────────────────────────────────────────────
-  let answer: string
+  // A submitted WhatsApp Flow form (native add-listing / add-client) — handled
+  // apart from text routing; it goes straight to confirm-before-write.
+  if (inbound.flow) {
+    let reply: BotReply
+    try { reply = await handleFlowSubmission(admin, profile, inbound.flow.data) }
+    catch (err) { console.error('[whatsapp] flow submission error', err); reply = 'Something went wrong saving the form. Please try again.' }
+    await stamp({ intent: 'flow_submit' })
+    await answerWith(reply, 'flow_submit', profile)
+    return
+  }
+
+  let answer: BotReply
   let intent: Intent | 'confirm_pending' = 'unknown'
-
   try {
-    const routed = await route(admin, profile, body, originOf(req))
+    const routed = await route(admin, profile, body, origin)
     intent = routed.intent
     answer = routed.answer
   } catch (err) {
@@ -296,23 +330,92 @@ export async function POST(req: NextRequest) {
     answer = 'Something went wrong on my side. Please try again in a moment.'
   }
 
-  if (inboundLogId) {
-    try { await admin.from('whatsapp_logs').update({ intent }).eq('id', inboundLogId) } catch { /* never break a reply */ }
-  }
-
-  await log(admin, {
-    company_id: profile.company_id,
-    profile_id: profile.id,
-    from_number: phone,
-    direction: 'outbound',
-    message: answer,
-    intent,
-  })
-
-  return reply(answer)
+  await stamp({ intent })
+  await answerWith(answer, intent, profile)
 }
 
-// Twilio pings the URL with GET when you save it in the console.
-export async function GET() {
-  return new Response('StateGen WhatsApp webhook is running.', { status: 200 })
+/**
+ * The public origin, for building absolute links in replies (share_listing).
+ * Behind Vercel's proxy the internal request URL is http on an internal host,
+ * so the forwarded headers are what carry the real values.
+ */
+function originOf(req: NextRequest): string {
+  const proto = req.headers.get('x-forwarded-proto') ?? 'https'
+  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? ''
+  return `${proto}://${host}`
+}
+
+export async function POST(req: NextRequest) {
+  const appSecret = process.env.WHATSAPP_APP_SECRET
+  if (!appSecret) {
+    console.error('[whatsapp] WHATSAPP_APP_SECRET is not set')
+    return new Response('Not configured', { status: 500 })
+  }
+
+  // ── Authenticate the request ──────────────────────────────────────────────
+  // HMAC over the RAW body — read it as text before any JSON parsing, because a
+  // re-serialised payload would not reproduce Meta's digest. Without this check,
+  // anyone who learns the URL could forge a sender and impersonate an agent.
+  const raw = await req.text()
+  const signature = req.headers.get('x-hub-signature-256')
+  if (!verifyMetaSignature(appSecret, signature, raw)) {
+    console.warn('[whatsapp] rejected request with an invalid signature')
+    return new Response('Invalid signature', { status: 403 })
+  }
+
+  let payload: unknown
+  try { payload = JSON.parse(raw) } catch { return new Response('Bad JSON', { status: 400 }) }
+
+  const inbound = parseInbound(payload)
+  // Status callbacks (delivery/read receipts) and anything non-actionable: just
+  // acknowledge so Meta stops retrying.
+  if (!inbound || !inbound.from) return new Response('ok', { status: 200 })
+
+  const phone = normalizePhone(inbound.from)
+  const body = inbound.text.trim()
+  const admin = createAdminClient()
+
+  // Atomic dedupe + inbound log in one insert. Meta delivers at-least-once, so
+  // the same message id can arrive several times (and did, badly, while the
+  // signature was misconfigured). The UNIQUE index on wa_message_id (migration
+  // 013) makes a repeat delivery fail this insert with 23505, so we ack and skip
+  // it — each message is processed exactly once. If the column isn't there yet,
+  // we fall back to a plain insert (no dedupe) so the bot still works.
+  let inboundLogId: string | null = null
+  const claim = await admin
+    .from('whatsapp_logs')
+    .insert({ direction: 'inbound', message: body, from_number: phone, wa_message_id: inbound.messageId })
+    .select('id')
+    .maybeSingle()
+  if (claim.error) {
+    if (claim.error.code === '23505') return new Response('ok', { status: 200 }) // duplicate delivery
+    const retry = await admin
+      .from('whatsapp_logs')
+      .insert({ direction: 'inbound', message: body, from_number: phone })
+      .select('id')
+      .maybeSingle()
+    inboundLogId = (retry.data?.id as string) ?? null
+  } else {
+    inboundLogId = (claim.data?.id as string) ?? null
+  }
+
+  // Ack immediately; do the real work (classification, DB writes, the reply
+  // send) after the response so webhook latency stays flat.
+  after(() => handleInbound(inbound, phone, body, inboundLogId, originOf(req)))
+  return new Response('ok', { status: 200 })
+}
+
+// Meta's webhook verification handshake: it GETs the URL with hub.mode,
+// hub.verify_token and hub.challenge. Echo the challenge back as plain text when
+// the token matches, else 403.
+export async function GET(req: NextRequest) {
+  const params = req.nextUrl.searchParams
+  const mode = params.get('hub.mode')
+  const token = params.get('hub.verify_token')
+  const challenge = params.get('hub.challenge')
+
+  if (mode === 'subscribe' && token && token === verifyToken()) {
+    return new Response(challenge ?? '', { status: 200, headers: { 'Content-Type': 'text/plain' } })
+  }
+  return new Response('Forbidden', { status: 403 })
 }

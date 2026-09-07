@@ -1,15 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
-  Client, ClientType, ClientStatus, ClientReq, PropertyType,
-  PROPERTIES, CURRENT_AGENT_ID, formatPrice
+  Client, ClientType, ClientStatus, ClientReq,
+  PROPERTIES, CURRENT_AGENT_ID, formatPrice, CLIENT_TAG_PRESETS, tagStyle,
+  PROPERTY_TYPES, propertyTypeLabel, FURNISHINGS, FLOORS
 } from '@/lib/data'
 import { matchProperties, MATCH_THRESHOLD, PropertyMatch } from '@/lib/matching'
 import { dbRowToProperty } from '@/lib/db-mappers'
 import { useSession } from '@/hooks/use-session'
-
-const PROPERTY_TYPES: PropertyType[] = ['Appartement', 'Shop', 'Office', 'Building', 'Villa', 'Land', 'Showroom', 'Restaurant']
+import { isManager } from '@/lib/permissions'
 
 interface Props {
   onClose: () => void
@@ -21,8 +21,9 @@ interface Props {
 let _nextId = 200
 
 const emptyReq = (): ClientReq => ({
-  transaction: '', type: '', location: '', priceMin: 0, priceMax: 0,
-  beds: 0, baths: 0, size: 0, garden: false, balcony: false, notes: '',
+  transaction: '', type: '', location: '', locations: [], priceMin: 0, priceMax: 0,
+  beds: 0, baths: 0, size: 0, garden: false, balcony: false,
+  view: '', furnishing: '', floor: '', notes: '',
 })
 
 export default function NewClientModal({ onClose, onSaved, matchThreshold = MATCH_THRESHOLD, initial }: Props) {
@@ -38,12 +39,90 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
   const [type, setType] = useState<ClientType>(initial?.type ?? 'Buyer')
   const [budget, setBudget] = useState<string>(initial?.budget ? String(initial.budget) : '')
   const [req, setReq] = useState<ClientReq>(initial?.req ? { ...emptyReq(), ...initial.req } : emptyReq())
+  // Areas the client is open to. Seeded from the array, or an older single/joined
+  // location string.
+  const [locations, setLocations] = useState<string[]>(
+    initial?.req?.locations?.length
+      ? initial.req.locations
+      : (initial?.req?.location ? initial.req.location.split(',').map(s => s.trim()).filter(Boolean) : [])
+  )
+  const [locationInput, setLocationInput] = useState('')
+  const [tags, setTags] = useState<string[]>(initial?.tags ?? [])
+  const [tagInput, setTagInput] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const [dupes, setDupes] = useState<{ id: number; name: string | null; mine: boolean }[]>([])
+
+  // A manager (e.g. the call-center) creating a client must say which agent owns
+  // it — an agent creating their own doesn't (it's always theirs). We only ask
+  // when there are real agents to assign to.
+  const manager = isManager(session?.role)
+  const [agentOptions, setAgentOptions] = useState<{ code: string; name: string }[]>([])
+  const [assignedAgent, setAssignedAgent] = useState<string>(initial?.agentId ?? '')
+
+  // A manager who also works as an agent owns their new clients by default — the
+  // dropdown starts on themselves, and they can reassign to another agent.
+  useEffect(() => {
+    if (!editing && manager && !assignedAgent && session?.agentCode) setAssignedAgent(session.agentCode)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manager, session?.agentCode, editing])
+
+  useEffect(() => {
+    if (!manager) return
+    let alive = true
+    fetch('/api/company/agents')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (!alive || !d?.agents) return
+        const opts = Object.entries(d.agents as Record<string, { name: string }>)
+          .map(([code, a]) => ({ code, name: a.name }))
+          .sort((x, y) => x.name.localeCompare(y.name))
+        setAgentOptions(opts)
+      })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [manager])
+
+  const needsAgent   = manager && agentOptions.length > 0
+  const agentMissing = needsAgent && !assignedAgent
 
   function setR(k: keyof ClientReq, v: string | number | boolean) {
     setReq(r => ({ ...r, [k]: v }))
   }
 
+  function addLocation() {
+    const v = locationInput.trim()
+    if (!v) return
+    setLocations(prev => prev.some(l => l.toLowerCase() === v.toLowerCase()) ? prev : [...prev, v].slice(0, 10))
+    setLocationInput('')
+  }
+  function removeLocation(l: string) {
+    setLocations(prev => prev.filter(x => x !== l))
+  }
+
+  // Fold the pending typed location in, and mirror the areas into both the
+  // display string (comma-joined) and the array used for matching.
+  function reqWithLocations(): ClientReq {
+    const extra = locationInput.trim()
+    const all = extra && !locations.some(l => l.toLowerCase() === extra.toLowerCase())
+      ? [...locations, extra] : locations
+    return { ...req, location: all.join(', '), locations: all }
+  }
+
+  function toggleTag(t: string) {
+    const v = t.trim().slice(0, 24)
+    if (!v) return
+    setTags(prev => prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v].slice(0, 12))
+  }
+  function addCustomTag() {
+    const v = tagInput.trim()
+    if (v && !tags.includes(v)) toggleTag(v)
+    setTagInput('')
+  }
+
   async function handleFindMatches() {
+    if (agentMissing) { setSaveError('Please choose the responsible agent.'); return }
+    setSaveError('')
     setFinding(true)
     // Match against the agency's real listings (demo data as offline fallback).
     let pool = PROPERTIES
@@ -54,14 +133,41 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
         if (Array.isArray(data.properties)) pool = data.properties.map(dbRowToProperty)
       }
     } catch { /* keep demo fallback */ }
-    setMatches(matchProperties({ req, budget: parseInt(budget) || 0, type }, pool, matchThreshold))
+    // Transaction is implied by client type (Buyer→For Sale, Renter→For Rent) —
+    // there's no separate field to fill.
+    const reqForMatch = { ...reqWithLocations(), transaction: (type === 'Renter' ? 'For Rent' : 'For Sale') as ClientReq['transaction'] }
+    setMatches(matchProperties({ req: reqForMatch, budget: parseInt(budget) || 0, type }, pool, matchThreshold))
     setFinding(false)
     setStep(2)
   }
 
-  async function handleSave() {
-    // Own code when signed in; the server re-stamps this for agents anyway.
-    const agentId = initial?.agentId ?? (session?.agentCode as typeof CURRENT_AGENT_ID) ?? CURRENT_AGENT_ID
+  async function handleSave(skipDupeCheck = false) {
+    if (!name.trim()) { setSaveError('Client name is required.'); return }
+    if (agentMissing) { setSaveError('Please choose the responsible agent.'); return }
+    setSaveError('')
+
+    // Warn about likely duplicates before creating a brand-new client (never on
+    // an edit). The user can override with "Save anyway".
+    if (!editing && !skipDupeCheck) {
+      setSaving(true)
+      try {
+        const r = await fetch('/api/clients/check', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, phone }),
+        })
+        if (r.ok) {
+          const d = await r.json()
+          if (Array.isArray(d.dupes) && d.dupes.length) { setDupes(d.dupes); setSaving(false); return }
+        }
+      } catch { /* if the check fails, don't block the save */ }
+    }
+    setDupes([])
+    setSaving(true)
+    // A manager picks the owning agent explicitly; an agent's own code is used
+    // (the server re-stamps agents to themselves regardless).
+    const agentId = manager
+      ? (assignedAgent as typeof CURRENT_AGENT_ID)
+      : (initial?.agentId ?? (session?.agentCode as typeof CURRENT_AGENT_ID) ?? CURRENT_AGENT_ID)
     const status: ClientStatus = initial?.status ?? 'Searching'
     const budgetNum = parseInt(budget) || 0
     const payload = {
@@ -69,7 +175,8 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
       budget: budgetNum,
       agentId,
       status,
-      req: { ...req, priceMin: budgetNum, priceMax: budgetNum },
+      req: { ...reqWithLocations(), priceMin: budgetNum, priceMax: budgetNum, transaction: (type === 'Renter' ? 'For Rent' : 'For Sale') as ClientReq['transaction'] },
+      tags,
     }
     let savedId = initial?.id ?? ++_nextId
     try {
@@ -78,9 +185,12 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editing ? { id: initial!.id, ...payload } : payload),
       })
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { setSaveError(data.error || 'Could not save. Please try again.'); setSaving(false); return }
       if (data.client?.id) savedId = data.client.id
-    } catch {}
+    } catch {
+      setSaveError('Network error. Please try again.'); setSaving(false); return
+    }
     const c: Client = { id: savedId, ...payload, agentId, status }
     onSaved(c)
   }
@@ -116,8 +226,17 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
                   <label className={label} style={labelStyle}>Name *</label>
                   <input className={inp} style={inpStyle} value={name} onChange={e => setName(e.target.value)} placeholder="Full name" />
                 </div>
+                {needsAgent && (
+                  <div className="col-span-2">
+                    <label className={label} style={labelStyle}>Assigned agent *</label>
+                    <select className={inp} style={inpStyle} value={assignedAgent} onChange={e => setAssignedAgent(e.target.value)}>
+                      <option value="">Choose an agent…</option>
+                      {agentOptions.map(a => <option key={a.code} value={a.code}>{a.name}</option>)}
+                    </select>
+                  </div>
+                )}
                 <div>
-                  <label className={label} style={labelStyle}>Email</label>
+                  <label className={label} style={labelStyle}>Email <span style={{ color: '#9AA3B2', fontWeight: 400 }}>(optional)</span></label>
                   <input className={inp} style={inpStyle} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="email@example.com" />
                 </div>
                 <div>
@@ -131,23 +250,35 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
                   </select>
                 </div>
                 <div>
-                  <label className={label} style={labelStyle}>Transaction</label>
-                  <select className={inp} style={inpStyle} value={req.transaction} onChange={e => setR('transaction', e.target.value)}>
-                    <option value="">Any</option>
-                    <option>For Sale</option>
-                    <option>For Rent</option>
-                  </select>
-                </div>
-                <div>
                   <label className={label} style={labelStyle}>Property type</label>
                   <select className={inp} style={inpStyle} value={req.type} onChange={e => setR('type', e.target.value)}>
                     <option value="">Any</option>
-                    {PROPERTY_TYPES.map(t => <option key={t}>{t}</option>)}
+                    {PROPERTY_TYPES.map(t => <option key={t} value={t}>{propertyTypeLabel(t)}</option>)}
                   </select>
                 </div>
-                <div>
-                  <label className={label} style={labelStyle}>Location</label>
-                  <input className={inp} style={inpStyle} value={req.location} onChange={e => setR('location', e.target.value)} placeholder="Beirut, Metn…" />
+                <div className="col-span-2">
+                  <label className={label} style={labelStyle}>
+                    Locations <span style={{ color: '#9AA3B2', fontWeight: 400 }}>(add one or more areas)</span>
+                  </label>
+                  {locations.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {locations.map(l => (
+                        <span key={l} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: '#EAF0FA', color: '#2E5288' }}>
+                          {l}
+                          <button type="button" onClick={() => removeLocation(l)} style={{ color: '#2E5288' }} className="leading-none">✕</button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <input
+                    className={inp}
+                    style={inpStyle}
+                    value={locationInput}
+                    onChange={e => setLocationInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addLocation() } }}
+                    onBlur={addLocation}
+                    placeholder="e.g. Achrafieh + Enter"
+                  />
                 </div>
                 <div className="col-span-2">
                   <label className={label} style={labelStyle}>
@@ -167,6 +298,28 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
                   <label className={label} style={labelStyle}>Min size (m²)</label>
                   <input className={inp} style={inpStyle} type="number" value={req.size || ''} onChange={e => setR('size', parseInt(e.target.value) || 0)} placeholder="100" />
                 </div>
+                <div>
+                  <label className={label} style={labelStyle}>View</label>
+                  <input className={inp} style={inpStyle} value={req.view ?? ''} onChange={e => setR('view', e.target.value)} placeholder="Sea, Mountain…" />
+                </div>
+                <div>
+                  <label className={label} style={labelStyle}>Furnishing</label>
+                  <select className={inp} style={inpStyle} value={req.furnishing ?? ''} onChange={e => setR('furnishing', e.target.value)}>
+                    <option value="">Any</option>
+                    {FURNISHINGS.map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={label} style={labelStyle}>Max building age (yrs)</label>
+                  <input className={inp} style={inpStyle} type="number" value={req.buildingAge || ''} onChange={e => setR('buildingAge', parseInt(e.target.value) || 0)} placeholder="e.g. 10" />
+                </div>
+                <div>
+                  <label className={label} style={labelStyle}>Floor</label>
+                  <select className={inp} style={inpStyle} value={req.floor ?? ''} onChange={e => setR('floor', e.target.value)}>
+                    <option value="">Any</option>
+                    {FLOORS.map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </div>
               </div>
 
               <div className="flex flex-wrap gap-4 pt-1">
@@ -178,12 +331,45 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
                   <input type="checkbox" checked={req.balcony} onChange={e => setR('balcony', e.target.checked)} />
                   Balcony required
                 </label>
-                {(req.transaction === 'For Rent' || type === 'Renter') && (
+                {type === 'Renter' && (
                   <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: '#14223F' }}>
                     <input type="checkbox" checked={req.advancedPayment ?? false} onChange={e => setR('advancedPayment', e.target.checked)} />
                     Can pay advanced <span className="text-xs" style={{ color: '#9AA3B2' }}>(optional)</span>
                   </label>
                 )}
+              </div>
+
+              <div>
+                <label className={label} style={labelStyle}>Tags</label>
+                {/* Quick-pick presets + any custom tags already on the client */}
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {[...new Set([...CLIENT_TAG_PRESETS, ...tags])].map(t => {
+                    const on = tags.includes(t)
+                    const s = tagStyle(t)
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => toggleTag(t)}
+                        className="text-xs font-semibold px-2.5 py-1 rounded-full transition-all"
+                        style={on
+                          ? { background: s.bg, color: s.color, boxShadow: `inset 0 0 0 1.5px ${s.color}` }
+                          : { background: '#F2F4F7', color: '#9AA3B2' }}
+                      >
+                        {on ? '✓ ' : ''}{t}
+                      </button>
+                    )
+                  })}
+                </div>
+                <input
+                  className={inp}
+                  style={inpStyle}
+                  value={tagInput}
+                  onChange={e => setTagInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomTag() } }}
+                  onBlur={addCustomTag}
+                  placeholder="Add a custom tag + Enter"
+                />
               </div>
 
               <div>
@@ -199,23 +385,24 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
               </div>
             </div>
 
+            {saveError && <p className="px-5 pt-3 text-xs" style={{ color: '#A23434' }}>{saveError}</p>}
             <div className="px-5 py-4 flex gap-3" style={{ borderTop: '1px solid #EEF0F4' }}>
               <button onClick={onClose} className="flex-1 rounded-xl py-2 text-sm font-semibold" style={{ border: '1.5px solid #EEF0F4', color: '#6A7488' }}>
                 Cancel
               </button>
               {editing ? (
                 <button
-                  onClick={handleSave}
-                  disabled={!name}
+                  onClick={() => handleSave()}
+                  disabled={!name || saving || agentMissing}
                   className="flex-1 rounded-xl py-2 text-sm font-bold text-white disabled:opacity-50"
                   style={{ background: '#0E1F3D' }}
                 >
-                  Save changes
+                  {saving ? 'Saving…' : 'Save changes'}
                 </button>
               ) : (
                 <button
                   onClick={handleFindMatches}
-                  disabled={!name || finding}
+                  disabled={!name || finding || agentMissing}
                   className="flex-1 rounded-xl py-2 text-sm font-bold text-white disabled:opacity-50"
                   style={{ background: '#0E1F3D' }}
                 >
@@ -293,16 +480,31 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
               )}
             </div>
 
+            {dupes.length > 0 && (
+              <div className="px-5 pt-3">
+                <div className="rounded-xl p-3" style={{ background: '#FBEFD6', border: '1px solid #E9CE90' }}>
+                  <p className="text-xs font-bold" style={{ color: '#9A6516' }}>Possible duplicate</p>
+                  <ul className="text-xs mt-1 space-y-0.5" style={{ color: '#7A5510' }}>
+                    {dupes.map(d => (
+                      <li key={d.id}>• {d.name ?? 'A client held by another agent'}{d.name && !d.mine ? ' (another agent)' : ''}</li>
+                    ))}
+                  </ul>
+                  <p className="text-[11px] mt-1.5" style={{ color: '#9A6516' }}>Save anyway if this is a different person.</p>
+                </div>
+              </div>
+            )}
+            {saveError && <p className="px-5 pt-3 text-xs" style={{ color: '#A23434' }}>{saveError}</p>}
             <div className="px-5 py-4 flex gap-3" style={{ borderTop: '1px solid #EEF0F4' }}>
               <button onClick={() => setStep(1)} className="flex-1 rounded-xl py-2 text-sm font-semibold" style={{ border: '1.5px solid #EEF0F4', color: '#6A7488' }}>
                 ← Back
               </button>
               <button
-                onClick={handleSave}
-                className="flex-1 rounded-xl py-2 text-sm font-bold text-white"
-                style={{ background: '#0E1F3D' }}
+                onClick={() => handleSave(dupes.length > 0)}
+                disabled={saving || agentMissing}
+                className="flex-1 rounded-xl py-2 text-sm font-bold text-white disabled:opacity-50"
+                style={{ background: dupes.length > 0 ? '#9A6516' : '#0E1F3D' }}
               >
-                Save client
+                {saving ? 'Saving…' : dupes.length > 0 ? 'Save anyway' : 'Save client'}
               </button>
             </div>
           </>

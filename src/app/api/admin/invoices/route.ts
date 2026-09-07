@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSession } from '@/lib/session'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { requireAdmin } from '@/lib/admin-guard'
 import { planFor } from '@/lib/stripe-plans'
 import { DEFAULT_PERIOD_DAYS } from '@/lib/billing'
 
@@ -12,13 +12,6 @@ import { DEFAULT_PERIOD_DAYS } from '@/lib/billing'
 //   PATCH { id, status:'paid'|'void', method? }
 //           marking paid stamps paid_at AND activates the company through the
 //           invoice's period_end — this is how access is granted/renewed.
-
-async function requireAdmin() {
-  const session = await getSession()
-  if (!session) return { error: 'Unauthorized', status: 401 as const }
-  if (!session.isPlatformAdmin) return { error: 'Forbidden', status: 403 as const }
-  return { session }
-}
 
 const iso = (d: Date) => d.toISOString().slice(0, 10)
 
@@ -51,7 +44,14 @@ export async function POST(req: NextRequest) {
   const today = new Date()
   const periodStart = body.period_start ? new Date(body.period_start) : today
   const periodEnd = body.period_end ? new Date(body.period_end) : new Date(today.getTime() + DEFAULT_PERIOD_DAYS * 86_400_000)
-  const amount = body.amount != null ? Number(body.amount) : (planDef?.price ?? 0)
+
+  // subtotal = the plan price (or an override); a discount % knocks it down to
+  // the payable amount. Discount is clamped to 0–100.
+  const subtotal = body.subtotal != null ? Number(body.subtotal)
+    : body.amount != null ? Number(body.amount)
+    : (planDef?.price ?? 0)
+  const discountPct = Math.min(100, Math.max(0, Number(body.discount_pct) || 0))
+  const amount = Math.round(subtotal * (1 - discountPct / 100) * 100) / 100
 
   // Human number: INV-YEAR-#### based on the count so far.
   const { count } = await admin.from('invoices').select('id', { count: 'exact', head: true })
@@ -61,6 +61,8 @@ export async function POST(req: NextRequest) {
     company_id: companyId,
     number,
     plan,
+    subtotal,
+    discount_pct: discountPct,
     amount,
     currency: 'USD',
     period_start: iso(periodStart),

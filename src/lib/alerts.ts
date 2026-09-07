@@ -62,6 +62,7 @@ export interface AlertView {
   propertyLabel: string   // "Villa · Achrafieh, Beirut"
   clientId: number | null
   clientName: string
+  clientPhone?: string | null   // to open WhatsApp to the client (agent forwards the listing)
   agentName?: string
 }
 

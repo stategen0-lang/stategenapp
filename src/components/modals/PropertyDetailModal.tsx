@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
-import { MessageCircle } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { MessageCircle, Link2, MapPin, FileText, Phone } from 'lucide-react'
 import { Property, Agent, Client, TYPE_GRADIENTS, statusStyle, formatPrice, buildDesc, getAgent } from '@/lib/data'
 import MatchCards from '@/components/matching/MatchCards'
+import OffersSection from '@/components/offers/OffersSection'
 import ClientDetailModal from './ClientDetailModal'
 
 interface Props {
@@ -22,31 +23,58 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
   const photos = p.photos ?? []
   const [activePhoto, setActivePhoto] = useState(0)
   const [stackedClient, setStackedClient] = useState<Client | null>(null)
-  const [shareLabel, setShareLabel] = useState('Share')
+  const [shareOpen, setShareOpen] = useState(false)
+  const [shareBusy, setShareBusy] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const shareUrlRef = useRef<string | null>(null)
 
-  // Ask the server to mint a signed public link, then copy it. The token can't
-  // be built client-side — it's signed with a server secret — so this is a
-  // fetch, not a string build.
-  async function sharePropertyLink() {
-    setShareLabel('…')
+  // Mint the signed public link once (the token is signed with a server secret,
+  // so it can't be built client-side) and cache it for this session.
+  async function getShareUrl(): Promise<string | null> {
+    if (shareUrlRef.current) return shareUrlRef.current
+    setShareBusy(true)
     try {
       const res = await fetch(`/api/share?id=${p.id}`)
-      if (!res.ok) { setShareLabel('Failed'); setTimeout(() => setShareLabel('Share'), 2000); return }
+      if (!res.ok) return null
       const { url } = await res.json()
-      try {
-        await navigator.clipboard.writeText(url)
-        setShareLabel('Copied ✓')
-      } catch {
-        // Clipboard blocked (older browser / insecure context): show the link
-        // so the agent can copy it by hand rather than losing it.
-        window.prompt('Share this listing link:', url)
-        setShareLabel('Share')
-      }
-      setTimeout(() => setShareLabel('Share'), 2500)
+      shareUrlRef.current = url as string
+      return url as string
     } catch {
-      setShareLabel('Failed')
-      setTimeout(() => setShareLabel('Share'), 2000)
+      return null
+    } finally {
+      setShareBusy(false)
     }
+  }
+
+  const shareText = () => {
+    const price = p.transaction === 'For Rent' ? `${formatPrice(p.rent)}/mo` : formatPrice(p.price)
+    const where = [p.district, p.city].filter(Boolean).join(', ')
+    return `${p.title}${where ? ` — ${where}` : ''} · ${price}`
+  }
+
+  async function onShareClick() {
+    const url = await getShareUrl()
+    if (!url) { setCopied(false); return }
+    // Mobile: the native share sheet already includes WhatsApp, Copy, etc.
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try { await navigator.share({ title: p.title, text: shareText(), url }); return } catch { /* cancelled → fall to menu */ }
+    }
+    setShareOpen(o => !o)
+  }
+
+  async function shareWhatsApp() {
+    const url = await getShareUrl()
+    if (!url) return
+    window.open(`https://wa.me/?text=${encodeURIComponent(`${shareText()}\n${url}`)}`, '_blank')
+    setShareOpen(false)
+  }
+
+  async function copyLink() {
+    const url = await getShareUrl()
+    if (!url) return
+    try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 2000) }
+    catch { window.prompt('Copy this listing link:', url) }
+    setShareOpen(false)
   }
 
   return (
@@ -77,13 +105,29 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
                 {p.type} · {p.transaction}
               </span>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={sharePropertyLink}
-                  className="h-7 px-3 rounded-full flex items-center justify-center text-white text-xs font-semibold leading-none"
-                  style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)' }}
-                >
-                  {shareLabel}
-                </button>
+                <div className="relative">
+                  <button
+                    onClick={onShareClick}
+                    className="h-7 px-3 rounded-full flex items-center justify-center text-white text-xs font-semibold leading-none"
+                    style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)' }}
+                  >
+                    {shareBusy ? '…' : copied ? 'Copied ✓' : 'Share'}
+                  </button>
+                  {shareOpen && (
+                    <>
+                      {/* click-away to close */}
+                      <div className="fixed inset-0 z-10" onClick={() => setShareOpen(false)} />
+                      <div className="absolute right-0 mt-1 z-20 rounded-xl overflow-hidden" style={{ background: '#fff', boxShadow: '0 6px 24px rgba(0,0,0,0.22)', minWidth: 180 }}>
+                        <button onClick={shareWhatsApp} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-medium hover:bg-gray-50" style={{ color: '#14223F' }}>
+                          <MessageCircle className="h-4 w-4" style={{ color: '#25D366' }} /> Share on WhatsApp
+                        </button>
+                        <button onClick={copyLink} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-medium hover:bg-gray-50" style={{ color: '#14223F', borderTop: '1px solid #EEF0F4' }}>
+                          <Link2 className="h-4 w-4" style={{ color: '#5E8FD6' }} /> Copy link
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
                 {onEdit && (
                   <button
                     onClick={() => onEdit(p)}
@@ -165,10 +209,14 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
                 { label: 'View',      value: p.view || '—' },
                 { label: 'Garden',    value: p.garden ? 'Yes' : 'No' },
                 { label: 'Balcony',   value: p.balcony ? 'Yes' : 'No' },
+                ...(p.terrace ? [{ label: 'Terrace', value: 'Yes' }] : []),
+                ...(p.furnishing ? [{ label: 'Furnishing', value: p.furnishing }] : []),
                 ...(p.parkings ? [{ label: 'Parking', value: String(p.parkings) }] : []),
                 ...(p.buildingAge ? [{ label: 'Building Age', value: `${p.buildingAge} yrs` }] : []),
+                ...(p.floor ? [{ label: 'Floor', value: p.floor }] : []),
                 ...(p.needsRenovation ? [{ label: 'Renovation', value: 'Needed' }] : []),
                 ...(p.advancedPayment ? [{ label: 'Advanced pay', value: p.advancedPayment }] : []),
+                ...(p.referredBy ? [{ label: 'Referred by', value: p.referredBy }] : []),
               ].map(({ label, value }) => (
                 <div key={label} className="rounded-xl p-3" style={{ background: '#F7F8FB' }}>
                   <p className="text-xs" style={{ color: '#9AA3B2' }}>{label}</p>
@@ -176,6 +224,72 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
                 </div>
               ))}
             </div>
+
+            {/* Amenities & building features */}
+            {[...(p.amenities ?? []), ...(p.buildingFeatures ?? [])].length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {[...(p.amenities ?? []), ...(p.buildingFeatures ?? [])].map(f => (
+                  <span key={f} className="text-xs font-semibold px-3 py-1.5 rounded-full" style={{ background: '#EAF0FA', color: '#2E5288' }}>
+                    {f}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Video walkthrough */}
+            {p.video && (
+              <div className="rounded-xl overflow-hidden" style={{ background: '#000' }}>
+                {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                <video src={p.video} controls playsInline preload="metadata" className="w-full" style={{ maxHeight: 280 }} />
+              </div>
+            )}
+
+            {/* Private — only reaches the owning agent + managers (the server
+                strips these fields for everyone else, so their mere presence
+                means the viewer is allowed to see them). */}
+            {(p.ownerName || p.ownerContact || p.documentPath || p.mapUrl) && (
+              <div className="rounded-xl p-3" style={{ background: '#FBF6EE', border: '1px solid #EFE2CC' }}>
+                <p className="text-[11px] font-bold mb-1.5" style={{ color: '#8A5A24' }}>🔒 Private — you & managers</p>
+                {(p.ownerName || p.ownerContact) && (
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold truncate" style={{ color: '#14223F' }}>{p.ownerName || 'Owner'}</p>
+                      {p.ownerContact && <p className="text-xs" style={{ color: '#6A7488' }}>{p.ownerContact}</p>}
+                    </div>
+                    {p.ownerContact && (
+                      <div className="flex gap-1.5 shrink-0">
+                        <a href={`tel:${p.ownerContact.replace(/[^\d+]/g, '')}`} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-white" style={{ background: '#2E5288' }}>
+                          <Phone className="h-3 w-3" /> Call
+                        </a>
+                        <a href={`https://wa.me/${p.ownerContact.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-white" style={{ background: '#25D366' }}>
+                          <MessageCircle className="h-3 w-3" /> WhatsApp
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {p.mapUrl && (
+                  <a
+                    href={p.mapUrl} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-2 mt-2 px-3 py-2 rounded-lg text-sm font-medium"
+                    style={{ background: '#fff', border: '1px solid #EFE2CC', color: '#14223F' }}
+                  >
+                    <MapPin className="h-4 w-4 shrink-0" style={{ color: '#2E5288' }} />
+                    <span className="truncate flex-1">Open exact location</span>
+                  </a>
+                )}
+                {p.documentPath && (
+                  <a
+                    href={`/api/properties/document?id=${p.id}`} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-2 mt-2 px-3 py-2 rounded-lg text-sm font-medium"
+                    style={{ background: '#fff', border: '1px solid #EFE2CC', color: '#14223F' }}
+                  >
+                    <FileText className="h-4 w-4 shrink-0" style={{ color: '#2E5288' }} />
+                    <span className="truncate flex-1">{p.documentName || 'Open document'}</span>
+                  </a>
+                )}
+              </div>
+            )}
 
             <div className="flex items-center gap-3 pt-2" style={{ borderTop: '1px solid #EEF0F4' }}>
               <div
@@ -199,6 +313,11 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
                   <MessageCircle className="h-3.5 w-3.5" /> Message
                 </a>
               )}
+            </div>
+
+            {/* ── Offers & negotiation ── */}
+            <div style={{ borderTop: '1px solid #EEF0F4', paddingTop: 16 }}>
+              <OffersSection propertyId={p.id} asking={p.transaction === 'For Rent' ? p.rent : p.price} />
             </div>
 
             {/* ── AI Matching ── */}

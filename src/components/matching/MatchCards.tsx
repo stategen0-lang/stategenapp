@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { MessageCircle, ExternalLink, X, RefreshCw } from 'lucide-react'
+import { MessageCircle, ExternalLink, X, RefreshCw, Share2 } from 'lucide-react'
 import {
   PROPERTIES, CLIENTS, getAgent,
   Property, Client,
@@ -86,7 +86,7 @@ function SubScores({ s }: { s: ScoreResult }) {
 // ── Match card shell ──────────────────────────────────────────────────────────
 function MatchCard({ score, onDismiss, children }: { score: number; onDismiss: () => void; children: React.ReactNode }) {
   return (
-    <div className="relative flex items-start gap-3 p-3 rounded-xl mb-3 transition-all"
+    <div className="relative p-3 rounded-xl mb-3 transition-all"
       style={{
         border:     score >= 75 ? '1.5px solid #B5DFC8' : '1.5px solid #F0DEB5',
         background: score >= 75 ? '#F4FCF8'             : '#FFFAF0',
@@ -130,6 +130,45 @@ export default function MatchCards({ entityType, entity, onOpenProperty, onOpenC
   const [matchedProperties, setMatchedProperties] = useState<MatchedProperty[]>([])
   const [dismissed, setDismissed] = useState<Set<number>>(new Set())
   const [loading,   setLoading]   = useState(true)
+  const [busyKey,   setBusyKey]   = useState<number | null>(null)   // card minting a link
+  const [copiedKey, setCopiedKey] = useState<number | null>(null)   // card that just copied
+
+  // Mint the public /l/<token> link for a listing (empty string on failure —
+  // we'd rather share/forward without it than block the agent).
+  async function mintLink(propertyId: number): Promise<string> {
+    try {
+      const r = await fetch(`/api/share?id=${propertyId}`)
+      if (r.ok) return (await r.json()).url ?? ''
+    } catch { /* fall through */ }
+    return ''
+  }
+
+  // Regular share: native sheet on mobile, copy-to-clipboard on desktop.
+  async function shareListing(propertyId: number, title: string, cardKey: number) {
+    setBusyKey(cardKey)
+    const url = await mintLink(propertyId)
+    setBusyKey(null)
+    if (!url) return
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try { await navigator.share({ title, text: title, url }); return } catch { /* cancelled → copy */ }
+    }
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopiedKey(cardKey)
+      setTimeout(() => setCopiedKey(k => (k === cardKey ? null : k)), 2000)
+    } catch { /* clipboard blocked — nothing to do */ }
+  }
+
+  // Forward a listing to a specific client from the AGENT'S OWN WhatsApp (the bot
+  // never messages clients — see the client-contact product rule).
+  async function forwardToClient(propertyId: number, title: string, phone: string, clientName: string, cardKey: number) {
+    setBusyKey(cardKey)
+    const url = await mintLink(propertyId)
+    setBusyKey(null)
+    const first = clientName.split(' ')[0]
+    const msg = `Hi ${first}, I found a listing that might suit you — ${title}.${url ? `\n${url}` : ''}`
+    window.open(`https://wa.me/${phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank')
+  }
 
   const runMatching = useCallback(async () => {
     setLoading(true)
@@ -213,28 +252,33 @@ export default function MatchCards({ entityType, entity, onOpenProperty, onOpenC
         const prop     = entity as Property
         const features = propFeatures(prop)
         const wishlist = [...(c.req.garden ? ['garden'] : []), ...(c.req.balcony ? ['balcony'] : [])]
-        const waMsg    = encodeURIComponent(`Hi, I have a property match for your client ${c.name} — score ${Math.round(s.total)}%. Interested?`)
+        const first    = c.name.split(' ')[0]
         return (
           <MatchCard key={c.id} score={s.total} onDismiss={() => setDismissed(prev => new Set([...prev, c.id]))}>
-            <div className="w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0" style={{ background: agent.color }}>
-              {initials}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold truncate" style={{ color: '#1A2B4A' }}>{c.name}</p>
-              <p className="text-xs" style={{ color: '#7A8499' }}>
-                Budget {formatPrice(c.budget)} · {c.req.type || 'Any type'} · {c.req.location || 'Any area'}
-              </p>
-              <AmenityPills features={features} wishlist={wishlist} />
-              <SubScores s={s} />
-            </div>
-            <div className="flex flex-col items-end gap-2 shrink-0">
-              <ScoreRing score={s.total} />
-              <div className="flex gap-1.5">
-                <ActionBtn icon={<ExternalLink className="h-3.5 w-3.5" />} label="View" color="#5E8FD6"
-                  onClick={() => onOpenClient?.(c)} />
-                <ActionBtn icon={<MessageCircle className="h-3.5 w-3.5" />} label="WhatsApp" color="#1D9E75"
-                  onClick={() => window.open(`https://wa.me/?text=${waMsg}`, '_blank')} />
+            <div className="flex items-start gap-3 pr-5">
+              <div className="w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0" style={{ background: agent.color }}>
+                {initials}
               </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold truncate" style={{ color: '#1A2B4A' }}>{c.name}</p>
+                <p className="text-xs" style={{ color: '#7A8499' }}>
+                  Budget {formatPrice(c.budget)} · {c.req.type || 'Any type'} · {c.req.location || 'Any area'}
+                </p>
+                <AmenityPills features={features} wishlist={wishlist} />
+                <SubScores s={s} />
+              </div>
+              <ScoreRing score={s.total} />
+            </div>
+            <div className="flex flex-wrap gap-1.5 mt-2.5">
+              <ActionBtn icon={<ExternalLink className="h-3.5 w-3.5" />} label="View" color="#5E8FD6"
+                onClick={() => onOpenClient?.(c)} />
+              {c.phone && !c.masked && (
+                <ActionBtn icon={<MessageCircle className="h-3.5 w-3.5" />} label={`Forward to ${first}`} color="#1D9E75"
+                  onClick={() => forwardToClient(prop.id, prop.title, c.phone, c.name, c.id)} />
+              )}
+              <ActionBtn icon={<Share2 className="h-3.5 w-3.5" />}
+                label={copiedKey === c.id ? 'Copied ✓' : busyKey === c.id ? '…' : 'Share'} color="#7A8499"
+                onClick={() => shareListing(prop.id, prop.title, c.id)} />
             </div>
           </MatchCard>
         )
@@ -246,31 +290,36 @@ export default function MatchCards({ entityType, entity, onOpenProperty, onOpenC
         const client   = entity as Client
         const features = propFeatures(p)
         const wishlist = [...(client.req.garden ? ['garden'] : []), ...(client.req.balcony ? ['balcony'] : [])]
-        const waMsg    = encodeURIComponent(`Hi, I found a property match — ${p.title} in ${p.district}, ${p.city}. Score: ${Math.round(s.total)}%. Interested?`)
+        const first    = client.name.split(' ')[0]
         return (
           <MatchCard key={p.id} score={s.total} onDismiss={() => setDismissed(prev => new Set([...prev, p.id]))}>
-            {photos[0]
-              ? // eslint-disable-next-line @next/next/no-img-element
-                <img src={photos[0]} alt={p.title} className="w-14 h-10 rounded-lg object-cover shrink-0" />
-              : <div className="w-14 h-10 rounded-lg shrink-0" style={{ background: TYPE_GRADIENTS[p.type] }} />
-            }
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold truncate" style={{ color: '#1A2B4A' }}>{p.title}</p>
-              <p className="text-xs" style={{ color: '#7A8499' }}>
-                {formatPrice(p.transaction === 'For Rent' ? p.rent : p.price)}{p.transaction === 'For Rent' ? '/mo' : ''} · {p.type} · {p.district}, {p.city}
-                {p.beds > 0 ? ` · ${p.beds}bd` : ''}
-              </p>
-              <AmenityPills features={features} wishlist={wishlist} />
-              <SubScores s={s} />
-            </div>
-            <div className="flex flex-col items-end gap-2 shrink-0">
-              <ScoreRing score={s.total} />
-              <div className="flex gap-1.5">
-                <ActionBtn icon={<ExternalLink className="h-3.5 w-3.5" />} label="View" color="#5E8FD6"
-                  onClick={() => onOpenProperty?.(p)} />
-                <ActionBtn icon={<MessageCircle className="h-3.5 w-3.5" />} label="WhatsApp" color="#1D9E75"
-                  onClick={() => window.open(`https://wa.me/?text=${waMsg}`, '_blank')} />
+            <div className="flex items-start gap-3 pr-5">
+              {photos[0]
+                ? // eslint-disable-next-line @next/next/no-img-element
+                  <img src={photos[0]} alt={p.title} className="w-14 h-10 rounded-lg object-cover shrink-0" />
+                : <div className="w-14 h-10 rounded-lg shrink-0" style={{ background: TYPE_GRADIENTS[p.type] }} />
+              }
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold truncate" style={{ color: '#1A2B4A' }}>{p.title}</p>
+                <p className="text-xs" style={{ color: '#7A8499' }}>
+                  {formatPrice(p.transaction === 'For Rent' ? p.rent : p.price)}{p.transaction === 'For Rent' ? '/mo' : ''} · {p.type} · {p.district}, {p.city}
+                  {p.beds > 0 ? ` · ${p.beds}bd` : ''}
+                </p>
+                <AmenityPills features={features} wishlist={wishlist} />
+                <SubScores s={s} />
               </div>
+              <ScoreRing score={s.total} />
+            </div>
+            <div className="flex flex-wrap gap-1.5 mt-2.5">
+              <ActionBtn icon={<ExternalLink className="h-3.5 w-3.5" />} label="View" color="#5E8FD6"
+                onClick={() => onOpenProperty?.(p)} />
+              {client.phone && !client.masked && (
+                <ActionBtn icon={<MessageCircle className="h-3.5 w-3.5" />} label={`Forward to ${first}`} color="#1D9E75"
+                  onClick={() => forwardToClient(p.id, p.title, client.phone, client.name, p.id)} />
+              )}
+              <ActionBtn icon={<Share2 className="h-3.5 w-3.5" />}
+                label={copiedKey === p.id ? 'Copied ✓' : busyKey === p.id ? '…' : 'Share'} color="#7A8499"
+                onClick={() => shareListing(p.id, p.title, p.id)} />
             </div>
           </MatchCard>
         )

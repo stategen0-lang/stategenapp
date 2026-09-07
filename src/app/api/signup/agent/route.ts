@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { agentLimitFor } from '@/lib/stripe-plans'
+import { seatsUsed } from '@/lib/seats'
+import { createAgentAccount } from '@/lib/agent-account'
 
 // Agent signup — server-authoritative.
 //
@@ -15,11 +17,10 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const domain = String(body.domain ?? '').toLowerCase().trim()
-    const agentCode = String(body.agentCode ?? '').trim()
     const fullName = String(body.fullName ?? '').trim()
     const password = String(body.password ?? '')
 
-    if (!domain || !agentCode || !fullName || !password) {
+    if (!domain || !fullName || !password) {
       return NextResponse.json({ error: 'Missing required fields.' }, { status: 400 })
     }
     if (password.length < 8) {
@@ -37,52 +38,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No agency found for that domain.' }, { status: 404 })
     }
 
-    // Enforce the plan's agent cap against approved agents — if every seat is
-    // already taken, a new signup could never be approved anyway.
+    // Enforce the plan's seat cap up front (a pending agent doesn't hold a seat,
+    // but if every seat is taken a new signup could never be approved anyway).
     const limit = agentLimitFor(company.Plan as string)
-    const { count } = await admin
-      .from('Profiles')
-      .select('id', { count: 'exact', head: true })
-      .eq('company_id', company.id)
-      .eq('role', 'agent')
-      .eq('approved', true)
-    const used = count ?? 0
+    const used = await seatsUsed(admin, company.id)
     if (limit !== null && used >= limit) {
       return NextResponse.json(
-        { error: `${company.Name} has reached its plan's limit of ${limit} agents. Ask your manager to upgrade to add more seats.` },
+        { error: `${company.Name} has reached its plan's limit of ${limit} users. Ask your manager to upgrade to add more seats.` },
         { status: 409 },
       )
     }
 
-    const email = `${agentCode.toLowerCase()}@${domain}`
-    const { data: created, error: authErr } = await admin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: { full_name: fullName },
+    // Server generates the agent code (regenerating on any collision), so the
+    // agent never hits a "that ID is taken" dead-end. Pending until approved.
+    const result = await createAgentAccount(admin, {
+      companyId: company.id as number,
+      companyName: (company.Name as string) ?? 'your agency',
+      domain,
+      plan: (company.Plan as string) ?? null,
+      fullName, password,
+      approved: false,
     })
-    if (authErr || !created?.user) {
-      const already = /already|registered|exists/i.test(authErr?.message ?? '')
-      return NextResponse.json(
-        { error: already ? 'An account with that agent ID already exists — go back and try again for a new ID.' : (authErr?.message ?? 'Could not create the account.') },
-        { status: already ? 409 : 500 },
-      )
-    }
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
 
-    const { error: profErr } = await admin.from('Profiles').insert({
-      id: created.user.id,
-      company_id: company.id,
-      Full_name: fullName,
-      role: 'agent',
-      agent_code: agentCode,
-    })
-    if (profErr) {
-      // Roll back the half-created auth user so a retry isn't blocked.
-      await admin.auth.admin.deleteUser(created.user.id).catch(() => {})
-      return NextResponse.json({ error: profErr.message }, { status: 500 })
-    }
-
-    return NextResponse.json({ ok: true, companyName: company.Name })
+    return NextResponse.json({ ok: true, companyName: company.Name, agentCode: result.agentCode, email: result.email })
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Signup failed.' }, { status: 500 })
   }

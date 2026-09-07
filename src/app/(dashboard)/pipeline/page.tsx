@@ -15,6 +15,12 @@ import { isManager } from '@/lib/permissions'
 const H = '#14223F'
 const SUB = '#6A7488'
 
+const OFFER_BADGE: Record<string, { bg: string; color: string }> = {
+  open:     { bg: '#FBEFD6', color: '#9A6516' },
+  accepted: { bg: '#E3F4EA', color: '#1F7A4D' },
+  rejected: { bg: '#FBE7E7', color: '#A23434' },
+}
+
 // Resolve against the live roster. Never falls back to "the first agent" —
 // that silently displayed one agent's deals under another's name and colour.
 function agentOf(roster: RosterAgent[], id: string | null) {
@@ -83,6 +89,16 @@ function DealCard({
         </span>
       </div>
 
+      {deal.offer && (
+        <span
+          className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+          style={OFFER_BADGE[deal.offer.status] ?? OFFER_BADGE.open}
+          title="Current offer"
+        >
+          💬 {formatPrice(deal.offer.amount)}{deal.offer.status !== 'open' ? ` · ${deal.offer.status}` : ''}
+        </span>
+      )}
+
       {/* Won / Lost picker for closed deals with no outcome yet */}
       {deal.stage === 'closed' && !deal.outcome && (
         <div className="flex gap-1.5 mt-2">
@@ -146,9 +162,12 @@ export default function PipelinePage() {
 
   const load = useCallback(async () => {
     const id = ++requestId.current
+    // Never let a slow/cold request leave the board spinning forever.
+    const ctrl = new AbortController()
+    const t = setTimeout(() => ctrl.abort(), 12000)
     try {
       const url = agentFilter ? `/api/deals?agent=${encodeURIComponent(agentFilter)}` : '/api/deals'
-      const res = await fetch(url)
+      const res = await fetch(url, { signal: ctrl.signal })
       if (res.ok) {
         const data = await res.json()
         if (id !== requestId.current) return   // superseded — discard
@@ -158,7 +177,17 @@ export default function PipelinePage() {
         if (Array.isArray(data.agents)) setRoster(data.agents)
       }
     } catch { /* leave the board as-is */ }
+    finally { clearTimeout(t) }
     if (id === requestId.current) setLoading(false)
+
+    // Offer badges load separately, so they never delay the board itself.
+    fetch('/api/offers/summary')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (id !== requestId.current || !d?.summary) return
+        setDeals(ds => ds.map(deal => ({ ...deal, offer: d.summary[String(deal.id)] ?? null })))
+      })
+      .catch(() => {})
   }, [agentFilter])
 
   useEffect(() => { load() }, [load])

@@ -1,20 +1,34 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { sendWhatsApp } from '@/lib/whatsapp/twilio'
+import { sendTemplate } from '@/lib/whatsapp/cloud'
 import { dbRowToClient } from '@/lib/db-mappers'
 import {
-  isDue, lastContactAt, reminderText, STALE_AFTER_DAYS,
+  isDue, lastContactAt, followupSummary, reminderPriority, STALE_AFTER_DAYS,
   type ReminderClient,
 } from '@/lib/whatsapp/reminders'
 import { todaysAgenda } from '@/lib/whatsapp/calendar-handlers'
+import { wallClock } from '@/lib/whatsapp/timezone'
 
-// Runs from Vercel Cron (see vercel.json). The spec uses Supabase pg_cron; this
-// app is deployed on Vercel, so the schedule lives there and calls this route.
+// Runs from Vercel Cron (see vercel.json), now **hourly**. Each agent picks the
+// local hour they want their digest (Profiles.reminder_hour, Asia/Beirut); this
+// job fires every hour and messages only the agents whose chosen hour equals the
+// current local hour. Cron is UTC, but we compare against the agency's wall clock
+// via wallClock(), so DST is handled automatically — no October edit needed.
 //
-// Scheduled at 06:00 UTC. Vercel Cron only understands UTC, so that is 9am in
-// Beirut during summer time (UTC+3) and 8am in winter (UTC+2). If the winter
-// hour matters, the cron expression needs changing in October — there is no way
-// to express "9am local" in vercel.json.
+// The daily digest goes out as an APPROVED TEMPLATE (sendTemplate), because it is
+// sent outside WhatsApp's 24-hour service window — free text there is silently
+// dropped by Meta. Template name defaults to 'daily_agenda' (override with
+// WHATSAPP_REMINDER_TEMPLATE). Its body has three {{n}} params, all single-line:
+//   {{1}} agent first name   {{2}} today's agenda   {{3}} the follow-up nudge
+const TEMPLATE_NAME = process.env.WHATSAPP_REMINDER_TEMPLATE || 'daily_agenda'
+const TEMPLATE_LANG = process.env.WHATSAPP_REMINDER_TEMPLATE_LANG || 'en'
+
+// Template variables can't contain newlines, tabs, or >4 spaces (Meta rejects
+// them), so every param is squashed to a single clean line.
+function oneLine(s: string, max = 500): string {
+  const t = s.replace(/\s+/g, ' ').trim()
+  return (t.length > max ? t.slice(0, max - 1).trimEnd() + '…' : t) || '—'
+}
 
 /**
  * Only the scheduler may run this. Without the check, anyone who found the URL
@@ -59,17 +73,39 @@ export async function POST(req: NextRequest) {
     .from('conversation_state').delete().lt('updated_at', dayAgo).select('id')
   cleanup.staleFlows = stale?.length ?? 0
 
-  // ── Agents who can actually receive a message ─────────────────────────────
-  const { data: profiles } = await admin
-    .from('Profiles')
-    .select('id, company_id, role, agent_code, Full_name, whatsapp_number')
-    .not('whatsapp_number', 'is', null)
+  // ── Agents due a digest ────────────────────────────────────────────────────
+  // Per-agent reminder times need an HOURLY cron so each hour we can message the
+  // agents who picked that hour. But hourly cron is a **Vercel Pro** feature —
+  // Hobby only allows once-per-day and rejects a more frequent schedule at
+  // deploy time. So this is opt-in via WHATSAPP_REMINDER_HOURLY:
+  //   • Pro:   set the cron to "0 * * * *" AND WHATSAPP_REMINDER_HOURLY=true →
+  //            each hour, message agents whose reminder_hour == the local hour.
+  //   • Hobby: leave it unset. The daily cron fires once and everyone due gets
+  //            their digest (reminder_hour is ignored). Agents can still set a
+  //            preferred hour in Settings; it takes effect once you're on Pro.
+  const hourly = process.env.WHATSAPP_REMINDER_HOURLY === 'true'
+  const nowHour = wallClock(now).hour
+  const COLS = 'id, company_id, role, agent_code, Full_name, whatsapp_number'
+  type ProfileRow = { id: string; company_id: number; role: string; agent_code: string | null; Full_name: string | null; whatsapp_number: string | null }
+  let profiles: ProfileRow[] | null
 
-  if (!profiles?.length) return Response.json({ sent: 0, cleanup, note: 'No agents have a WhatsApp number registered.' })
+  if (hourly) {
+    const res = await admin.from('Profiles').select(COLS).not('whatsapp_number', 'is', null).eq('reminder_hour', nowHour)
+    // Migration 015 not applied yet → no reminder_hour column; send to all.
+    profiles = res.error?.code === '42703'
+      ? (await admin.from('Profiles').select(COLS).not('whatsapp_number', 'is', null)).data
+      : res.data
+  } else {
+    profiles = (await admin.from('Profiles').select(COLS).not('whatsapp_number', 'is', null)).data
+  }
+
+  if (!profiles?.length) return Response.json({ sent: 0, cleanup, hour: nowHour, hourly, note: 'No agents due a digest.' })
 
   const results: { agent: string; client: string; events: number; status: string }[] = []
 
   for (const profile of profiles) {
+    if (!profile.whatsapp_number) continue   // selected as non-null, but narrow the type
+
     // ── Reminders already scheduled and due ─────────────────────────────────
     const { data: due } = await admin
       .from('reminder_schedule')
@@ -103,6 +139,7 @@ export async function POST(req: NextRequest) {
         location: c.req.location || '',
         lastContactAt: lastContactAt(row.notes, row.created_at as string),
         createdAt: row.created_at as string,
+        leadScore: Number(row.lead_score) || 0,
       }
       const scheduled = scheduledClientIds.has(c.id)
       if (scheduled || isDue(rc, now)) {
@@ -119,12 +156,15 @@ export async function POST(req: NextRequest) {
     // agent per day is the rule, and the Twilio account is metered.
     const agenda = await todaysAgenda(admin, profile.id, now)
 
-    // At most one client nudge — a morning of eight separate pings gets the
-    // bot muted.
-    const top = candidates
-      .sort((a, b) => (a.client.lastContactAt ?? '').localeCompare(b.client.lastContactAt ?? ''))[0]
+    // Surface the top ~3 by RELEVANCE (hottest lead / most urgent stage), not
+    // merely the oldest. The first is the primary — a "done"/"snooze" reply acts
+    // on it — and the rest are a heads-up so the agent sees their whole hot list.
+    const ranked = candidates.sort((a, b) => reminderPriority(b.client, now) - reminderPriority(a.client, now))
+    const picks = ranked.slice(0, 3)
+    const top = picks[0]
+    const followText = picks.length ? followupSummary(picks.map(p => p.client), now) : ''
 
-    const sections = [agenda, top ? reminderText(top.client, now) : ''].filter(Boolean)
+    const sections = [agenda, followText].filter(Boolean)
     // An agent with an empty calendar and nobody to chase hears nothing.
     if (!sections.length) continue
 
@@ -137,7 +177,24 @@ export async function POST(req: NextRequest) {
     })
     if (dry) continue
 
-    const sent = await sendWhatsApp(`whatsapp:${profile.whatsapp_number}`, message)
+    // Fill the three single-line template params. Because we skip when there's
+    // neither an agenda nor a follow-up, at least one is real; the other shows a
+    // friendly "nothing" line so no param is ever empty (Meta rejects empties).
+    const firstName = (profile.Full_name ?? '').trim().split(/\s+/)[0] || 'there'
+    const agendaParam = agenda ? oneLine(agenda.replace(/\n/g, ' · ').replace(/•\s*/g, '')) : 'Nothing scheduled today.'
+    const followParam = oneLine(followText || 'No follow-ups due today.')
+    const components = [{
+      type: 'body',
+      parameters: [
+        { type: 'text', text: firstName },
+        { type: 'text', text: agendaParam },
+        { type: 'text', text: followParam },
+      ],
+    }]
+
+    // Sent as an approved template — this fires outside the 24h window, where
+    // free text is silently dropped by Meta.
+    const sent = await sendTemplate(profile.whatsapp_number, TEMPLATE_NAME, TEMPLATE_LANG, components)
     if (!sent.ok) {
       console.error('[whatsapp] reminder send failed', sent.error)
       results[results.length - 1].status = `failed: ${sent.error}`

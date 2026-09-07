@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   const supabase = await createClient()
   let query = supabase
     .from('listing_alerts')
-    .select('id, score, seen, created_at, property_id, client_id, agent_code, Properties(Title, Location, Neighborhood, Amenities), client_requests("Client Name")')
+    .select('id, score, seen, created_at, property_id, client_id, agent_code, Properties(Title, Location, Neighborhood, Amenities), client_requests("Client Name", "client phone")')
     .eq('company_id', session.companyId)
     .order('created_at', { ascending: false })
     .limit(200)
@@ -60,6 +60,7 @@ export async function GET(req: NextRequest) {
       propertyLabel: prop.label,
       clientId: (row.client_id as number) ?? null,
       clientName: (client?.['Client Name'] as string) ?? 'Client',
+      clientPhone: (client?.['client phone'] as string | null) ?? null,
       agentName: isManager(session.role) ? nameOf.get(row.agent_code as string) : undefined,
     }
   })

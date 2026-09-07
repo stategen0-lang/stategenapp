@@ -95,7 +95,8 @@ test('publicListing: the exact key set is the allowlist, nothing more', () => {
   const pub = publicListing(fullProperty, 'desc')
   const allowed = new Set([
     'title', 'type', 'transaction', 'price', 'rent', 'district', 'city', 'size',
-    'beds', 'baths', 'parkings', 'buildingAge', 'garden', 'balcony', 'view',
+    'beds', 'baths', 'parkings', 'buildingAge', 'garden', 'balcony', 'terrace',
+    'furnishing', 'amenities', 'buildingFeatures', 'view',
     'status', 'photos', 'description',
   ])
   for (const key of Object.keys(pub)) {

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { isStage } from '@/lib/pipeline'
 import { recalculateScores } from '@/lib/score-engine'
@@ -90,6 +90,8 @@ export async function GET(req: NextRequest) {
       agents = agents.filter(a => a.id === session.agentCode)
     }
 
+    // NB: offer badges are loaded separately (GET /api/offers/summary) so this
+    // response — which the board blocks on — stays a single fast query.
     return NextResponse.json({ deals, agents })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
@@ -147,9 +149,11 @@ export async function PATCH(req: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
     // A stage move is a fresh activity signal — refresh that client's score.
-    // Non-fatal: scoring must never fail the stage change itself.
+    // Deferred with after() so the move returns instantly; the score lands a
+    // moment later. Non-fatal: scoring must never fail the stage change itself.
     if (stage !== undefined && data?.client_id) {
-      try { await recalculateScores({ clientId: Number(data.client_id), companyId: session.companyId }) } catch { /* ignore */ }
+      const clientId = Number(data.client_id)
+      after(async () => { try { await recalculateScores({ clientId, companyId: session.companyId }) } catch { /* ignore */ } })
     }
 
     return NextResponse.json({ deal: toDeal(data as Row) })

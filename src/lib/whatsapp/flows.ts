@@ -22,13 +22,18 @@ import { toMoney, toCount, toText, toEnum, PROPERTY_FIELDS, PROPERTY_TYPES, TRAN
  * and had to guess the app's internal spelling — which happened on the first
  * real listing anyone tried to add over WhatsApp.
  */
+// Only maps words that AREN'T themselves listing types. Studio, Duplex and
+// Showroom used to live here (→ Appartement/Villa/Shop) but are now real types
+// of their own, so they're matched exactly instead (exact match runs first in
+// coerceType) — leaving them here would wrongly rewrite "duplex in Achrafieh".
 const TYPE_SYNONYMS: Record<string, string> = {
   apartment: 'Appartement', appartment: 'Appartement', apt: 'Appartement',
-  flat: 'Appartement', condo: 'Appartement', studio: 'Appartement',
-  house: 'Villa', home: 'Villa', duplex: 'Villa',
-  store: 'Shop', retail: 'Shop', showroom: 'Shop',
+  flat: 'Appartement', condo: 'Appartement',
+  house: 'Villa', home: 'Villa',
+  store: 'Shop', retail: 'Shop',
   plot: 'Land', terrain: 'Land',
   offices: 'Office', chalets: 'Chalet', buildings: 'Building',
+  warehouses: 'Warehouse', depot: 'Warehouse', garages: 'Garage',
 }
 
 export function coerceType(v: unknown): string | null {
@@ -55,6 +60,9 @@ export interface FlowStep {
   hint?: string
   /** Other labels an agent might type for this field. */
   aliases?: string[]
+  /** Natural one-line question asked when this field is missing (mandatory
+   *  fields only — optional fields are never prompted for). */
+  question?: string
   /** Returns the cleaned value, or null if the answer can't be used. */
   coerce: (v: unknown) => unknown
 }
@@ -73,17 +81,17 @@ const coerceTransaction = (v: unknown) => {
  * for them.
  */
 export const CREATE_PROPERTY_STEPS: FlowStep[] = [
-  { key: 'type',         label: 'Type',          mandatory: true,  hint: PROPERTY_TYPES.join('/'), coerce: coerceType, aliases: ['property type'] },
-  { key: 'transaction',  label: 'Sale or rent',  mandatory: true,  hint: 'sale/rent', coerce: coerceTransaction, aliases: ['transaction', 'listing', 'for sale or rent', 'buy or rent'] },
-  { key: 'location',     label: 'City',          mandatory: true,  hint: 'e.g. Beirut', coerce: toText, aliases: ['location'] },
-  { key: 'neighborhood', label: 'Area',          mandatory: true,  hint: 'e.g. Hamra', coerce: toText, aliases: ['neighbourhood', 'neighborhood', 'district'] },
-  { key: 'price',        label: 'Price',         mandatory: true,  hint: 'USD, e.g. 450k', coerce: toMoney, aliases: ['price usd', 'asking', 'asking price'] },
+  { key: 'type',         label: 'Type',          mandatory: true,  hint: PROPERTY_TYPES.join('/'), coerce: coerceType, aliases: ['property type'], question: 'What type of property is it? (e.g. apartment, villa, office, shop, land)' },
+  { key: 'transaction',  label: 'Sale or rent',  mandatory: true,  hint: 'sale/rent', coerce: coerceTransaction, aliases: ['transaction', 'listing', 'for sale or rent', 'buy or rent'], question: 'Is it for sale or for rent?' },
+  { key: 'location',     label: 'City',          mandatory: true,  hint: 'e.g. Beirut', coerce: toText, aliases: ['location'], question: 'Which city is it in?' },
+  { key: 'neighborhood', label: 'Area',          mandatory: true,  hint: 'e.g. Hamra', coerce: toText, aliases: ['neighbourhood', 'neighborhood', 'district'], question: 'Which area or neighbourhood?' },
+  { key: 'price',        label: 'Price',         mandatory: true,  hint: 'USD, e.g. 450k', coerce: toMoney, aliases: ['price usd', 'asking', 'asking price'], question: "What's the asking price? (USD)" },
   { key: 'beds',         label: 'Bedrooms',      mandatory: false, hint: 'e.g. 3', coerce: toCount, aliases: ['beds', 'bed', 'br'] },
   { key: 'baths',        label: 'Bathrooms',     mandatory: false, hint: 'e.g. 2', coerce: toCount, aliases: ['baths', 'bath', 'ba'] },
   { key: 'size',         label: 'Size',          mandatory: false, hint: 'm², e.g. 180', coerce: toCount, aliases: ['sqm', 'm2', 'size m2', 'area sqm'] },
   { key: 'parkings',     label: 'Parking spaces', mandatory: false, hint: 'e.g. 1', coerce: toCount, aliases: ['parking', 'parkings', 'garage'] },
-  { key: 'ownerName',    label: 'Owner name',    mandatory: true,  coerce: toText, aliases: ['owner'] },
-  { key: 'ownerContact', label: 'Owner phone',   mandatory: true,  hint: 'e.g. 03 123456', coerce: toText, aliases: ['owner number', 'owner contact', 'owner phone'] },
+  { key: 'ownerName',    label: 'Owner name',    mandatory: true,  coerce: toText, aliases: ['owner'], question: "What's the owner's name?" },
+  { key: 'ownerContact', label: 'Owner phone',   mandatory: true,  hint: 'e.g. 03 123456', coerce: toText, aliases: ['owner number', 'owner contact', 'owner phone'], question: "And the owner's phone number?" },
 ]
 
 // ── Client fields ─────────────────────────────────────────────────────────────
@@ -102,12 +110,12 @@ const coerceClientType = (v: unknown) => {
  * matching but don't block saving.
  */
 export const CREATE_CLIENT_STEPS: FlowStep[] = [
-  { key: 'name',        label: 'Name',          mandatory: true,  coerce: toText, aliases: ['client name', 'full name'] },
-  { key: 'phone',       label: 'Phone',         mandatory: true,  hint: 'e.g. 03 123456', coerce: toText, aliases: ['number', 'contact', 'mobile'] },
-  { key: 'clientType',  label: 'Buyer or renter', mandatory: true, hint: 'buyer/renter', coerce: coerceClientType, aliases: ['type', 'buyer/renter'] },
-  { key: 'propertyType', label: 'Looking for',  mandatory: true,  hint: PROPERTY_TYPES.join('/'), coerce: coerceType, aliases: ['property type', 'wants', 'interested in'] },
-  { key: 'location',    label: 'Preferred area', mandatory: true, hint: 'e.g. Achrafieh', coerce: toText, aliases: ['area', 'location', 'where'] },
-  { key: 'budget',      label: 'Budget',        mandatory: true,  hint: 'USD, e.g. 400k', coerce: toMoney, aliases: ['budget usd', 'price'] },
+  { key: 'name',        label: 'Name',          mandatory: true,  coerce: toText, aliases: ['client name', 'full name'], question: "What's the client's name?" },
+  { key: 'phone',       label: 'Phone',         mandatory: true,  hint: 'e.g. 03 123456', coerce: toText, aliases: ['number', 'contact', 'mobile'], question: "What's their phone number?" },
+  { key: 'clientType',  label: 'Buyer or renter', mandatory: true, hint: 'buyer/renter', coerce: coerceClientType, aliases: ['type', 'buyer/renter'], question: 'Are they buying or renting?' },
+  { key: 'propertyType', label: 'Looking for',  mandatory: true,  hint: PROPERTY_TYPES.join('/'), coerce: coerceType, aliases: ['property type', 'wants', 'interested in'], question: 'What type of property are they after? (e.g. apartment, villa, office)' },
+  { key: 'location',    label: 'Preferred area', mandatory: true, hint: 'e.g. Achrafieh', coerce: toText, aliases: ['area', 'location', 'where'], question: 'Which area are they interested in?' },
+  { key: 'budget',      label: 'Budget',        mandatory: true,  hint: 'USD, e.g. 400k', coerce: toMoney, aliases: ['budget usd', 'price'], question: "What's their budget? (USD)" },
   { key: 'beds',        label: 'Bedrooms',      mandatory: false, hint: 'e.g. 3', coerce: toCount, aliases: ['beds', 'bed', 'br'] },
   { key: 'baths',       label: 'Bathrooms',     mandatory: false, hint: 'e.g. 2', coerce: toCount, aliases: ['bath', 'baths', 'wc'] },
   { key: 'parkings',    label: 'Parking spaces', mandatory: false, hint: 'e.g. 1', coerce: toCount, aliases: ['parking', 'garage', 'car spots'] },
@@ -184,6 +192,24 @@ export function missingMandatory(context: FlowContext, steps: FlowStep[]): FlowS
   return steps.filter(s => s.mandatory && (context[s.key] === undefined || context[s.key] === null || context[s.key] === ''))
 }
 
+/** The next mandatory field to ask about, or null when the record is complete. */
+export function firstMissing(context: FlowContext, steps: FlowStep[]): FlowStep | null {
+  return missingMandatory(context, steps)[0] ?? null
+}
+
+/**
+ * The conversational prompt for the next missing field — one natural question at
+ * a time, optionally prefixed with a short acknowledgement of what we captured
+ * from the agent's last message. Returns '' when nothing is missing (the caller
+ * moves on to the confirm step instead).
+ */
+export function nextQuestion(context: FlowContext, steps: FlowStep[], ack?: string): string {
+  const step = firstMissing(context, steps)
+  if (!step) return ''
+  const q = step.question ?? `What's the ${step.label.toLowerCase()}?`
+  return ack ? `${ack}\n${q}` : q
+}
+
 /**
  * Does this message plainly ask to add a listing?
  *
@@ -192,16 +218,21 @@ export function missingMandatory(context: FlowContext, steps: FlowStep[]): FlowS
  * back unknown, so the flow silently failed to start. Phrasings this obvious
  * shouldn't depend on a model round-trip.
  */
+// A scheduling message ("add a viewing … about the villa in Metn") names a
+// property type but is an EVENT, not a new listing/client — exclude it so it
+// isn't misrouted into a create flow.
+const SCHEDULING = /\b(viewing|showing|meeting|appointment)\b/i
+
 export function isStartListing(text: string | null | undefined): boolean {
   const s = (text ?? '').trim()
-  if (!s) return false
+  if (!s || SCHEDULING.test(s)) return false
   return /^(i (want|need|would like) to\s+)?(add|create|list|post|register)\b[^.!?]*\b(listing|property|properties|apartment|appartement|flat|villa|office|shop|chalet|building|land|house)\b/i.test(s)
 }
 
 /** Does this message plainly ask to add a client/lead/buyer/renter? */
 export function isStartClient(text: string | null | undefined): boolean {
   const s = (text ?? '').trim()
-  if (!s) return false
+  if (!s || SCHEDULING.test(s)) return false
   return /^(i (want|need|would like) to\s+)?(add|create|register|new|save)\b[^.!?]*\b(client|customer|lead|buyer|renter|tenant)\b/i.test(s)
 }
 

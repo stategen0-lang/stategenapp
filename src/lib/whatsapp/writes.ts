@@ -94,7 +94,13 @@ export function toEnum(allowed: string[]) {
 
 const CLIENT_STATUSES = ['Searching', 'Viewing', 'Negotiating', 'Closed', 'Inactive']
 const PROPERTY_STATUSES = ['Available', 'Reserved', 'Sold', 'Rented']
-export const PROPERTY_TYPES = ['Appartement', 'Villa', 'Office', 'Shop', 'Land', 'Chalet', 'Building']
+// Keep in sync with PROPERTY_TYPES in src/lib/data.ts (this module is a pure,
+// self-contained unit-tested file, so it can't import from there).
+export const PROPERTY_TYPES = [
+  'Appartement', 'Duplex', 'Studio', 'Villa', 'Chalet', 'Standalone',
+  'Building', 'Land', 'Shop', 'Office', 'Showroom', 'Restaurant',
+  'Garage', 'Warehouse',
+]
 export const TRANSACTIONS = ['For Sale', 'For Rent']
 
 // ── What a WhatsApp message is allowed to change ────────────────────────────

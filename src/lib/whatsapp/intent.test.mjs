@@ -51,6 +51,17 @@ test('parseIntentJson: keeps update fields', () => {
   assert.deepEqual(r.fields, { budget: 400000 })
 })
 
+test('parseIntentJson: keeps a forwarded enquiry’s create_client fields', () => {
+  // A forwarded client message the model classified as a new lead — every
+  // extracted field must survive parsing so the client form can be seeded.
+  const r = parseIntentJson('{"intent":"create_client","fields":{"name":"Joe Khoury","clientType":"buyer","propertyType":"apartment","location":"Achrafieh","budget":250000,"beds":2,"phone":"03 123456"}}')
+  assert.equal(r.intent, 'create_client')
+  assert.deepEqual(r.fields, {
+    name: 'Joe Khoury', clientType: 'buyer', propertyType: 'apartment',
+    location: 'Achrafieh', budget: 250000, beds: 2, phone: '03 123456',
+  })
+})
+
 test('parseIntentJson: ignores empty or non-object fields', () => {
   assert.equal(parseIntentJson('{"intent":"update_client","fields":{}}').fields, undefined)
   assert.equal(parseIntentJson('{"intent":"update_client","fields":[1,2]}').fields, undefined)

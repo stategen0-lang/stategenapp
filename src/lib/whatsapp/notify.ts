@@ -1,0 +1,59 @@
+import { createAdminClient } from '@/lib/supabase/admin'
+import { waNumber } from '@/lib/dedupe'
+import { sendTemplate, sendText } from './cloud'
+import { newClientLine, newClientCore, type NewClientInfo } from './notify-copy'
+
+// Notify the OWNING AGENT (on their own WhatsApp) that a client was assigned to
+// them, so they reach out. The bot never messages the client — this only ever
+// goes to an agent (the client-contact product rule).
+//
+// A business-initiated message OUTSIDE WhatsApp's 24h window needs an APPROVED
+// template (as the reminders do). Set env WHATSAPP_NEW_CLIENT_TEMPLATE to its
+// name; the body must have ONE {{1}} param. Without it we fall back to free text,
+// which Meta only delivers if the agent messaged the bot in the last 24h — so
+// configure the template for reliable delivery. Best-effort and non-fatal.
+
+interface NotifyOpts {
+  companyId: number
+  ownerAgentCode: string | null   // Profiles.agent_code of the responsible agent
+  actorAgentCode?: string | null  // who created it — skip if they own it themselves
+  client: NewClientInfo
+}
+
+export async function notifyAgentNewClient(opts: NotifyOpts): Promise<{ notified: boolean; reason?: string }> {
+  const { companyId, ownerAgentCode, actorAgentCode, client } = opts
+  if (!ownerAgentCode) return { notified: false, reason: 'no owning agent' }
+  // The agent who just added their own client already knows — don't ping them.
+  if (actorAgentCode && actorAgentCode === ownerAgentCode) return { notified: false, reason: 'owner is creator' }
+
+  const admin = createAdminClient()
+  const { data: profile } = await admin
+    .from('Profiles')
+    .select('whatsapp_number, whatsapp_enabled')
+    .eq('company_id', companyId)
+    .eq('agent_code', ownerAgentCode)
+    .maybeSingle()
+
+  const number = (profile?.whatsapp_number as string | undefined) ?? undefined
+  if (!number || profile?.whatsapp_enabled === false) return { notified: false, reason: 'agent has no WhatsApp' }
+
+  const templateName = process.env.WHATSAPP_NEW_CLIENT_TEMPLATE
+  const wa = waNumber(client.phone)   // the client's number, for the chat button
+  if (templateName && wa) {
+    const lang = process.env.WHATSAPP_NEW_CLIENT_TEMPLATE_LANG || 'en'
+    // Body {{1}} is the client data; the client's phone also sits inside it so
+    // WhatsApp auto-links it. The dynamic URL button's {{1}} is the number, which
+    // resolves through /wa to the client's chat in the AGENT'S own WhatsApp — the
+    // agent reaches out, the bot never messages the client.
+    const res = await sendTemplate(number, templateName, lang, [
+      { type: 'body', parameters: [{ type: 'text', text: newClientCore(client) }] },
+      { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: wa }] },
+    ])
+    return { notified: res.ok, reason: res.ok ? undefined : 'template send failed' }
+  }
+
+  // No template, or no client phone for the button → free text (24h window only).
+  const res = await sendText(number, newClientLine(client))
+  if (!res.ok) console.warn('[notify] free-text send failed:', res.error)
+  return { notified: res.ok, reason: res.ok ? undefined : (res.error ?? 'no template / no client phone') }
+}

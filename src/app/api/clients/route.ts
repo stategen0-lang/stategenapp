@@ -1,8 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { recalculateScores } from '@/lib/score-engine'
 import { getSession } from '@/lib/session'
 import { canSeeClientPII, canEditClient, isManager, maskClientName } from '@/lib/permissions'
+import { notifyAgentNewClient } from '@/lib/whatsapp/notify'
+import { ensureManagerAgentCode } from '@/lib/ensure-manager-code'
 
 
 // The owning agent code lives in the client's notes JSON.
@@ -10,10 +13,25 @@ function clientAgent(row: Record<string, unknown>): string | null {
   try { return (JSON.parse((row.notes as string) || '{}').agentId as string) ?? null } catch { return null }
 }
 
+// Free-form labels: strings only, trimmed, de-duped, capped so a bad payload
+// can't bloat the row.
+function sanitizeTags(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  const seen = new Set<string>()
+  for (const t of raw) {
+    if (typeof t !== 'string') continue
+    const v = t.trim().slice(0, 24)
+    if (v) seen.add(v)
+  }
+  return [...seen].slice(0, 12)
+}
+
 // A client change is a scoring signal — refresh that client's lead score.
-// Non-fatal: a scoring hiccup must never fail the client write itself.
-async function refreshScore(clientId: number, companyId: number) {
-  try { await recalculateScores({ clientId, companyId }) } catch { /* ignore */ }
+// Deferred with after() so the write returns immediately: re-scoring loads the
+// company's clients/properties/deals and was making every save wait on it. The
+// new score lands a moment later and shows on the next read. Non-fatal.
+function refreshScoreAfter(clientId: number, companyId: number) {
+  after(async () => { try { await recalculateScores({ clientId, companyId }) } catch { /* ignore */ } })
 }
 
 export async function GET(req: NextRequest) {
@@ -101,8 +119,20 @@ export async function PATCH(req: NextRequest) {
     }
     if (body.req?.beds !== undefined) update.bedrooms = body.req.beds
     if (body.req?.transaction !== undefined) update.payment_terms = body.req.transaction
-    if (body.name !== undefined || body.email !== undefined || body.type !== undefined || body.req !== undefined) {
-      update.notes = JSON.stringify({ email: body.email, type: body.type, agentId: body.agentId, req: body.req })
+    if (body.name !== undefined || body.email !== undefined || body.type !== undefined || body.req !== undefined || body.tags !== undefined) {
+      // Merge onto the existing notes so a partial update (e.g. tags-only)
+      // never wipes email / agentId / req that weren't resent.
+      let prev: Record<string, unknown> = {}
+      try { prev = JSON.parse((existing.notes as string) || '{}') } catch { /* start fresh */ }
+      const merged = {
+        ...prev,
+        ...(body.email !== undefined ? { email: body.email } : {}),
+        ...(body.type !== undefined ? { type: body.type } : {}),
+        ...(body.agentId !== undefined ? { agentId: body.agentId } : {}),
+        ...(body.req !== undefined ? { req: body.req } : {}),
+        ...(body.tags !== undefined ? { tags: sanitizeTags(body.tags) } : {}),
+      }
+      update.notes = JSON.stringify(merged)
     }
 
     if (Object.keys(update).length === 0) {
@@ -117,10 +147,8 @@ export async function PATCH(req: NextRequest) {
       .select()
       .single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    await refreshScore(Number(id), session.companyId)
-    const { data: fresh } = await supabase
-      .from('client_requests').select('*').eq('id', id).single()
-    return NextResponse.json({ ok: true, client: fresh ?? data })
+    refreshScoreAfter(Number(id), session.companyId)
+    return NextResponse.json({ ok: true, client: data })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
@@ -134,11 +162,19 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const supabase = await createClient()
 
-    // An agent always creates clients under their own code — they cannot file
-    // a client under someone else. Managers may assign explicitly.
-    const ownerAgent = isManager(session.role)
-      ? (body.agentId ?? null)
-      : (session.agentCode ?? body.agentId ?? null)
+    // An agent always creates clients under their own code. A manager may assign
+    // to any agent — but if they don't pick one, the client is theirs (managers
+    // work deals too), so mint their code if it's missing.
+    let ownerAgent: string | null
+    if (isManager(session.role)) {
+      let managerCode = session.agentCode
+      if (!managerCode) {
+        managerCode = await ensureManagerAgentCode(createAdminClient(), session.companyId, session.userId, session.fullName)
+      }
+      ownerAgent = body.agentId || managerCode || null
+    } else {
+      ownerAgent = session.agentCode ?? body.agentId ?? null
+    }
 
     // Pack extra UI fields into notes JSON
     const extras = {
@@ -146,6 +182,7 @@ export async function POST(req: NextRequest) {
       type: body.type,
       agentId: ownerAgent,
       req: body.req,
+      tags: sanitizeTags(body.tags),
     }
 
     // Agent_id is a uuid column; the UI's agentId is a mock code like "a1",
@@ -172,7 +209,28 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    if (data?.id) await refreshScore(Number(data.id), session.companyId)
+    if (data?.id) refreshScoreAfter(Number(data.id), session.companyId)
+
+    // Ping the responsible agent on WhatsApp to reach out — but only when the
+    // client was assigned to someone OTHER than the person adding it (a manager
+    // assigning to an agent). Deferred so the save returns immediately; non-fatal.
+    after(async () => {
+      try {
+        await notifyAgentNewClient({
+          companyId: session.companyId,
+          ownerAgentCode: ownerAgent,
+          actorAgentCode: session.agentCode,
+          client: {
+            name: body.name,
+            phone: body.phone,
+            type: body.type,
+            budget: body.budget ?? body.req?.priceMax,
+            location: body.req?.location,
+          },
+        })
+      } catch { /* notification is best-effort */ }
+    })
+
     return NextResponse.json({ client: data })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })

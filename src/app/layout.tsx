@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Public_Sans } from "next/font/google";
 import "./globals.css";
+import ServiceWorkerRegister from "@/components/pwa/ServiceWorkerRegister";
+import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Analytics } from "@vercel/analytics/next";
 import CookieBanner from "@/components/CookieBanner";
 
 const publicSans = Public_Sans({
@@ -13,7 +16,7 @@ const DESCRIPTION =
   "StateGen is the CRM built for Lebanese real estate agencies — smart property matching, a shared client & deal pipeline, and a WhatsApp assistant.";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://stategenapp.vercel.app"),
+  metadataBase: new URL("https://stategen.app"),
   title: {
     default: "StateGen — Real estate CRM",
     template: "%s · StateGen",
@@ -34,6 +37,15 @@ export const metadata: Metadata = {
     description: DESCRIPTION,
     images: ["/logo.png"],
   },
+  icons: {
+    icon: "/icon.png",
+    apple: "/icons/apple-touch-icon.png",
+  },
+  appleWebApp: {
+    capable: true,
+    title: "StateGen",
+    statusBarStyle: "default",
+  },
 };
 
 export const viewport: Viewport = {
@@ -53,8 +65,11 @@ export default function RootLayout({
       style={{ fontFamily: 'var(--font-public-sans), -apple-system, BlinkMacSystemFont, sans-serif' }}
     >
       <body className="min-h-full flex flex-col">
+        <ServiceWorkerRegister />
         {children}
         <CookieBanner />
+        <SpeedInsights />
+        <Analytics />
       </body>
     </html>
   );

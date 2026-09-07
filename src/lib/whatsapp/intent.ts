@@ -22,11 +22,16 @@ export type Intent =
   | 'query_client'
   | 'query_property'
   | 'query_agents'
+  | 'query_activity'
   | 'query_schedule'
   | 'create_event'
   | 'create_client'
   | 'share_listing'
   | 'describe_property'
+  | 'log_offer'
+  | 'query_offers'
+  | 'accept_offer'
+  | 'reject_offer'
   | 'query_overdue'
   | 'confirm'
   | 'cancel'
@@ -51,8 +56,9 @@ export interface IntentResult {
 
 const VALID: Intent[] = [
   'reminder_response', 'feedback', 'update_client', 'update_property', 'update_deal', 'query_pipeline',
-  'create_property', 'query_client', 'query_property', 'query_agents', 'query_schedule', 'create_event',
-  'create_client', 'share_listing', 'describe_property', 'query_overdue', 'confirm', 'cancel', 'help', 'unknown',
+  'create_property', 'query_client', 'query_property', 'query_agents', 'query_activity', 'query_schedule', 'create_event',
+  'create_client', 'share_listing', 'describe_property', 'log_offer', 'query_offers', 'accept_offer', 'reject_offer',
+  'query_overdue', 'confirm', 'cancel', 'help', 'unknown',
 ]
 
 /**
@@ -105,8 +111,9 @@ best guess at a real intent is better than refusing a slightly misspelt message.
 
 Intents:
 - query_client: asking for information about a client ("send me info on Ahmed")
-- query_property: asking about listings or matches ("what matches a 500k budget in Beirut")
-- query_agents: asking how the team or a set of agents is performing ("how is the team doing", "agent activity")
+- query_property: the AGENT searching existing listings, with NO specific person attached ("what matches a 500k budget in Beirut")
+- query_agents: asking how the team or a set of agents is PERFORMING — stats/numbers ("how is the team doing", "agent performance", "who is my top agent")
+- query_activity: asking what has HAPPENED recently — a feed of recent actions, not stats ("what's new", "recent activity", "what did the team do today", "any updates", "latest")
 - query_schedule: asking what is on their calendar ("what is on today", "my schedule tomorrow")
 - create_event: wants a calendar entry ("book a viewing with Ahmed tomorrow at 3pm")
 - query_overdue: asking which follow-ups or reminders are late ("what follow-ups are overdue")
@@ -115,9 +122,13 @@ Intents:
 - update_deal: wants to move a client's deal along the sales pipeline ("move Ahmed to negotiating", "mark Ahmed's deal as won")
 - query_pipeline: asking about the deal pipeline or deals in a stage ("what's in negotiation", "show my pipeline", "what am I closing")
 - create_property: wants to add a new listing (describes a property to add)
-- create_client: wants to add a new client/lead/buyer/renter ("add a client", "new buyer Ahmed")
+- create_client: wants to add a new client/lead/buyer/renter ("add a client", "new buyer Ahmed"), OR is forwarding a prospective client's own enquiry — a message that gives a person's name and/or phone number together with what property they're after. A property need with a name or phone attached is a new client to register, NOT a search (query_property).
 - share_listing: wants a shareable public link to a listing to forward to a client ("send me the link for #23", "share property 23")
 - describe_property: wants an AI-written listing description for a property ("write a description for #23", "describe listing 23")
+- log_offer: log an offer or counter-offer on a deal ("offer 450k from Joe on #23", "counter Joe 470k", "buyer offered 500k on #12"). ANY message about an offer being made, added, or put in ("offered X", "add the offer", "put in an offer", "a client offered X", "counter") is log_offer — NOT a property search — even when it has NO listing number and NO client name; just extract fields.amount. When two amounts appear (an offer and the asking price), the OFFER is the amount next to "offer/offered"; put that in fields.amount. A CLIENT's offer is side "buyer" (default); the OWNER/agency countering is side "owner" ("counter" = owner).
+- query_offers: asking where a negotiation stands ("offers on #23", "what's the offer on #12", "where does the negotiation stand for Joe")
+- accept_offer: accept the current offer, closing the deal won ("accept Joe's offer", "accept the offer on #23")
+- reject_offer: reject the current offer ("reject Joe's offer", "turn down the offer on #23")
 - feedback: reporting the outcome of a call or a note about a client
 - reminder_response: responding to a call reminder
 - help: asking what the bot can do
@@ -135,9 +146,17 @@ For update_client, update_property and create_property, put the changes in "fiel
 using ONLY these key names (anything else is discarded):
 - client: budget, status, location, beds, phone, rating
   status must be one of: Searching, Viewing, Negotiating, Closed, Inactive
-- property: status, price, rent, size, beds, baths, title, location, neighborhood, notes
+- property: type, transaction, status, price, rent, size, beds, baths, title, location, neighborhood, ownerName, ownerContact, notes
+  type is the property type ("apartment","villa","office","shop","land","building","chalet","showroom") — extract it whenever named
+  transaction is "For Sale" or "For Rent" (a sale price or "for sale"/"selling" → For Sale; "for rent"/monthly → For Rent)
+  ownerName and ownerContact are the owner's name and phone when given ("owner Joe Khoury 03 123456" → ownerName "Joe Khoury", ownerContact "03 123456")
   status must be one of: Available, Reserved, Sold, Rented
   "location" is the city, "neighborhood" is the area within it
+For create_client, put fields using ONLY these keys: name, phone,
+clientType (buyer|renter), propertyType, location, budget, beds, baths, parkings.
+For log_offer, put the amount in fields.amount (plain USD number: "450k"->450000,
+"1.2m"->1200000) and set fields.side to "owner" ONLY when the owner/agency is
+countering ("counter …"); otherwise omit side (it defaults to the buyer).
 For update_deal, put the target in "fields":
 - stage must be one of: lead, contacted, viewing, negotiating, closed
 - outcome (only when closing) must be one of: won, lost
@@ -154,16 +173,31 @@ Examples (note the typos and varied phrasing):
 "share property 23 with the client" -> {"intent":"share_listing","propertyId":23}
 "write a description for #23" -> {"intent":"describe_property","propertyId":23}
 "can you write me a blurb for listing 23" -> {"intent":"describe_property","propertyId":23}
+"offer 450k from Joe on #23" -> {"intent":"log_offer","clientName":"Joe","propertyId":23,"fields":{"amount":450000}}
+"counter joe 470k" -> {"intent":"log_offer","clientName":"Joe","fields":{"amount":470000,"side":"owner"}}
+"buyer offered 500k on #12 from Maya" -> {"intent":"log_offer","clientName":"Maya","propertyId":12,"fields":{"amount":500000}}
+"a client offered 280k for the 3 bed apartment in hamra, add the offer" -> {"intent":"log_offer","fields":{"amount":280000}}
+"add the offer, 300k from a buyer" -> {"intent":"log_offer","fields":{"amount":300000}}
+"offers on #23" -> {"intent":"query_offers","propertyId":23}
+"where does the negotiation stand for joe" -> {"intent":"query_offers","clientName":"Joe"}
+"accept joes offer" -> {"intent":"accept_offer","clientName":"Joe"}
+"reject the offer on #23" -> {"intent":"reject_offer","propertyId":23}
 "move ahmed to negotiating" -> {"intent":"update_deal","clientName":"Ahmed","fields":{"stage":"negotiating"}}
 "ahmeds deal is won" -> {"intent":"update_deal","clientName":"Ahmed","fields":{"stage":"closed","outcome":"won"}}
 "whats in negotiation" -> {"intent":"query_pipeline","fields":{"stage":"negotiating"}}
 "show me my pipeline" -> {"intent":"query_pipeline"}
 "prop 23 is sold" -> {"intent":"update_property","propertyId":23,"fields":{"status":"Sold"}}
-"add listing: 3 bed apartment in Hamra, Beirut, 450k, 180 sqm" -> {"intent":"create_property","fields":{"title":"3 bed apartment","beds":3,"neighborhood":"Hamra","location":"Beirut","price":450000,"size":180}}
+"add listing 3 bed apartment in Hamra, Beirut, for sale, 450k, 180 sqm, owner Joe Khoury 03 123456" -> {"intent":"create_property","fields":{"title":"3 bed apartment","type":"apartment","transaction":"For Sale","beds":3,"neighborhood":"Hamra","location":"Beirut","price":450000,"size":180,"ownerName":"Joe Khoury","ownerContact":"03 123456"}}
 "book a viewing with ahmed tomorow at 3pm" -> {"intent":"create_event","clientName":"Ahmed","notes":"viewing tomorrow at 3pm"}
 "whats on today" -> {"intent":"query_schedule"}
+"whats new" -> {"intent":"query_activity"}
+"recent activity" -> {"intent":"query_activity"}
+"what did the team do today" -> {"intent":"query_activity"}
+"any updates" -> {"intent":"query_activity"}
 "add a client" -> {"intent":"create_client"}
 "new buyer Ahmed looking for a villa in Hamra, budget 600k, 03111222" -> {"intent":"create_client","fields":{"name":"Ahmed","clientType":"buyer","propertyType":"villa","location":"Hamra","budget":600000,"phone":"03111222"}}
+"Hi, I'm looking for a 2 bedroom apartment in Achrafieh around 250k, this is Joe Khoury 03 123456" -> {"intent":"create_client","fields":{"name":"Joe Khoury","clientType":"buyer","propertyType":"apartment","location":"Achrafieh","budget":250000,"beds":2,"phone":"03 123456"}}
+"Client Rana 71 998877 wants to rent an office in Hamra, budget 2000/month" -> {"intent":"create_client","fields":{"name":"Rana","clientType":"renter","propertyType":"office","location":"Hamra","budget":2000,"phone":"71 998877"}}
 "called Ahmed, he wants a viewing Saturday" -> {"intent":"feedback","clientName":"Ahmed","notes":"wants a viewing Saturday"}`
 
 /**

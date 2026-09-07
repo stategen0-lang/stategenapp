@@ -12,7 +12,16 @@ export interface ReminderReply {
   snoozeDays?: number   // only when action === 'snooze'
 }
 
-const DONE = /^(done|called|did it|spoke|spoke to (them|him|her)|contacted|finished|complete[d]?)\b/i
+// A bare completion of the CURRENT reminder ("done", "did it", "finished") or a
+// verb with only a pronoun after it ("called him", "spoke to them", "contacted").
+// A completion verb followed by a NAME ("spoke to Ahmed", "called Sara") is
+// FEEDBACK about that specific client, not a reply to the current reminder, so it
+// deliberately does NOT match here (it falls through to intent classification).
+const DONE_BARE = /^(done|did it|finished|complete[d]?)\b/i
+// A completion verb followed by a PRONOUN ("called them, all good") or nothing
+// ("called", "contacted") — a reply about the current reminder. A verb followed
+// by a NAME ("called Sara", "spoke to Ahmed") is feedback and must NOT match.
+const DONE_PRONOUN = /^(called|spoke(?:\s+to)?|contacted|reached(?:\s+out)?)(\s+(them|him|her|it)\b|\s*[.!]*$)/i
 const NOT_INTERESTED = /\b(not interested|no longer interested|uninterested|dead|drop (it|them)|lost)\b/i
 const SNOOZE = /\b(snooze|later|postpone|remind me)\b/i
 
@@ -64,6 +73,11 @@ export function parseReminderReply(raw: string | null | undefined): ReminderRepl
   const text = (raw ?? '').trim()
   if (!text) return { action: 'unknown' }
 
+  // "remind me TO <task>" is a NEW reminder to schedule ("remind me to call Jess
+  // in 42 minutes"), never a snooze of the current follow-up — even though it
+  // contains "remind me". Hand it to intent classification (→ create_event).
+  if (/\bremind\s+me\s+to\b/i.test(text)) return { action: 'unknown' }
+
   // A fresh command ("book a viewing tomorrow", "set X's budget…") is never a
   // reminder reply, even if it contains a date word. This stopped a real bug:
   // "book a viewing tomorrow at 3pm" was read as "snooze until tomorrow".
@@ -80,7 +94,7 @@ export function parseReminderReply(raw: string | null | undefined): ReminderRepl
     return { action: 'snooze', snoozeDays: days ?? DEFAULT_SNOOZE_DAYS }
   }
 
-  if (DONE.test(text) && !isCommand) return { action: 'done' }
+  if ((DONE_BARE.test(text) || DONE_PRONOUN.test(text)) && !isCommand) return { action: 'done' }
 
   return { action: 'unknown' }
 }

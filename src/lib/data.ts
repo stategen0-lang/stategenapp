@@ -17,10 +17,47 @@ export const AGENTS: Agent[] = [
   { id: 'a4', name: 'Nour Haddad',     initials: 'NH', color: '#A23434', shortName: 'Nour H.' },
 ]
 
-export type PropertyType = 'Appartement' | 'Shop' | 'Office' | 'Building' | 'Villa' | 'Land' | 'Showroom' | 'Restaurant'
+export type PropertyType =
+  | 'Appartement' | 'Duplex' | 'Studio' | 'Villa' | 'Chalet' | 'Standalone'
+  | 'Building' | 'Land' | 'Shop' | 'Office' | 'Showroom' | 'Restaurant'
+  | 'Garage' | 'Warehouse'
 export type Transaction = 'For Sale' | 'For Rent'
 export type PropertyStatus = 'Available' | 'Pending' | 'Sold' | 'Reserved'
 export type AdvancedPayment = '3 months' | '6 months' | '1 year'
+export type Furnishing = 'Furnished' | 'Semi-furnished' | 'Unfurnished'
+export const FURNISHINGS: Furnishing[] = ['Furnished', 'Semi-furnished', 'Unfurnished']
+export type Floor = 'Ground level' | 'Mid floor' | 'Last floor'
+export const FLOORS: Floor[] = ['Ground level', 'Mid floor', 'Last floor']
+
+// Tick-box amenities stored as free arrays (so the list can grow without a
+// migration). Garden/Balcony/Terrace keep their own booleans for backward
+// compatibility and matching; these are the extras.
+export const PROPERTY_AMENITIES = [
+  'Pool', "Helper's Room", 'Air Conditioning', 'Credit Facilities',
+]
+export const BUILDING_FEATURES = [
+  'Concierge', '24/7 Security', 'Elevator', 'Gym', 'Shared Pool',
+  'Shared Spaces', 'Storage Room', 'Generator', 'Water Well', 'Solar Panels',
+]
+
+// The one canonical list of listing types, in the order shown in every picker.
+// Kept here so the web modals, the client "looking for" picker and the microsite
+// filter never drift apart. (The WhatsApp coercion whitelist in
+// whatsapp/writes.ts is a separate, self-contained pure module — keep it in sync
+// by hand when this changes.)
+export const PROPERTY_TYPES: PropertyType[] = [
+  'Appartement', 'Duplex', 'Studio', 'Villa', 'Chalet', 'Standalone',
+  'Building', 'Land', 'Shop', 'Office', 'Showroom', 'Restaurant',
+  'Garage', 'Warehouse',
+]
+
+// A friendlier label for the picker where the enum value alone is unclear.
+const PROPERTY_TYPE_LABELS: Partial<Record<PropertyType, string>> = {
+  Standalone: 'Standalone (House)',
+}
+export function propertyTypeLabel(t: PropertyType): string {
+  return PROPERTY_TYPE_LABELS[t] ?? t
+}
 
 export interface Property {
   id: number
@@ -41,9 +78,29 @@ export interface Property {
   view: string
   parkings?: number
   buildingAge?: number
+  floor?: Floor
   needsRenovation?: boolean
+  terrace?: boolean
+  amenities?: string[]
+  buildingFeatures?: string[]
+  furnishing?: Furnishing
+  /** Google Maps link / pin to the exact spot. */
+  mapUrl?: string
+  /** A single walkthrough video, stored as a URL (upload or a pasted link). */
+  video?: string
   aiDescription?: string
   notes?: string
+  /** Partner company/agent who referred this listing (for co-brokering). Internal
+   *  — visible to the team, never published to the public page. */
+  referredBy?: string
+  // Private to the assigned agent + managers — never shown to other agents or
+  // published to the public microsite.
+  ownerName?: string
+  ownerContact?: string
+  /** Storage path (private bucket) of an attached document, not a public URL. */
+  documentPath?: string
+  /** Original filename of the attached document, for display. */
+  documentName?: string
   status: PropertyStatus
   agentId: AgentId
 }
@@ -79,7 +136,8 @@ export type ClientStatus = 'Searching' | 'Negotiation' | 'Signed' | 'Viewing'
 export interface ClientReq {
   transaction: Transaction | ''
   type: PropertyType | ''
-  location: string
+  location: string            // display string (all areas, comma-joined)
+  locations?: string[]        // the areas the client is open to (for matching)
   priceMin: number
   priceMax: number
   beds: number
@@ -88,6 +146,10 @@ export interface ClientReq {
   parkings?: number
   garden: boolean
   balcony: boolean
+  view?: string               // preferred view (Sea, Mountain…)
+  furnishing?: Furnishing | ''
+  buildingAge?: number        // max acceptable building age (yrs)
+  floor?: Floor | ''
   advancedPayment?: boolean   // renter can pay advanced (optional)
   notes: string
 }
@@ -105,6 +167,28 @@ export interface Client {
   leadScore?: number     // 0-100 lead score (Phase 2)
   agentRating?: number   // agent's 1-5 star gut-feel rating
   masked?: boolean       // another agent's client: name/phone hidden, read-only
+  tags?: string[]        // free-form labels for grouping (Hot / Investor / …)
+  // Set when the client was referred/transferred from another agent — that agent
+  // gets the referral commission. Code is the referrer's agent_code.
+  referredBy?: string
+  referredByName?: string
+}
+
+// Suggested client tags. Agents can also type their own — these are just the
+// quick-pick chips shown in the editor and the filter bar.
+export const CLIENT_TAG_PRESETS = ['Hot', 'Warm', 'Investor', 'First-time', 'VIP', 'Cash', 'Urgent'] as const
+
+// A stable colour for a tag chip, derived from the text so the same tag always
+// looks the same without needing a stored palette.
+export function tagStyle(tag: string): { bg: string; color: string } {
+  const palette = [
+    { bg: '#FBE7E7', color: '#A23434' }, { bg: '#E3F4EA', color: '#1F7A4D' },
+    { bg: '#E6EEFB', color: '#2E5288' }, { bg: '#FBEFD6', color: '#9A6516' },
+    { bg: '#EFE7FB', color: '#5B3AA2' }, { bg: '#E0F2F4', color: '#1B6C74' },
+  ]
+  let h = 0
+  for (let i = 0; i < tag.length; i++) h = (h * 31 + tag.charCodeAt(i)) >>> 0
+  return palette[h % palette.length]
 }
 
 export const CLIENTS: Client[] = [
@@ -188,25 +272,37 @@ export function formatPrice(value: number, currency = 'USD'): string {
 
 export const TYPE_GRADIENTS: Record<PropertyType, string> = {
   Appartement: 'linear-gradient(135deg,#16294A,#2E5288)',
+  Duplex:      'linear-gradient(135deg,#1B2E52,#3A62A8)',
+  Studio:      'linear-gradient(135deg,#123B3A,#1E7A78)',
   Villa:       'linear-gradient(135deg,#13403A,#1F8A5B)',
+  Chalet:      'linear-gradient(135deg,#20301A,#4A7A2E)',
+  Standalone:  'linear-gradient(135deg,#3A2A1A,#A56A2E)',
   Office:      'linear-gradient(135deg,#1E2A3A,#4A5A70)',
   Building:    'linear-gradient(135deg,#2A1E3A,#6A4A90)',
   Shop:        'linear-gradient(135deg,#3A2A14,#9A6516)',
   Land:        'linear-gradient(135deg,#1A3020,#2E7A4A)',
   Showroom:    'linear-gradient(135deg,#3A1A2A,#9A3460)',
   Restaurant:  'linear-gradient(135deg,#3A1A14,#C04A20)',
+  Garage:      'linear-gradient(135deg,#26303A,#556170)',
+  Warehouse:   'linear-gradient(135deg,#2E2A20,#7A6A3A)',
 }
 
 export function typeStyle(type: PropertyType): { bg: string; color: string } {
   const map: Record<PropertyType, { bg: string; color: string }> = {
     Appartement: { bg: '#EAF0FA', color: '#2E5288' },
+    Duplex:      { bg: '#E7EEFB', color: '#345FA0' },
+    Studio:      { bg: '#E0F3F2', color: '#1C6E6C' },
     Villa:       { bg: '#E3F4EA', color: '#1F7A4D' },
+    Chalet:      { bg: '#EAF3E2', color: '#3E6A28' },
+    Standalone:  { bg: '#F6EDDF', color: '#8A5A24' },
     Office:      { bg: '#F0F4FA', color: '#4A5A70' },
     Building:    { bg: '#F0EAFA', color: '#6A4A90' },
     Shop:        { bg: '#FBEFD6', color: '#9A6516' },
     Land:        { bg: '#E8F4ED', color: '#2E7A4A' },
     Showroom:    { bg: '#FAEBF4', color: '#9A3460' },
     Restaurant:  { bg: '#FAE8E3', color: '#C04A20' },
+    Garage:      { bg: '#EDF0F4', color: '#556170' },
+    Warehouse:   { bg: '#F1EEE2', color: '#6E6132' },
   }
   return map[type] ?? { bg: '#F0F2F5', color: '#6A7488' }
 }

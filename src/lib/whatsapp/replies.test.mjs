@@ -8,6 +8,28 @@ import {
 } from './replies.ts'
 
 // ── reminder replies (the spec's done / snooze 3d / not interested) ─────────
+test('parseReminderReply: "remind me to <task>" is NOT a snooze (new reminder)', () => {
+  // The real bug: "remind me to call jess in 42 minutes" snoozed the wrong client.
+  for (const s of ['remind me to call jess in 42 minutes', 'Remind me to email Sara tomorrow', 'remind me to follow up with Joe']) {
+    assert.equal(parseReminderReply(s).action, 'unknown', s)
+  }
+})
+test('parseReminderReply: a plain snooze still works', () => {
+  assert.equal(parseReminderReply('snooze 3d').action, 'snooze')
+  assert.equal(parseReminderReply('remind me tomorrow').action, 'snooze')
+  assert.equal(parseReminderReply('remind me later').action, 'snooze')
+})
+test('parseReminderReply: "called/spoke to <NAME>" is feedback, NOT a done', () => {
+  // The bug: "called Sara, not ready yet" marked the wrong (current) reminder done.
+  for (const s of ['spoke to Ahmed, he wants a viewing Saturday', 'called Sara, not ready yet', 'contacted Joe Khoury', 'spoke to Michel about the villa']) {
+    assert.equal(parseReminderReply(s).action, 'unknown', s)
+  }
+})
+test('parseReminderReply: bare / pronoun completions are still done', () => {
+  for (const s of ['done', 'did it', 'finished', 'called', 'called him', 'spoke to them', 'contacted', 'reached out']) {
+    assert.equal(parseReminderReply(s).action, 'done', s)
+  }
+})
 test('parseReminderReply: done variants', () => {
   for (const s of ['done', 'Done', 'called', 'called him', 'spoke to them', 'contacted', 'finished']) {
     assert.equal(parseReminderReply(s).action, 'done', s)

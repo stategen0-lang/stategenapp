@@ -1,13 +1,27 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/session'
-import { canEditProperty, isManager } from '@/lib/permissions'
+import { canEditProperty, isManager, owns, type Session } from '@/lib/permissions'
 import { createListingAlerts } from '@/lib/alerts-server'
+import { ensureManagerAgentCode } from '@/lib/ensure-manager-code'
 
 // The listing agent's code lives in the property's Amenities JSON.
 function propertyAgent(row: Record<string, unknown>): string | null {
   try { return (JSON.parse((row.Amenities as string) || '{}').agentId as string) ?? null } catch { return null }
+}
+
+// Owner name/contact and the private document are confidential to the listing's
+// own agent and managers. Everyone else in the company shares the inventory but
+// must not receive these — so we strip them from the raw row before it leaves
+// the server, not just hide them in the UI (which the network tab would expose).
+function stripPrivateFields(row: Record<string, unknown>, session: Session): Record<string, unknown> {
+  if (isManager(session.role) || owns(session, propertyAgent(row))) return row
+  try {
+    const ex = JSON.parse((row.Amenities as string) || '{}')
+    delete ex.ownerName; delete ex.ownerContact; delete ex.documentPath; delete ex.documentName; delete ex.mapUrl
+    return { ...row, Amenities: JSON.stringify(ex) }
+  } catch { return row }
 }
 
 export async function GET() {
@@ -23,7 +37,8 @@ export async function GET() {
       .order('created_at', { ascending: false })
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ properties: data ?? [] })
+    const rows = (data ?? []).map(r => stripPrivateFields(r as Record<string, unknown>, session))
+    return NextResponse.json({ properties: rows })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
@@ -37,8 +52,14 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const supabase = await createClient()
 
-    // An agent's new listing is always filed under their own code.
-    if (!isManager(session.role) && session.agentCode) body.agentId = session.agentCode
+    // A new listing is always filed under its creator's own code — an agent's,
+    // or a manager's (managers work deals too; mint their code if missing so it's
+    // never stamped to a phantom demo agent).
+    let ownCode = session.agentCode
+    if (!ownCode && isManager(session.role)) {
+      ownCode = await ensureManagerAgentCode(createAdminClient(), session.companyId, session.userId, session.fullName)
+    }
+    if (ownCode) body.agentId = ownCode
 
     // Pack extra UI fields that don't have dedicated DB columns into Amenities JSON
     const extras = {
@@ -46,13 +67,27 @@ export async function POST(req: NextRequest) {
       transaction: body.transaction,
       garden: body.garden,
       balcony: body.balcony,
+      terrace: body.terrace,
+      amenities: Array.isArray(body.amenities) ? body.amenities : [],
+      buildingFeatures: Array.isArray(body.buildingFeatures) ? body.buildingFeatures : [],
+      furnishing: body.furnishing,
       view: body.view,
+      mapUrl: body.mapUrl,
+      video: body.video,
       rent: body.rent,
       advancedPayment: body.advancedPayment,
       agentId: body.agentId,
       notes: body.notes,
+      referredBy: body.referredBy,
       aiDescription: body.aiDescription,
       parkings: body.parkings,
+      buildingAge: body.buildingAge,
+      floor: body.floor,
+      needsRenovation: body.needsRenovation,
+      ownerName: body.ownerName,
+      ownerContact: body.ownerContact,
+      documentPath: body.documentPath,
+      documentName: body.documentName,
       status: body.status,
     }
 
@@ -78,14 +113,16 @@ export async function POST(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    // Raise match alerts for clients this new listing fits. Non-fatal: the
-    // listing is already saved, so a failure here must not fail the request.
-    let alerts = 0
-    try {
-      alerts = await createListingAlerts(createAdminClient(), session.companyId, data as Record<string, unknown>)
-    } catch { /* already logged inside */ }
+    // Raise match alerts for clients this new listing fits — deferred with
+    // after() so the save returns instantly; the scan runs off the response path.
+    // Non-fatal: the listing is already saved, so a failure here can't fail it.
+    const companyId = session.companyId
+    const saved = data as Record<string, unknown>
+    after(async () => {
+      try { await createListingAlerts(createAdminClient(), companyId, saved) } catch { /* already logged inside */ }
+    })
 
-    return NextResponse.json({ property: data, alerts })
+    return NextResponse.json({ property: data })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
@@ -115,15 +152,27 @@ export async function PATCH(req: NextRequest) {
       transaction: body.transaction,
       garden: body.garden,
       balcony: body.balcony,
+      terrace: body.terrace,
+      amenities: Array.isArray(body.amenities) ? body.amenities : [],
+      buildingFeatures: Array.isArray(body.buildingFeatures) ? body.buildingFeatures : [],
+      furnishing: body.furnishing,
       view: body.view,
+      mapUrl: body.mapUrl,
+      video: body.video,
       rent: body.rent,
       advancedPayment: body.advancedPayment,
       agentId: body.agentId,
       notes: body.notes,
+      referredBy: body.referredBy,
       aiDescription: body.aiDescription,
       parkings: body.parkings,
       buildingAge: body.buildingAge,
+      floor: body.floor,
       needsRenovation: body.needsRenovation,
+      ownerName: body.ownerName,
+      ownerContact: body.ownerContact,
+      documentPath: body.documentPath,
+      documentName: body.documentName,
       status: body.status,
     }
 

@@ -5,9 +5,26 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  scoreBudget, scoreLocation, scoreBedrooms, scoreAmenities,
+  scoreBudget, scoreLocation, scoreLocationMulti, scoreBedrooms, scoreAmenities,
   propFeatures, computeScore, matchProperties, matchClients, MATCH_THRESHOLD, BUDGET_EXCLUDE, LOCATION_EXCLUDE,
 } from './matching.ts'
+
+// ── scoreLocationMulti: a client open to several areas ───────────────────────
+test('scoreLocationMulti: best of the requested areas wins', () => {
+  // Property in Achrafieh; client open to Jounieh (far) OR Achrafieh (exact).
+  const s = scoreLocationMulti('Achrafieh Beirut', { location: '', locations: ['Jounieh', 'Achrafieh'] })
+  assert.equal(s, 100)
+})
+test('scoreLocationMulti: none matching excludes', () => {
+  const s = scoreLocationMulti('Tripoli North', { location: '', locations: ['Jounieh', 'Achrafieh'] })
+  assert.equal(s, LOCATION_EXCLUDE)
+})
+test('scoreLocationMulti: no areas = no constraint', () => {
+  assert.equal(scoreLocationMulti('Anywhere', { location: '', locations: [] }), 100)
+})
+test('scoreLocationMulti: falls back to the single location field', () => {
+  assert.equal(scoreLocationMulti('Achrafieh Beirut', { location: 'Achrafieh' }), 100)
+})
 
 // ── fixtures ────────────────────────────────────────────────────────────────
 const prop = (o = {}) => ({
