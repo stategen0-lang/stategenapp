@@ -64,6 +64,7 @@ export default function AdminPage() {
   const [pin, setPin] = useState('')
   const [unlocked, setUnlocked] = useState(false)
   const [pinError, setPinError] = useState(false)
+  const [pinLoading, setPinLoading] = useState(false)
   const [companies, setCompanies] = useState<Company[]>([])
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -221,13 +222,18 @@ export default function AdminPage() {
 
   async function handlePin(e: React.FormEvent) {
     e.preventDefault()
-    const res = await fetch('/api/admin/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pin }),
-    })
-    if (res.ok) { setUnlocked(true); setPinError(false) }
-    else setPinError(true)
+    setPinLoading(true)
+    setPinError(false)
+    try {
+      const res = await fetch('/api/admin/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin }),
+      })
+      if (res.ok) { setUnlocked(true) }
+      else setPinError(true)
+    } catch { setPinError(true) }
+    setPinLoading(false)
   }
 
   useEffect(() => {
@@ -347,8 +353,13 @@ export default function AdminPage() {
               style={{ background: '#1a3258', color: '#fff', border: pinError ? '1.5px solid #e05c5c' : '1.5px solid #2a4570', fontFamily: 'inherit' }}
             />
             {pinError && <p className="text-xs text-center" style={{ color: '#e05c5c' }}>Incorrect PIN</p>}
-            <button type="submit" className="w-full py-3 rounded-xl text-sm font-semibold text-white" style={{ background: '#5E8FD6' }}>
-              Unlock →
+            <button
+              type="submit"
+              disabled={pinLoading || !pin}
+              className="w-full py-3 rounded-xl text-sm font-semibold text-white disabled:opacity-60 transition-opacity"
+              style={{ background: '#5E8FD6' }}
+            >
+              {pinLoading ? 'Checking…' : 'Unlock →'}
             </button>
           </form>
         </div>
