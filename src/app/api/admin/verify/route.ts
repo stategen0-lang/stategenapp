@@ -10,11 +10,8 @@ function makeToken() {
 export async function POST(req: NextRequest) {
   const { pin } = await req.json().catch(() => ({ pin: '' }))
   const expected = process.env.ADMIN_PIN
-  if (!expected) {
-    return NextResponse.json({ error: 'ADMIN_PIN env var not set' }, { status: 401 })
-  }
-  if (pin !== expected) {
-    return NextResponse.json({ error: `Wrong PIN (expected length ${expected.length})` }, { status: 401 })
+  if (!expected || pin !== expected) {
+    return NextResponse.json({ error: 'Invalid PIN' }, { status: 401 })
   }
   const token = makeToken()
   const res = NextResponse.json({ ok: true })
