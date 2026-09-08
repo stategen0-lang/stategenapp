@@ -17,5 +17,9 @@ export function normalizeDomain(raw: string | null | undefined): string {
     .replace(/^www\./, '')         // strip www.
     .replace(/[/?#].*$/, '')       // strip any path / query / fragment
     .replace(/\.+$/, '')           // strip trailing dot(s)
-    .replace(/\s+/g, '')           // no internal spaces
+    // Drop EVERYTHING that isn't a valid domain character. This is the important
+    // one: it removes invisible junk that survives a trim — non-breaking spaces,
+    // zero-width spaces, BOMs — which is how two identical-LOOKING domains fail an
+    // exact match ("no company found" for a domain that's clearly in the table).
+    .replace(/[^a-z0-9.-]/g, '')
 }

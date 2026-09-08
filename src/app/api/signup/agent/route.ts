@@ -30,14 +30,14 @@ export async function POST(req: NextRequest) {
 
     const admin = createAdminClient()
 
-    // Match the company by NORMALISED domain, so an agent typing the clean
-    // domain still finds an agency whose stored value has www/protocol/casing
-    // from before domains were normalised on write. Narrow with ilike, then
-    // confirm an exact normalised match.
+    // Match the company by NORMALISED domain. We scan all companies and compare
+    // normalised values (rather than an ilike/substring) so a hidden character
+    // ANYWHERE in the stored domain — a zero-width space, nbsp, BOM, or stray
+    // casing/www/protocol — can't hide an agency from its own agents. The
+    // Companies table is small, so a full scan is cheap.
     const { data: candidates } = await admin
       .from('Companies')
       .select('id, Name, Plan, domain')
-      .ilike('domain', `%${domain}%`)
     const company = (candidates ?? []).find(c => normalizeDomain(c.domain as string) === domain) ?? null
     if (!company) {
       return NextResponse.json({ error: 'No agency found for that domain.' }, { status: 404 })
