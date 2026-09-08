@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Building2, Users, Banknote, Clock, X, Plus, ChevronRight, UserCheck } from 'lucide-react'
 import {
-  getAgent,
+  getAgent, AGENTS,
   statusStyle, CLIENT_TYPE_STYLE, formatPrice, TYPE_GRADIENTS, typeStyle,
   Property, Client, Agent, propertyLocation,
 } from '@/lib/data'
@@ -91,9 +91,9 @@ export default function DashboardPage() {
   // Real agent for a code, falling back to the demo helper for legacy codes.
   const agentFor = (code: string): Agent => {
     const a = agents[code]
-    return a
-      ? { id: code as Agent['id'], name: a.name, initials: a.initials, color: a.color, shortName: a.name.split(' ')[0] }
-      : getAgent(code as Agent['id'])
+    if (a) return { id: code as Agent['id'], name: a.name, initials: a.initials, color: a.color, shortName: a.name.split(' ')[0] }
+    const fallback = AGENTS.find(x => x.id === code)
+    return fallback ?? { id: code as Agent['id'], name: code, initials: code.slice(0, 2).toUpperCase(), color: '#9AA3B2', shortName: code }
   }
 
   function upsertProp(p: Property) {

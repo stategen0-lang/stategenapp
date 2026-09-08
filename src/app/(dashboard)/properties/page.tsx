@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Search, X } from 'lucide-react'
-import { getAgent, Property, Agent, PROPERTY_TYPES, propertyTypeLabel } from '@/lib/data'
+import { getAgent, AGENTS, Property, Agent, PROPERTY_TYPES, propertyTypeLabel } from '@/lib/data'
 import { filterProperties } from '@/lib/search'
 import PropertyCard from '@/components/properties/MeridianPropertyCard'
 import PropertyDetailModal from '@/components/modals/PropertyDetailModal'
@@ -46,9 +46,9 @@ export default function PropertiesPage() {
   // that predate their profile.
   const agentFor = (code: string): Agent => {
     const a = agents[code]
-    return a
-      ? { id: code as Agent['id'], name: a.name, initials: a.initials, color: a.color, shortName: a.name.split(' ')[0] }
-      : getAgent(code as Agent['id'])
+    if (a) return { id: code as Agent['id'], name: a.name, initials: a.initials, color: a.color, shortName: a.name.split(' ')[0] }
+    const fallback = AGENTS.find(x => x.id === code)
+    return fallback ?? { id: code as Agent['id'], name: code, initials: code.slice(0, 2).toUpperCase(), color: '#9AA3B2', shortName: code }
   }
   const [detailId, setDetailId] = useState<number | null>(null)
   const [addOpen, setAddOpen] = useState(false)
