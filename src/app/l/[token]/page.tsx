@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { dbRowToProperty } from '@/lib/db-mappers'
 import { parseShareToken, shareSecret, publicListing, type PublicListing } from '@/lib/share'
 import { formatPrice, propertyLocation } from '@/lib/data'
+import PhotoGallery from '@/components/listing/PhotoGallery'
 
 // Public, unauthenticated listing page. Reached only via a signed token, and it
 // renders exclusively the allowlisted fields from publicListing() — never the
@@ -12,7 +13,6 @@ export const dynamic = 'force-dynamic'
 
 const H = '#14223F'
 const SUB = '#6A7488'
-const LINE = '#EEF0F4'
 
 // The owning agency's public branding — shown instead of the generic StateGen
 // footer so a shared link carries the agent's company.
@@ -161,16 +161,8 @@ export default async function ListingPage({ params }: { params: Promise<{ token:
           </span>
         </div>
 
-        {/* Hero photo with overlaid title + price */}
-        <div className="relative w-full" style={{ aspectRatio: '16 / 10', background: '#E3E7EE' }}>
-          {listing.photos[0]
-            // eslint-disable-next-line @next/next/no-img-element
-            ? <img src={listing.photos[0]} alt={listing.title} className="w-full h-full object-cover" />
-            : <div className="w-full h-full flex items-center justify-center text-sm" style={{ color: '#9AA3B2' }}>No photo</div>}
-
-          {/* darkening scrim so the overlaid text stays legible on any photo */}
-          <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(9,16,32,0.85) 0%, rgba(9,16,32,0.35) 34%, rgba(9,16,32,0) 62%)' }} />
-
+        {/* Photo gallery — swipeable, with arrows + clickable thumbnails */}
+        <PhotoGallery photos={listing.photos} title={listing.title} accent={accent}>
           {/* top badges */}
           <div className="absolute top-3 left-3 flex gap-2">
             <span className="text-xs font-semibold px-2.5 py-1 rounded-full text-white" style={{ background: 'rgba(0,0,0,0.42)', backdropFilter: 'blur(4px)' }}>
@@ -198,17 +190,7 @@ export default async function ListingPage({ params }: { params: Promise<{ token:
               </span>
             </div>
           </div>
-        </div>
-
-        {/* Thumbnail strip */}
-        {listing.photos.length > 1 && (
-          <div className="flex gap-2 px-4 py-3 overflow-x-auto" style={{ borderBottom: `1px solid ${LINE}` }}>
-            {listing.photos.map((src, i) => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img key={i} src={src} alt="" className="shrink-0 rounded-xl object-cover" style={{ width: 92, height: 66 }} />
-            ))}
-          </div>
-        )}
+        </PhotoGallery>
 
         <div className="p-5 md:p-6 space-y-6">
           {/* Facts */}
