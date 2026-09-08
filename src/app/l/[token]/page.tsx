@@ -217,6 +217,20 @@ export default async function ListingPage({ params }: { params: Promise<{ token:
             </div>
             <p className="text-sm leading-relaxed" style={{ color: '#2B3A54', whiteSpace: 'pre-wrap' }}>{listing.description}</p>
           </div>
+
+          {/* Video walkthrough */}
+          {listing.video && (
+            <div>
+              <div className="flex items-center gap-2.5 mb-2.5">
+                <span className="h-4 w-1 rounded-full" style={{ background: accent }} />
+                <p className="text-[11px] font-bold uppercase" style={{ color: accent, letterSpacing: '0.12em' }}>Video walkthrough</p>
+              </div>
+              <div className="rounded-2xl overflow-hidden" style={{ background: '#000' }}>
+                {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                <video src={listing.video} controls playsInline preload="metadata" className="w-full" style={{ maxHeight: 420 }} />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Contact card */}

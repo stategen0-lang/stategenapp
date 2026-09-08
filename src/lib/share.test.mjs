@@ -97,7 +97,7 @@ test('publicListing: the exact key set is the allowlist, nothing more', () => {
     'title', 'type', 'transaction', 'price', 'rent', 'district', 'city', 'size',
     'beds', 'baths', 'parkings', 'buildingAge', 'garden', 'balcony', 'terrace',
     'furnishing', 'amenities', 'buildingFeatures', 'view',
-    'status', 'photos', 'description',
+    'status', 'photos', 'video', 'description',
   ])
   for (const key of Object.keys(pub)) {
     assert.ok(allowed.has(key), `unexpected key leaked to public view: ${key}`)

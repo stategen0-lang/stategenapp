@@ -83,6 +83,7 @@ export interface PublicListing {
   view: string
   status: string
   photos: string[]
+  video?: string
   description: string
 }
 
@@ -117,6 +118,7 @@ export function publicListing(p: Property, description: string): PublicListing {
     view: p.view,
     status: p.status,
     photos: Array.isArray(p.photos) ? p.photos : [],
+    video: p.video,
     description,
   }
 }
