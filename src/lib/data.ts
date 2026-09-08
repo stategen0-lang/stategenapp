@@ -263,7 +263,17 @@ export const DEALS: Deal[] = [
 export const CURRENT_AGENT_ID: AgentId = 'a1'  // Lara Khoury (logged-in user)
 
 export function getAgent(id: AgentId): Agent {
-  return AGENTS.find(a => a.id === id)!
+  const found = AGENTS.find(a => a.id === id)
+  if (found) return found
+  // Unknown code — a manager/custom/real agent code that isn't in the demo
+  // roster. Return a safe fallback so callers never crash on `.name`/`.initials`
+  // (this used to be `find(...)!`, which returned undefined and threw once
+  // listings started being owned by codes like "MGR-1" or "NH-204"). Real names
+  // and colours come from the live roster (/api/company/agents) at the call
+  // sites that have it; this is just a non-crashing default.
+  const code = String(id ?? '').trim()
+  const initials = code.replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase() || 'AG'
+  return { id, name: code || 'Agent', initials, color: '#6A7488', shortName: code || 'Agent' }
 }
 
 export function formatPrice(value: number, currency = 'USD'): string {
