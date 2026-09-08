@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin } from '@/lib/admin-guard'
 import { planFor } from '@/lib/stripe-plans'
+import { normalizeDomain } from '@/lib/domain'
+import { generateAgentCode } from '@/lib/agent-code'
 
 export async function GET() {
   const gate = await requireAdmin()
@@ -47,7 +49,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const companyName = String(body.companyName ?? '').trim()
-    const domain = String(body.domain ?? '').toLowerCase().trim()
+    const domain = normalizeDomain(body.domain)
     const email = String(body.email ?? '').toLowerCase().trim()
     const planId = String(body.planId ?? '')
     const password = String(body.password ?? '')
@@ -91,7 +93,8 @@ export async function POST(req: NextRequest) {
     }
 
     const { error: profileErr } = await supabase.from('Profiles').insert({
-      id: created.user.id, company_id: company.id, Full_name: `${companyName} Manager`, role: 'owner', approved: true,
+      id: created.user.id, company_id: company.id, Full_name: `${companyName} Manager`, role: 'owner',
+      agent_code: generateAgentCode(companyName || 'Manager'), approved: true,
     })
     if (profileErr) {
       await supabase.from('Companies').delete().eq('id', company.id)

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { planFor } from '@/lib/stripe-plans'
 import { generateAgentCode } from '@/lib/agent-code'
+import { normalizeDomain } from '@/lib/domain'
 
 // Company signup — manual billing (no Stripe).
 //
@@ -13,7 +14,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const companyName = String(body.companyName ?? '').trim()
-    const domain = String(body.domain ?? '').toLowerCase().trim()
+    const domain = normalizeDomain(body.domain)
     const email = String(body.email ?? '').toLowerCase().trim()
     const planId = String(body.planId ?? '')
     const password = String(body.password ?? '')

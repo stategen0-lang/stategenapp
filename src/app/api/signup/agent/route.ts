@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { agentLimitFor } from '@/lib/stripe-plans'
 import { seatsUsed } from '@/lib/seats'
 import { createAgentAccount } from '@/lib/agent-account'
+import { normalizeDomain } from '@/lib/domain'
 
 // Agent signup — server-authoritative.
 //
@@ -16,7 +17,7 @@ import { createAgentAccount } from '@/lib/agent-account'
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const domain = String(body.domain ?? '').toLowerCase().trim()
+    const domain = normalizeDomain(body.domain)
     const fullName = String(body.fullName ?? '').trim()
     const password = String(body.password ?? '')
 
@@ -29,11 +30,15 @@ export async function POST(req: NextRequest) {
 
     const admin = createAdminClient()
 
-    const { data: company } = await admin
+    // Match the company by NORMALISED domain, so an agent typing the clean
+    // domain still finds an agency whose stored value has www/protocol/casing
+    // from before domains were normalised on write. Narrow with ilike, then
+    // confirm an exact normalised match.
+    const { data: candidates } = await admin
       .from('Companies')
-      .select('id, Name, Plan')
-      .eq('domain', domain)
-      .maybeSingle()
+      .select('id, Name, Plan, domain')
+      .ilike('domain', `%${domain}%`)
+    const company = (candidates ?? []).find(c => normalizeDomain(c.domain as string) === domain) ?? null
     if (!company) {
       return NextResponse.json({ error: 'No agency found for that domain.' }, { status: 404 })
     }
