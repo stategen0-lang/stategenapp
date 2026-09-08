@@ -11,7 +11,7 @@ export type CreateFlow = 'create_property' | 'create_client'
 
 const PROPERTY_KEYS =
   'type (apartment/villa/office/shop/land/building/chalet/showroom), transaction ("For Sale" or "For Rent"), ' +
-  'location (city), neighborhood (area within the city), price (USD number), rent (USD per month number), ' +
+  'location (the area/neighbourhood, ONE place e.g. "Achrafieh" — not a separate city), price (USD number), rent (USD per month number), ' +
   'beds, baths, size (sqm), parkings, ownerName, ownerContact (phone), view, notes'
 
 const CLIENT_KEYS =
@@ -30,7 +30,7 @@ function systemPrompt(flow: CreateFlow, askedLabel?: string): string {
     `Read through typos and casual phrasing.`,
     ``,
     `Examples:`,
-    `"3 bed apartment in Hamra Beirut for sale 450k, 180sqm" -> {"fields":{"type":"apartment","transaction":"For Sale","location":"Beirut","neighborhood":"Hamra","price":450000,"beds":3,"size":180}}`,
+    `"3 bed apartment in Hamra Beirut for sale 450k, 180sqm" -> {"fields":{"type":"apartment","transaction":"For Sale","location":"Hamra","price":450000,"beds":3,"size":180}}`,
     `"500k" -> {"fields":{"price":500000}}`,
     `"for rent, 1800 a month" -> {"fields":{"transaction":"For Rent","rent":1800}}`,
     `"owner is Joe Khoury 03 123456" -> {"fields":{"ownerName":"Joe Khoury","ownerContact":"03 123456"}}`,

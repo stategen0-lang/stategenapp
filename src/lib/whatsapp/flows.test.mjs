@@ -90,13 +90,14 @@ test('renderForm: an unfilled optional line has an empty value (hint in the labe
 test('parseForm (listing): reads every labelled line', () => {
   const { context, invalid } = parseProp([
     'Type (required): Apartment', 'Sale or rent (required): sale',
-    'City (required): Beirut', 'Area (required): Hamra', 'Price (required): 450k',
+    'Area (required): Achrafieh', 'Price (required): 450k',
     'Bedrooms (optional): 3', 'Bathrooms (optional): 2', 'Size (optional): 180',
     'Parking spaces (optional): 1', 'Owner name (required): Mr Khoury', 'Owner phone (required): 03111222',
   ].join('\n'))
   assert.deepEqual(invalid, [])
   assert.equal(context.type, 'Appartement')
   assert.equal(context.transaction, 'For Sale')
+  assert.equal(context.location, 'Achrafieh')
   assert.equal(context.price, 450000)
   assert.equal(context.baths, 2)
   assert.equal(context.size, 180)
@@ -142,6 +143,12 @@ test('seedContext (listing): form fields land in context, extras elsewhere', () 
   assert.equal(ctx.baths, 2)
   assert.equal(ctx.size, 140)
   assert.deepEqual(extrasOf(ctx), { rent: 1200 })
+})
+test('seedContext: collapses split neighbourhood/city into one area (prefers neighbourhood)', () => {
+  assert.equal(seedContext({ neighborhood: 'Hamra', location: 'Beirut' }).location, 'Hamra')
+  assert.equal(seedContext({ district: 'Achrafieh', city: 'Beirut' }).location, 'Achrafieh')
+  assert.equal(seedContext({ city: 'Jounieh' }).location, 'Jounieh')
+  assert.equal('neighborhood' in seedContext({ neighborhood: 'Hamra', location: 'Beirut' }), false)
 })
 test('seedContext: drops junk, ignores unknown keys, empty ok', () => {
   const ctx = seedContext({ price: 'negotiable', type: 'Spaceship', company_id: 99 })

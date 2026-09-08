@@ -146,12 +146,12 @@ For update_client, update_property and create_property, put the changes in "fiel
 using ONLY these key names (anything else is discarded):
 - client: budget, status, location, beds, phone, rating
   status must be one of: Searching, Viewing, Negotiating, Closed, Inactive
-- property: type, transaction, status, price, rent, size, beds, baths, title, location, neighborhood, ownerName, ownerContact, notes
+- property: type, transaction, status, price, rent, size, beds, baths, title, location, ownerName, ownerContact, notes
   type is the property type ("apartment","villa","office","shop","land","building","chalet","showroom") — extract it whenever named
   transaction is "For Sale" or "For Rent" (a sale price or "for sale"/"selling" → For Sale; "for rent"/monthly → For Rent)
   ownerName and ownerContact are the owner's name and phone when given ("owner Joe Khoury 03 123456" → ownerName "Joe Khoury", ownerContact "03 123456")
   status must be one of: Available, Reserved, Sold, Rented
-  "location" is the city, "neighborhood" is the area within it
+  "location" is the single area/neighbourhood (e.g. "Achrafieh") — one place, not a separate city
 For create_client, put fields using ONLY these keys: name, phone,
 clientType (buyer|renter), propertyType, location, budget, beds, baths, parkings.
 For log_offer, put the amount in fields.amount (plain USD number: "450k"->450000,
@@ -187,7 +187,7 @@ Examples (note the typos and varied phrasing):
 "whats in negotiation" -> {"intent":"query_pipeline","fields":{"stage":"negotiating"}}
 "show me my pipeline" -> {"intent":"query_pipeline"}
 "prop 23 is sold" -> {"intent":"update_property","propertyId":23,"fields":{"status":"Sold"}}
-"add listing 3 bed apartment in Hamra, Beirut, for sale, 450k, 180 sqm, owner Joe Khoury 03 123456" -> {"intent":"create_property","fields":{"title":"3 bed apartment","type":"apartment","transaction":"For Sale","beds":3,"neighborhood":"Hamra","location":"Beirut","price":450000,"size":180,"ownerName":"Joe Khoury","ownerContact":"03 123456"}}
+"add listing 3 bed apartment in Hamra, Beirut, for sale, 450k, 180 sqm, owner Joe Khoury 03 123456" -> {"intent":"create_property","fields":{"title":"3 bed apartment","type":"apartment","transaction":"For Sale","beds":3,"location":"Hamra","price":450000,"size":180,"ownerName":"Joe Khoury","ownerContact":"03 123456"}}
 "book a viewing with ahmed tomorow at 3pm" -> {"intent":"create_event","clientName":"Ahmed","notes":"viewing tomorrow at 3pm"}
 "whats on today" -> {"intent":"query_schedule"}
 "whats new" -> {"intent":"query_activity"}

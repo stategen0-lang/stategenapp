@@ -83,8 +83,7 @@ const coerceTransaction = (v: unknown) => {
 export const CREATE_PROPERTY_STEPS: FlowStep[] = [
   { key: 'type',         label: 'Type',          mandatory: true,  hint: PROPERTY_TYPES.join('/'), coerce: coerceType, aliases: ['property type'], question: 'What type of property is it? (e.g. apartment, villa, office, shop, land)' },
   { key: 'transaction',  label: 'Sale or rent',  mandatory: true,  hint: 'sale/rent', coerce: coerceTransaction, aliases: ['transaction', 'listing', 'for sale or rent', 'buy or rent'], question: 'Is it for sale or for rent?' },
-  { key: 'location',     label: 'City',          mandatory: true,  hint: 'e.g. Beirut', coerce: toText, aliases: ['location'], question: 'Which city is it in?' },
-  { key: 'neighborhood', label: 'Area',          mandatory: true,  hint: 'e.g. Hamra', coerce: toText, aliases: ['neighbourhood', 'neighborhood', 'district'], question: 'Which area or neighbourhood?' },
+  { key: 'location',     label: 'Area',          mandatory: true,  hint: 'e.g. Achrafieh', coerce: toText, aliases: ['location', 'area', 'city', 'neighbourhood', 'neighborhood', 'district'], question: 'Which area is it in? (e.g. Achrafieh)' },
   { key: 'price',        label: 'Price',         mandatory: true,  hint: 'USD, e.g. 450k', coerce: toMoney, aliases: ['price usd', 'asking', 'asking price'], question: "What's the asking price? (USD)" },
   { key: 'beds',         label: 'Bedrooms',      mandatory: false, hint: 'e.g. 3', coerce: toCount, aliases: ['beds', 'bed', 'br'] },
   { key: 'baths',        label: 'Bathrooms',     mandatory: false, hint: 'e.g. 2', coerce: toCount, aliases: ['baths', 'bath', 'ba'] },
@@ -262,6 +261,16 @@ export function seedContext(fields: Record<string, unknown> | undefined, steps: 
   const out: FlowContext = {}
   if (!fields) return out
 
+  // Listings now carry a single "area", so collapse a split neighbourhood/city
+  // into one location, preferring the more specific neighbourhood ("Hamra"
+  // over "Beirut"). The model still sometimes emits both.
+  const src = { ...fields }
+  const area = src.neighborhood ?? src.district ?? src.location ?? src.city
+  if (area != null && String(area).trim()) {
+    src.location = area
+    delete src.neighborhood; delete src.district; delete src.city
+  }
+
   // Details the agent volunteered that aren't form fields (rent, view, garden,
   // balcony, notes). Kept so a rich opening message isn't partly discarded.
   const extra: Record<string, unknown> = {}
@@ -270,12 +279,12 @@ export function seedContext(fields: Record<string, unknown> | undefined, steps: 
   const alias: Record<string, string> = {
     bedrooms: 'beds', bathrooms: 'baths', sqm: 'size', m2: 'size',
     parking: 'parkings', garage: 'parkings',
-    district: 'neighborhood', city: 'location',
+    city: 'location',
     owner: 'ownerName', owner_name: 'ownerName', ownerPhone: 'ownerContact',
     owner_contact: 'ownerContact', contact: 'ownerContact',
   }
 
-  for (const [rawKey, rawValue] of Object.entries(fields)) {
+  for (const [rawKey, rawValue] of Object.entries(src)) {
     const key = alias[rawKey] ?? rawKey
     const step = steps.find(s => s.key === key)
     if (step) {
@@ -315,7 +324,7 @@ export function derivedTitle(context: FlowContext): string {
   const parts = [
     beds > 0 ? `${beds} bed` : null,
     String(context.type ?? 'Property'),
-    context.neighborhood ? `in ${context.neighborhood}` : null,
+    context.neighborhood || context.location ? `in ${context.neighborhood || context.location}` : null,
   ].filter(Boolean)
   return parts.join(' ')
 }
