@@ -6,7 +6,7 @@
 // assets (icons, images, fonts) are cached. Its real jobs are (1) making the app
 // installable and (2) showing a friendly offline page when there's no network.
 
-const CACHE = 'stategen-static-v1'
+const CACHE = 'stategen-static-v3'
 const OFFLINE_URL = '/offline.html'
 
 self.addEventListener('install', (event) => {
@@ -37,7 +37,11 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // Static same-origin assets: cache-first, then network (and cache the result).
+  // Only cache truly static assets (icons, images, fonts) — never JS/CSS chunks
+  // from _next/static, which change on every deploy and stale-serve broken code.
+  const isNextChunk = url.pathname.startsWith('/_next/')
+  if (isNextChunk) return   // let Next.js chunks always go to the network
+
   event.respondWith(
     caches.match(req).then((hit) => {
       if (hit) return hit
