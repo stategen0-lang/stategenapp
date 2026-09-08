@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getAgent, Property, Agent } from '@/lib/data'
+import { Search, X } from 'lucide-react'
+import { getAgent, Property, Agent, PROPERTY_TYPES, propertyTypeLabel } from '@/lib/data'
+import { filterProperties } from '@/lib/search'
 import PropertyCard from '@/components/properties/MeridianPropertyCard'
 import PropertyDetailModal from '@/components/modals/PropertyDetailModal'
 import NewPropertyModal from '@/components/modals/NewPropertyModal'
@@ -53,6 +55,11 @@ export default function PropertiesPage() {
   const [importOpen, setImportOpen] = useState(false)
   const [editProp, setEditProp] = useState<Property | null>(null)
   const [toast, setToast] = useState('')
+  // Search + filters
+  const [q, setQ] = useState('')
+  const [fType, setFType] = useState('')
+  const [fTxn, setFTxn] = useState('')
+  const [fStatus, setFStatus] = useState('')
 
   async function reloadProperties() {
     const r = await fetch('/api/properties')
@@ -68,9 +75,11 @@ export default function PropertiesPage() {
   }
 
   // "Mine" means the signed-in agent's own listings (was hardcoded to 'a1').
-  const filtered = scope === 'me'
+  const scoped = scope === 'me'
     ? list.filter(p => session?.agentCode != null && p.agentId === session.agentCode)
     : list
+  const filtered = filterProperties(scoped, { q, type: fType, transaction: fTxn, status: fStatus })
+  const activeFilters = !!(q || fType || fTxn || fStatus)
 
   const detailProp = detailId != null ? list.find(p => p.id === detailId) ?? null : null
   const detailAgent = detailProp ? agentFor(detailProp.agentId) : null
@@ -120,11 +129,50 @@ export default function PropertiesPage() {
         </div>
       </div>
 
+      {/* Search + filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[180px]">
+          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#9AA3B2' }} />
+          <input
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            placeholder="Search listings — title, area, type…"
+            className="w-full rounded-xl pl-9 pr-3 py-2 text-sm outline-none"
+            style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: '#14223F' }}
+          />
+        </div>
+        <select value={fType} onChange={e => setFType(e.target.value)} className="rounded-xl px-2.5 py-2 text-sm outline-none" style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: fType ? '#14223F' : '#6A7488' }}>
+          <option value="">Any type</option>
+          {PROPERTY_TYPES.map(t => <option key={t} value={t}>{propertyTypeLabel(t)}</option>)}
+        </select>
+        <select value={fTxn} onChange={e => setFTxn(e.target.value)} className="rounded-xl px-2.5 py-2 text-sm outline-none" style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: fTxn ? '#14223F' : '#6A7488' }}>
+          <option value="">Sale & rent</option>
+          <option value="For Sale">For Sale</option>
+          <option value="For Rent">For Rent</option>
+        </select>
+        <select value={fStatus} onChange={e => setFStatus(e.target.value)} className="rounded-xl px-2.5 py-2 text-sm outline-none" style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: fStatus ? '#14223F' : '#6A7488' }}>
+          <option value="">Any status</option>
+          {['Available', 'Pending', 'Reserved', 'Sold'].map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        {activeFilters && (
+          <button
+            onClick={() => { setQ(''); setFType(''); setFTxn(''); setFStatus('') }}
+            className="flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-semibold"
+            style={{ border: '1.5px solid #EEF0F4', background: '#F7F8FB', color: '#6A7488' }}
+          >
+            <X className="h-3.5 w-3.5" /> Clear
+          </button>
+        )}
+      </div>
+      {activeFilters && (
+        <p className="text-xs -mt-2" style={{ color: '#9AA3B2' }}>{filtered.length} result{filtered.length === 1 ? '' : 's'}</p>
+      )}
+
       {/* Grid */}
       {filtered.length === 0 ? (
         <div className="text-center py-20" style={{ color: '#9AA3B2' }}>
           <p className="text-base font-medium">No listings found</p>
-          <p className="text-sm mt-1">Add a listing or switch to Company view</p>
+          <p className="text-sm mt-1">{activeFilters ? 'Try clearing the search or filters' : 'Add a listing or switch to Company view'}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">

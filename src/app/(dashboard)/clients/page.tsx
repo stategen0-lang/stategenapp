@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { Search, X } from 'lucide-react'
 import { getAgent, statusStyle, CLIENT_TYPE_STYLE, formatPrice, tagStyle, Client, Agent } from '@/lib/data'
+import { filterClients } from '@/lib/search'
 import { useSession } from '@/hooks/use-session'
 import { isManager } from '@/lib/permissions'
 import { sortOwnFirst } from '@/lib/client-order'
@@ -53,6 +55,10 @@ export default function ClientsPage() {
   const [editClient, setEditClient] = useState<Client | null>(null)
   const [tagFilter, setTagFilter] = useState<string | null>(null)
   const [toast, setToast] = useState('')
+  // Search + filters
+  const [q, setQ] = useState('')
+  const [fType, setFType] = useState('')
+  const [fStatus, setFStatus] = useState('')
 
   async function reloadClients() {
     const r = await fetch('/api/clients')
@@ -73,7 +79,9 @@ export default function ClientsPage() {
   const scoped = scope === 'me'
     ? list.filter(c => session?.agentCode != null && c.agentId === session.agentCode)
     : sortOwnFirst(list, session?.agentCode)
-  const filtered = tagFilter ? scoped.filter(c => (c.tags ?? []).includes(tagFilter)) : scoped
+  const searched = filterClients(scoped, { q, type: fType, status: fStatus })
+  const filtered = tagFilter ? searched.filter(c => (c.tags ?? []).includes(tagFilter)) : searched
+  const activeFilters = !!(q || fType || fStatus)
 
   // Every tag currently in use, for the filter bar. Cleared automatically if the
   // active filter no longer applies to any visible client.
@@ -139,6 +147,38 @@ export default function ClientsPage() {
             + Add
           </button>
         </div>
+      </div>
+
+      {/* Search + filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[180px]">
+          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#9AA3B2' }} />
+          <input
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            placeholder="Search clients — name, phone, area…"
+            className="w-full rounded-xl pl-9 pr-3 py-2 text-sm outline-none"
+            style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: '#14223F' }}
+          />
+        </div>
+        <select value={fType} onChange={e => setFType(e.target.value)} className="rounded-xl px-2.5 py-2 text-sm outline-none" style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: fType ? '#14223F' : '#6A7488' }}>
+          <option value="">Buyer & renter</option>
+          <option value="Buyer">Buyer</option>
+          <option value="Renter">Renter</option>
+        </select>
+        <select value={fStatus} onChange={e => setFStatus(e.target.value)} className="rounded-xl px-2.5 py-2 text-sm outline-none" style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: fStatus ? '#14223F' : '#6A7488' }}>
+          <option value="">Any status</option>
+          {['Searching', 'Viewing', 'Negotiation', 'Signed'].map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        {activeFilters && (
+          <button
+            onClick={() => { setQ(''); setFType(''); setFStatus('') }}
+            className="flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-semibold"
+            style={{ border: '1.5px solid #EEF0F4', background: '#F7F8FB', color: '#6A7488' }}
+          >
+            <X className="h-3.5 w-3.5" /> Clear
+          </button>
+        )}
       </div>
 
       {/* Tag filter bar — only shown once tags exist */}
