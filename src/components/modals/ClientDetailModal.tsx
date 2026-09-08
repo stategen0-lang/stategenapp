@@ -325,7 +325,7 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
       {stackedProperty && (
         <PropertyDetailModal
           property={stackedProperty}
-          agent={getAgent(stackedProperty.agentId)}
+          agent={getAgent(stackedProperty.agentId) ?? { id: stackedProperty.agentId as Agent['id'], name: stackedProperty.agentId, initials: stackedProperty.agentId.slice(0,2).toUpperCase(), color: '#9AA3B2', shortName: stackedProperty.agentId }}
           onClose={() => setStackedProperty(null)}
         />
       )}

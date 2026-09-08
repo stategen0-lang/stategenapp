@@ -94,7 +94,7 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
               // eslint-disable-next-line @next/next/no-img-element
               <img src={photos[activePhoto]} alt={p.title} className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full" style={{ background: TYPE_GRADIENTS[p.type] }} />
+              <div className="w-full h-full" style={{ background: TYPE_GRADIENTS[p.type] ?? 'linear-gradient(135deg,#16294A,#2E5288)' }} />
             )}
 
             <div className="absolute top-3 left-3 right-3 flex items-start justify-between">
@@ -336,7 +336,7 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
       {stackedClient && (
         <ClientDetailModal
           client={stackedClient}
-          agent={getAgent(stackedClient.agentId)}
+          agent={getAgent(stackedClient.agentId) ?? { id: stackedClient.agentId as Agent['id'], name: stackedClient.agentId, initials: stackedClient.agentId.slice(0,2).toUpperCase(), color: '#9AA3B2', shortName: stackedClient.agentId }}
           onClose={() => setStackedClient(null)}
         />
       )}
