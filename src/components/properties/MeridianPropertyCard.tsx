@@ -34,9 +34,16 @@ export default function PropertyCard({ property: p, agent, onClick }: Props) {
         )}
         <div className="relative h-full px-4 pt-3 pb-3 flex flex-col justify-between">
           <div className="flex items-start justify-between">
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(0,0,0,0.28)', color: '#fff' }}>
-              {p.type} · {p.transaction}
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(0,0,0,0.28)', color: '#fff' }}>
+                {p.type} · {p.transaction}
+              </span>
+              {p.video && (
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(0,0,0,0.28)', color: '#fff' }} title="Has a video walkthrough">
+                  🎥
+                </span>
+              )}
+            </div>
             <span
               className="text-xs font-semibold px-2 py-0.5 rounded-full"
               style={{ background: sc.bg, color: sc.color }}

@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic'
 type Row = Record<string, unknown>
 
 interface Brand { name: string; logoUrl: string | null; color: string }
-interface Card { token: string; title: string; type: string; transaction: string; price: number; rent: number; district: string; city: string; beds: number; baths: number; size: number; photo: string | null }
+interface Card { token: string; title: string; type: string; transaction: string; price: number; rent: number; district: string; city: string; beds: number; baths: number; size: number; photo: string | null; hasVideo: boolean }
 interface Site { brand: Brand; cards: Card[] }
 
 function readableOn(hex: string): string {
@@ -56,6 +56,7 @@ async function loadSite(slug: string): Promise<{ site: Site; companyId: number }
       price: p.price, rent: p.rent, district: p.district, city: p.city,
       beds: p.beds, baths: p.baths, size: p.size,
       photo: (p.photos ?? [])[0] ?? null,
+      hasVideo: !!p.video,
     }))
 
   return { site: { brand, cards }, companyId: c.id as number }
@@ -138,6 +139,11 @@ export default async function MicrositePage({ params, searchParams }: { params: 
                     <span className="absolute top-2.5 left-2.5 text-xs font-semibold px-2.5 py-1 rounded-full text-white" style={{ background: 'rgba(0,0,0,0.42)', backdropFilter: 'blur(4px)' }}>
                       {card.type} · {card.transaction}
                     </span>
+                    {card.hasVideo && (
+                      <span className="absolute top-2.5 right-2.5 text-xs font-semibold px-2 py-1 rounded-full text-white" style={{ background: 'rgba(0,0,0,0.42)', backdropFilter: 'blur(4px)' }} title="Has a video walkthrough">
+                        🎥
+                      </span>
+                    )}
                   </div>
                   <div className="p-3.5">
                     <div className="flex items-start justify-between gap-2">
