@@ -314,7 +314,20 @@ export default function TeamPage() {
                     <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0" style={{ background: '#2E5288' }}>{initials(a.Full_name)}</div>
                     <div className="min-w-0">
                       <p className="text-sm font-semibold truncate" style={{ color: H }}>{a.Full_name || 'Unnamed agent'}</p>
-                      <p className="text-xs font-mono" style={{ color: SUB }}>{a.agent_code}</p>
+                      {a.agent_code && (
+                        <button
+                          onClick={() => copy(a.agent_code!)}
+                          title="Copy Agent ID (their login)"
+                          className="mt-0.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg"
+                          style={{ background: '#F0F4FA', border: '1px solid #D8E2F0' }}
+                        >
+                          <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: '#5E8FD6' }}>ID</span>
+                          <span className="text-xs font-mono font-bold" style={{ color: H }}>{a.agent_code}</span>
+                          {copied === a.agent_code
+                            ? <Check className="h-3 w-3" style={{ color: '#1B8A4B' }} />
+                            : <Copy className="h-3 w-3" style={{ color: '#9AA3B2' }} />}
+                        </button>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
