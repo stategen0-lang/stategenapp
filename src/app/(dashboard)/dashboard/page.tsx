@@ -280,7 +280,7 @@ export default function DashboardPage() {
                 style={{ borderBottom: '1px solid #F4F5F8' }}>
                 {p.photos?.[0]
                   ? <img src={p.photos[0]} alt="" className="w-12 h-9 rounded-lg object-cover shrink-0" />
-                  : <div className="w-12 h-9 rounded-lg shrink-0" style={{ background: TYPE_GRADIENTS[p.type] }} />}
+                  : <div className="w-12 h-9 rounded-lg shrink-0" style={{ background: TYPE_GRADIENTS[p.type] ?? 'linear-gradient(135deg,#16294A,#2E5288)' }} />}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold truncate" style={{ color: H }}>{p.title}</p>
                   <p className="text-xs" style={{ color: SUB }}>{propertyLocation(p)}</p>
@@ -424,7 +424,7 @@ export default function DashboardPage() {
                   <div className="relative h-20 overflow-hidden">
                     {p.photos?.[0]
                       ? <img src={p.photos[0]} alt={p.title} className="w-full h-full object-cover" />
-                      : <div className="w-full h-full" style={{ background: TYPE_GRADIENTS[p.type] }} />
+                      : <div className="w-full h-full" style={{ background: TYPE_GRADIENTS[p.type] ?? 'linear-gradient(135deg,#16294A,#2E5288)' }} />
                     }
                     <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 55%)' }} />
                     <p className="absolute bottom-2 left-2.5 text-xs font-semibold text-white truncate pr-8">{p.title}</p>

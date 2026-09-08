@@ -22,7 +22,7 @@ export default function PropertyCard({ property: p, agent, onClick }: Props) {
       {/* Header — the listing photo when there is one, else the type gradient */}
       <div
         className="h-28 relative overflow-hidden"
-        style={{ background: TYPE_GRADIENTS[p.type] }}
+        style={{ background: TYPE_GRADIENTS[p.type] ?? 'linear-gradient(135deg,#16294A,#2E5288)' }}
       >
         {p.photos?.[0] && (
           <>
