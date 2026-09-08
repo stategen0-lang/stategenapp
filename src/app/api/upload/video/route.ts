@@ -11,13 +11,19 @@ import { VIDEO_BUCKET, MAX_VIDEO_BYTES, VIDEO_MIME_TYPES, videoPath } from '@/li
 // its own checks still can't upload something oversized or non-video.
 
 async function ensureBucket(admin: ReturnType<typeof createAdminClient>) {
+  const opts = { public: true, fileSizeLimit: MAX_VIDEO_BYTES, allowedMimeTypes: VIDEO_MIME_TYPES }
   const { data } = await admin.storage.getBucket(VIDEO_BUCKET)
-  if (data) return
-  await admin.storage.createBucket(VIDEO_BUCKET, {
-    public: true,
-    fileSizeLimit: MAX_VIDEO_BYTES,
-    allowedMimeTypes: VIDEO_MIME_TYPES,
-  })
+  if (data) {
+    // The bucket exists but may have been created private (videos then can't
+    // play from their public URL — "Bucket not found"). Force it public.
+    if (!data.public) {
+      const { error } = await admin.storage.updateBucket(VIDEO_BUCKET, opts)
+      if (error) console.error('[upload/video] updateBucket', error.message)
+    }
+    return
+  }
+  const { error } = await admin.storage.createBucket(VIDEO_BUCKET, opts)
+  if (error) console.error('[upload/video] createBucket', error.message)
 }
 
 export async function POST(req: NextRequest) {
