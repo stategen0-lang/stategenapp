@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Sparkles, Loader2, ImagePlus, ChevronDown, ChevronLeft, ChevronRight, FileText, X, MapPin, Video } from 'lucide-react'
 import { Property, PropertyType, Transaction, PropertyStatus, AdvancedPayment, Furnishing, Floor, AgentId, CURRENT_AGENT_ID, PROPERTY_TYPES, propertyTypeLabel, PROPERTY_AMENITIES, BUILDING_FEATURES, FURNISHINGS, FLOORS } from '@/lib/data'
 import { useSession } from '@/hooks/use-session'
+import { useLockBodyScroll } from '@/hooks/use-lock-body-scroll'
 import { DescriptionTemplate, loadTemplates } from '@/lib/templates'
 import { createClient as createSupabaseBrowser } from '@/lib/supabase/client'
 import { VIDEO_BUCKET, MAX_VIDEO_BYTES } from '@/lib/upload'
@@ -18,6 +19,7 @@ interface Props {
 let _nextId = 100
 
 export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
+  useLockBodyScroll()
   const editing = !!initial
   const { session } = useSession()
   const [form, setForm] = useState({
@@ -333,7 +335,7 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
           <button onClick={onClose} style={{ color: '#9AA3B2' }} className="hover:text-gray-600 text-lg leading-none">✕</button>
         </div>
 
-        <div className="p-5 space-y-3 overflow-y-auto max-h-[72vh]">
+        <div className="p-5 space-y-3 overflow-y-auto max-h-[72vh]" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
           {/* Title */}
           <div>
             <label className={label} style={labelStyle}>Title *</label>

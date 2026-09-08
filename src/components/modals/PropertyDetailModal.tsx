@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react'
 import { MessageCircle, Link2, MapPin, FileText, Phone } from 'lucide-react'
 import { Property, Agent, Client, TYPE_GRADIENTS, statusStyle, formatPrice, buildDesc, getAgent, propertyLocation } from '@/lib/data'
+import { useLockBodyScroll } from '@/hooks/use-lock-body-scroll'
 import MatchCards from '@/components/matching/MatchCards'
 import OffersSection from '@/components/offers/OffersSection'
 import ClientDetailModal from './ClientDetailModal'
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export default function PropertyDetailModal({ property: p, agent, onClose, onEdit, agentWhatsApp, isOwnListing }: Props) {
+  useLockBodyScroll()
   const sc = statusStyle(p.status)
   const photos = p.photos ?? []
   const [activePhoto, setActivePhoto] = useState(0)
@@ -187,7 +189,7 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
           )}
 
           {/* ── Scrollable body ── */}
-          <div className="overflow-y-auto flex-1 p-5 space-y-4">
+          <div className="overflow-y-auto flex-1 p-5 space-y-4" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
             <div className="flex items-center justify-between">
               <p className="text-2xl font-extrabold" style={{ color: '#14223F', letterSpacing: '-0.5px' }}>
                 {p.transaction === 'For Rent' ? `${formatPrice(p.rent)}/mo` : formatPrice(p.price)}

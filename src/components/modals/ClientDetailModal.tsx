@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Star } from 'lucide-react'
 import { Client, Agent, Property, ClientStatus, statusStyle, CLIENT_TYPE_STYLE, formatPrice, getAgent } from '@/lib/data'
 import { scoreBand, BAND_STYLE } from '@/lib/scoring'
+import { useLockBodyScroll } from '@/hooks/use-lock-body-scroll'
 import MatchCards from '@/components/matching/MatchCards'
 import PropertyDetailModal from './PropertyDetailModal'
 
@@ -20,6 +21,7 @@ interface Props {
 }
 
 export default function ClientDetailModal({ client: c, agent, onClose, onStatusChange, onEdit, onReferred }: Props) {
+  useLockBodyScroll()
   const [status, setStatus] = useState<ClientStatus>(c.status)
   const [saving, setSaving] = useState(false)
   const [rating, setRating] = useState<number>(c.agentRating ?? 3)
@@ -172,7 +174,7 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
             </div>
           </div>
 
-          <div className="p-5 space-y-4 overflow-y-auto max-h-[80vh] md:max-h-[70vh]">
+          <div className="p-5 space-y-4 overflow-y-auto max-h-[80vh] md:max-h-[70vh]" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
             {/* Refer / transfer panel */}
             {referOpen && (
               <div className="rounded-xl p-4" style={{ background: '#F1F8F3', border: '1px solid #CDE7D6' }}>

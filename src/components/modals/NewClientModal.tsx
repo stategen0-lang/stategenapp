@@ -9,6 +9,7 @@ import {
 import { matchProperties, MATCH_THRESHOLD, PropertyMatch } from '@/lib/matching'
 import { dbRowToProperty } from '@/lib/db-mappers'
 import { useSession } from '@/hooks/use-session'
+import { useLockBodyScroll } from '@/hooks/use-lock-body-scroll'
 import { isManager } from '@/lib/permissions'
 
 interface Props {
@@ -27,6 +28,7 @@ const emptyReq = (): ClientReq => ({
 })
 
 export default function NewClientModal({ onClose, onSaved, matchThreshold = MATCH_THRESHOLD, initial }: Props) {
+  useLockBodyScroll()
   const editing = !!initial
   const { session } = useSession()
   const [step, setStep] = useState<1 | 2>(1)
@@ -220,7 +222,7 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
 
         {step === 1 ? (
           <>
-            <div className="p-5 space-y-3 overflow-y-auto max-h-[65vh]">
+            <div className="p-5 space-y-3 overflow-y-auto max-h-[65vh]" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2">
                   <label className={label} style={labelStyle}>Name *</label>
@@ -413,7 +415,7 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
           </>
         ) : (
           <>
-            <div className="p-5 space-y-3 overflow-y-auto max-h-[65vh]">
+            <div className="p-5 space-y-3 overflow-y-auto max-h-[65vh]" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
               {matches.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-sm font-semibold" style={{ color: '#14223F' }}>No matches found</p>
