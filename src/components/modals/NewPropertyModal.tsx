@@ -26,8 +26,9 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
     transaction: (initial?.transaction ?? 'For Sale') as Transaction,
     price: initial?.price ? String(initial.price) : '',
     rent: initial?.rent ? String(initial.rent) : '',
-    district: initial?.district ?? '',
-    city: initial?.city ?? '',
+    // One "area" field replaces the old district + city (typing "Achrafieh"
+    // already implies Beirut). Seeded from either field so old listings still edit.
+    area: [initial?.district, initial?.city].filter(Boolean).join(', '),
     size: initial?.size ? String(initial.size) : '',
     beds: initial?.beds ? String(initial.beds) : '',
     baths: initial?.baths ? String(initial.baths) : '',
@@ -236,8 +237,7 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
   }
 
   async function handleSave(skipDupeCheck = false) {
-    // District (neighborhood) is optional — land plots and some areas have none.
-    if (!form.title || !form.city) { setSaveError('Title and city are required.'); return }
+    if (!form.title || !form.area.trim()) { setSaveError('Title and area are required.'); return }
     setSaveError('')
 
     // Warn about a likely-duplicate listing before creating a new one (never on
@@ -248,7 +248,7 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
         const r = await fetch('/api/properties/check', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            title: form.title, district: form.district, city: form.city, type: form.type,
+            title: form.title, district: '', city: form.area.trim(), type: form.type,
             transaction: form.transaction, price: parseInt(form.price) || 0, rent: parseInt(form.rent) || 0,
           }),
         })
@@ -268,8 +268,9 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
       transaction: form.transaction,
       price: parseInt(form.price) || 0,
       rent: parseInt(form.rent) || 0,
-      district: form.district,
-      city: form.city,
+      // Single "area" is stored as the location; the neighborhood field is retired.
+      district: '',
+      city: form.area.trim(),
       size: parseInt(form.size) || 0,
       beds: parseInt(form.beds) || 0,
       baths: parseInt(form.baths) || 0,
@@ -390,16 +391,10 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
             </div>
           )}
 
-          {/* District + City */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={label} style={labelStyle}>District *</label>
-              <input className={inp} style={inpStyle} value={form.district} onChange={e => set('district', e.target.value)} placeholder="Raouché" />
-            </div>
-            <div>
-              <label className={label} style={labelStyle}>City *</label>
-              <input className={inp} style={inpStyle} value={form.city} onChange={e => set('city', e.target.value)} placeholder="Beirut" />
-            </div>
+          {/* Area (single field — the neighborhood implies the city) */}
+          <div>
+            <label className={label} style={labelStyle}>Area *</label>
+            <input className={inp} style={inpStyle} value={form.area} onChange={e => set('area', e.target.value)} placeholder="e.g. Achrafieh" />
           </div>
 
           {/* Size + Beds + Baths + Parking */}
@@ -727,7 +722,7 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
                     const q = form.mapUrl.trim()
                     // Open the pasted pin if there is one, otherwise a Maps search
                     // for the address so the agent can grab the pin and paste it.
-                    const addr = [form.district, form.city].filter(Boolean).join(', ')
+                    const addr = form.area.trim()
                     const url = q
                       ? (/^https?:\/\//i.test(q) ? q : `https://www.google.com/maps/search/${encodeURIComponent(q)}`)
                       : `https://www.google.com/maps/search/${encodeURIComponent(addr || 'Lebanon')}`
@@ -795,7 +790,7 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
             </button>
             <button
               onClick={() => handleSave(dupes.length > 0)}
-              disabled={!form.title || !form.city || uploading || docUploading || videoUploading || saving}
+              disabled={!form.title || !form.area.trim() || uploading || docUploading || videoUploading || saving}
               className="flex-1 rounded-xl py-2 text-sm font-bold text-white disabled:opacity-50"
               style={{ background: dupes.length > 0 ? '#9A6516' : '#0E1F3D' }}
             >

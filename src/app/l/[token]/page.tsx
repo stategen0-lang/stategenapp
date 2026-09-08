@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { dbRowToProperty } from '@/lib/db-mappers'
 import { parseShareToken, shareSecret, publicListing, type PublicListing } from '@/lib/share'
-import { formatPrice } from '@/lib/data'
+import { formatPrice, propertyLocation } from '@/lib/data'
 
 // Public, unauthenticated listing page. Reached only via a signed token, and it
 // renders exclusively the allowlisted fields from publicListing() — never the
@@ -67,7 +67,7 @@ function fallbackDescription(p: ReturnType<typeof dbRowToProperty>): string {
   const beds = p.beds > 0 ? ` with ${p.beds} bedroom${p.beds > 1 ? 's' : ''} and ${p.baths} bathroom${p.baths > 1 ? 's' : ''}` : ''
   const extras = [p.garden && 'a private garden', p.balcony && 'a balcony', p.view && `${p.view.toLowerCase()} views`]
     .filter(Boolean).join(', ')
-  return `A ${p.size ? `${p.size} m² ` : ''}${p.type.toLowerCase()} in ${p.district}, ${p.city}${beds}, offered ${p.transaction.toLowerCase()} at ${price}.${extras ? ` Featuring ${extras}.` : ''}`
+  return `A ${p.size ? `${p.size} m² ` : ''}${p.type.toLowerCase()} in ${propertyLocation(p)}${beds}, offered ${p.transaction.toLowerCase()} at ${price}.${extras ? ` Featuring ${extras}.` : ''}`
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ token: string }> }): Promise<Metadata> {
@@ -79,10 +79,10 @@ export async function generateMetadata({ params }: { params: Promise<{ token: st
   const price = listing.transaction === 'For Rent' ? `${formatPrice(listing.rent)}/mo` : formatPrice(listing.price)
   return {
     title: `${listing.title} — ${price} · ${agency}`,
-    description: `${listing.type} ${listing.transaction.toLowerCase()} in ${listing.district}, ${listing.city}.`,
+    description: `${listing.type} ${listing.transaction.toLowerCase()} in ${propertyLocation(listing)}.`,
     openGraph: {
       title: `${listing.title} — ${price}`,
-      description: `${listing.type} in ${listing.district}, ${listing.city}`,
+      description: `${listing.type} in ${propertyLocation(listing)}`,
       siteName: agency,
       images: listing.photos.length ? [listing.photos[0]] : [],
     },
@@ -190,7 +190,7 @@ export default async function ListingPage({ params }: { params: Promise<{ token:
                 <h1 className="text-xl md:text-3xl font-extrabold text-white leading-tight" style={{ letterSpacing: '-0.5px', textShadow: '0 2px 16px rgba(0,0,0,0.35)' }}>
                   {listing.title}
                 </h1>
-                <p className="text-sm mt-1 text-white" style={{ opacity: 0.88 }}>{listing.district}, {listing.city}</p>
+                <p className="text-sm mt-1 text-white" style={{ opacity: 0.88 }}>{propertyLocation(listing)}</p>
               </div>
               <span className="shrink-0 text-sm md:text-lg font-extrabold px-3.5 py-2 rounded-2xl whitespace-nowrap"
                 style={{ background: accent, color: onAccent, boxShadow: '0 6px 18px rgba(0,0,0,0.28)' }}>

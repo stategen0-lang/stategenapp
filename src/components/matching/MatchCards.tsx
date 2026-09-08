@@ -5,7 +5,7 @@ import { MessageCircle, ExternalLink, X, RefreshCw, Share2 } from 'lucide-react'
 import {
   PROPERTIES, CLIENTS, getAgent,
   Property, Client,
-  formatPrice, TYPE_GRADIENTS,
+  formatPrice, TYPE_GRADIENTS, propertyLocation,
 } from '@/lib/data'
 import { propFeatures, matchClients, matchProperties, ScoreResult } from '@/lib/matching'
 import { dbRowToProperty, dbRowToClient } from '@/lib/db-mappers'
@@ -302,7 +302,7 @@ export default function MatchCards({ entityType, entity, onOpenProperty, onOpenC
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold truncate" style={{ color: '#1A2B4A' }}>{p.title}</p>
                 <p className="text-xs" style={{ color: '#7A8499' }}>
-                  {formatPrice(p.transaction === 'For Rent' ? p.rent : p.price)}{p.transaction === 'For Rent' ? '/mo' : ''} · {p.type} · {p.district}, {p.city}
+                  {formatPrice(p.transaction === 'For Rent' ? p.rent : p.price)}{p.transaction === 'For Rent' ? '/mo' : ''} · {p.type} · {propertyLocation(p)}
                   {p.beds > 0 ? ` · ${p.beds}bd` : ''}
                 </p>
                 <AmenityPills features={features} wishlist={wishlist} />

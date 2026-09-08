@@ -144,7 +144,7 @@ export default async function MicrositePage({ params, searchParams }: { params: 
                       <p className="text-sm font-bold truncate" style={{ color: H }}>{card.title}</p>
                       <p className="text-sm font-extrabold whitespace-nowrap" style={{ color: brand.color === '#14223F' ? '#1F7A4D' : brand.color }}>{price}</p>
                     </div>
-                    <p className="text-xs mt-0.5" style={{ color: SUB }}>{card.district}, {card.city}</p>
+                    <p className="text-xs mt-0.5" style={{ color: SUB }}>{[card.district, card.city].filter(Boolean).join(', ')}</p>
                     <p className="text-xs mt-1.5" style={{ color: '#9AA3B2' }}>
                       {[card.beds > 0 ? `${card.beds} bd` : null, card.baths > 0 ? `${card.baths} ba` : null, card.size > 0 ? `${card.size} m²` : null].filter(Boolean).join(' · ')}
                     </p>

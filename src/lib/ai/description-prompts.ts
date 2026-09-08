@@ -50,7 +50,7 @@ export function buildFacts(d: DescriptionInput): string {
     `Property type: ${d.type}`,
     `Transaction: ${d.transaction} (${d.transaction === 'For Rent' ? 'rental' : 'sale'})`,
     `Price: ${priceStr}`,
-    `Location: ${d.district}, ${d.city}, Lebanon`,
+    `Location: ${[d.district, d.city].filter(Boolean).join(', ')}, Lebanon`,
     d.size ? `Size: ${d.size} m²` : null,
     d.beds ? `Bedrooms: ${d.beds}` : null,
     d.baths ? `Bathrooms: ${d.baths}` : null,

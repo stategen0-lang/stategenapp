@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { MessageCircle, Link2, MapPin, FileText, Phone } from 'lucide-react'
-import { Property, Agent, Client, TYPE_GRADIENTS, statusStyle, formatPrice, buildDesc, getAgent } from '@/lib/data'
+import { Property, Agent, Client, TYPE_GRADIENTS, statusStyle, formatPrice, buildDesc, getAgent, propertyLocation } from '@/lib/data'
 import MatchCards from '@/components/matching/MatchCards'
 import OffersSection from '@/components/offers/OffersSection'
 import ClientDetailModal from './ClientDetailModal'
@@ -153,7 +153,7 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
             >
               <p className="text-base font-bold text-white leading-tight">{p.title}</p>
               <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                {p.district}, {p.city}
+                {propertyLocation(p)}
               </p>
             </div>
           </div>

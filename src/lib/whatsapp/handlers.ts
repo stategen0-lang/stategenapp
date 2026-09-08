@@ -9,7 +9,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { canSeeClientPII, isManager, maskClientName } from '@/lib/permissions'
 import { dbRowToClient, dbRowToProperty } from '@/lib/db-mappers'
 import { matchProperties } from '@/lib/matching'
-import { formatPrice, type Property } from '@/lib/data'
+import { formatPrice, propertyLocation, type Property } from '@/lib/data'
 import type { IntentResult } from '@/lib/whatsapp/intent'
 import { splitClientRef } from '@/lib/whatsapp/client-ref'
 import { makeShareToken, shareSecret } from '@/lib/share'
@@ -154,7 +154,7 @@ export async function handleQueryProperty(
       `#${p.id} ${p.title}`,
       `${p.type} · ${p.transaction}`,
       `${p.transaction === 'For Rent' ? `${formatPrice(p.rent)}/mo` : formatPrice(p.price)}`,
-      `${p.district}, ${p.city}`,
+      propertyLocation(p),
       p.beds ? `${p.beds} bed · ${p.baths} bath · ${p.size} m²` : `${p.size} m²`,
       `Status: ${p.status}`,
     ].join('\n')
@@ -187,7 +187,7 @@ export async function handleQueryProperty(
     const available = pool.filter(p => p.status !== 'Sold').slice(0, 8)
     return [
       `${available.length} listing${available.length === 1 ? '' : 's'} in ${intent.location}:`,
-      ...available.map(p => `• #${p.id} ${p.title} — ${price(p)} · ${p.district}`),
+      ...available.map(p => `• #${p.id} ${p.title} — ${price(p)} · ${p.city || p.district}`),
     ].join('\n')
   }
 
@@ -216,7 +216,7 @@ export async function handleQueryProperty(
   return [
     header,
     ...matches.map(({ property: p, score }) =>
-      `• #${p.id} ${p.title} — ${price(p)} · ${p.district} · ${Math.round(score.total)}% match`),
+      `• #${p.id} ${p.title} — ${price(p)} · ${p.city || p.district} · ${Math.round(score.total)}% match`),
   ].join('\n')
 }
 

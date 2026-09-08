@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import {
   Client, ClientType, ClientStatus, ClientReq,
   PROPERTIES, CURRENT_AGENT_ID, formatPrice, CLIENT_TAG_PRESETS, tagStyle,
-  PROPERTY_TYPES, propertyTypeLabel, FURNISHINGS, FLOORS
+  PROPERTY_TYPES, propertyTypeLabel, FURNISHINGS, FLOORS, propertyLocation
 } from '@/lib/data'
 import { matchProperties, MATCH_THRESHOLD, PropertyMatch } from '@/lib/matching'
 import { dbRowToProperty } from '@/lib/db-mappers'
@@ -453,7 +453,7 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-bold" style={{ color: '#14223F' }}>{p.title}</p>
                           <p className="text-xs mt-0.5" style={{ color: '#9AA3B2' }}>
-                            {p.district}, {p.city} ·{' '}
+                            {propertyLocation(p)} ·{' '}
                             {p.transaction === 'For Rent' ? `${formatPrice(p.rent)}/mo` : formatPrice(p.price)}
                           </p>
                         </div>

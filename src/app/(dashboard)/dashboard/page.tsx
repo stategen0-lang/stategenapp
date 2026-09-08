@@ -6,7 +6,7 @@ import { Building2, Users, Banknote, Clock, X, Plus, ChevronRight, UserCheck } f
 import {
   getAgent,
   statusStyle, CLIENT_TYPE_STYLE, formatPrice, TYPE_GRADIENTS, typeStyle,
-  Property, Client, Agent,
+  Property, Client, Agent, propertyLocation,
 } from '@/lib/data'
 import { dbRowToProperty, dbRowToClient } from '@/lib/db-mappers'
 import { STAGES, type Stage } from '@/lib/pipeline'
@@ -283,7 +283,7 @@ export default function DashboardPage() {
                   : <div className="w-12 h-9 rounded-lg shrink-0" style={{ background: TYPE_GRADIENTS[p.type] }} />}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold truncate" style={{ color: H }}>{p.title}</p>
-                  <p className="text-xs" style={{ color: SUB }}>{p.district}, {p.city}</p>
+                  <p className="text-xs" style={{ color: SUB }}>{propertyLocation(p)}</p>
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-sm font-semibold" style={{ color: H }}>

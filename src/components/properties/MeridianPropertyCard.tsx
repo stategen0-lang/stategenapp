@@ -1,6 +1,6 @@
 'use client'
 
-import { Property, Agent, TYPE_GRADIENTS, statusStyle, formatPrice } from '@/lib/data'
+import { Property, Agent, TYPE_GRADIENTS, statusStyle, formatPrice, propertyLocation } from '@/lib/data'
 
 interface Props {
   property: Property
@@ -46,7 +46,7 @@ export default function PropertyCard({ property: p, agent, onClick }: Props) {
           </div>
           <div>
             <p className="text-sm font-bold text-white leading-tight">{p.title}</p>
-            <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.78)' }}>{p.district}, {p.city}</p>
+            <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.78)' }}>{propertyLocation(p)}</p>
           </div>
         </div>
         {/* Agent initials */}

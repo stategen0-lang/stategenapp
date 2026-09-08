@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Client, Property, PROPERTIES, formatPrice } from '@/lib/data'
+import { Client, Property, PROPERTIES, formatPrice, propertyLocation } from '@/lib/data'
 import { dbRowToProperty } from '@/lib/db-mappers'
 
 // Bulk-forward a single listing to a group of the agent's own clients (e.g. all
@@ -119,7 +119,7 @@ export default function BulkForwardModal({ clients, tagLabel, onClose }: Props) 
                       {p.transaction === 'For Rent' ? `${formatPrice(p.rent)}/mo` : formatPrice(p.price)}
                     </p>
                   </div>
-                  <p className="text-xs mt-0.5" style={{ color: '#9AA3B2' }}>{p.type} · {p.district}, {p.city}</p>
+                  <p className="text-xs mt-0.5" style={{ color: '#9AA3B2' }}>{p.type} · {propertyLocation(p)}</p>
                 </button>
               ))}
             </div>

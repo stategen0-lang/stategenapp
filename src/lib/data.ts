@@ -270,6 +270,13 @@ export function formatPrice(value: number, currency = 'USD'): string {
   return `${currency} ${value.toLocaleString('en-US')}`
 }
 
+/** A listing's location as one line. New listings store a single "area" in the
+ *  city field; older ones have a separate district — this joins whatever exists
+ *  so neither shows a stray comma. */
+export function propertyLocation(p: { district?: string; city?: string }): string {
+  return [p.district, p.city].filter(Boolean).join(', ')
+}
+
 export const TYPE_GRADIENTS: Record<PropertyType, string> = {
   Appartement: 'linear-gradient(135deg,#16294A,#2E5288)',
   Duplex:      'linear-gradient(135deg,#1B2E52,#3A62A8)',
@@ -337,5 +344,5 @@ export function buildDesc(p: Property): string {
     ? `${formatPrice(p.rent)}/mo`
     : formatPrice(p.price)
   const advPay = p.advancedPayment ? ` Advanced payment required: ${p.advancedPayment}.` : ''
-  return `${p.title} is a ${p.size} m² ${p.type.toLowerCase()} located in ${p.district}, ${p.city}, offered ${p.transaction.toLowerCase()} at ${price}.${p.beds > 0 ? ` Features ${p.beds} bedroom(s) and ${p.baths} bathroom(s).` : ''}${p.garden ? ' Private garden.' : ''}${p.balcony ? ' Balcony.' : ''} ${p.view} view.${advPay} Listed by ${agent.name}.`
+  return `${p.title} is a ${p.size} m² ${p.type.toLowerCase()} located in ${propertyLocation(p)}, offered ${p.transaction.toLowerCase()} at ${price}.${p.beds > 0 ? ` Features ${p.beds} bedroom(s) and ${p.baths} bathroom(s).` : ''}${p.garden ? ' Private garden.' : ''}${p.balcony ? ' Balcony.' : ''} ${p.view} view.${advPay} Listed by ${agent.name}.`
 }
