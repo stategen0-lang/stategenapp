@@ -70,7 +70,25 @@ export default function LoginPage() {
     setResetMsg(null)
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
+      // Agents sign in with their Agent ID (they have no inbox). Anything without
+      // an "@" is treated as an ID and resolved to the synthetic login email;
+      // managers type their real email and skip this.
+      let loginEmail = email.trim()
+      if (loginEmail && !loginEmail.includes('@')) {
+        const rr = await fetch('/api/auth/agent-email', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: loginEmail }),
+        })
+        const rj = await rr.json().catch(() => ({}))
+        if (!rr.ok || !rj.email) {
+          setError(rj.error || 'No account found for that Agent ID.')
+          setLoading(false)
+          return
+        }
+        loginEmail = rj.email
+      }
+
+      const { data, error } = await supabase.auth.signInWithPassword({ email: loginEmail, password })
 
       if (error) {
         setError(cleanMsg(error.message, 'Invalid email or password.'))
@@ -163,16 +181,19 @@ export default function LoginPage() {
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
               <p className="text-xs font-bold tracking-wider mb-1.5 uppercase" style={{ color: '#6A7488', letterSpacing: '0.5px' }}>
-                Email address
+                Agent ID or email
               </p>
               <div className="relative">
                 <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: '#9AA3B2' }} />
                 <input
-                  type="email"
+                  type="text"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  placeholder="you@agency.com"
+                  placeholder="e.g. JD-204  (or you@agency.com)"
                   className="w-full pl-10 pr-4 py-2.5 text-sm outline-none transition-colors"
                   style={{
                     border: '1.5px solid #D7DCE5',
