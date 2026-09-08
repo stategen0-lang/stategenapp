@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { UserCheck, Check, X, Clock, Users, Trash2, Shield, ShieldCheck, ShieldOff, Link2, Copy, Plus, KeyRound } from 'lucide-react'
+import { UserCheck, Check, X, Clock, Users, Trash2, Shield, ShieldCheck, ShieldOff, Link2, Copy, Plus, KeyRound, Pencil } from 'lucide-react'
 import { useSession } from '@/hooks/use-session'
 import { isManager } from '@/lib/permissions'
 
@@ -42,6 +42,12 @@ export default function TeamPage() {
   const [resetBusy, setResetBusy] = useState(false)
   const [resetDone, setResetDone] = useState<string | null>(null)
   const [resetErr, setResetErr] = useState('')
+  // Edit an agent's ID/code
+  const [editIdFor, setEditIdFor] = useState<Agent | null>(null)
+  const [editCode, setEditCode] = useState('')
+  const [editBusy, setEditBusy] = useState(false)
+  const [editErr, setEditErr] = useState('')
+  const [editDone, setEditDone] = useState<{ code: string; email: string | null } | null>(null)
 
   async function load() {
     const r = await fetch('/api/agents').then(x => x.ok ? x.json() : null).catch(() => null)
@@ -91,6 +97,21 @@ export default function TeamPage() {
       await load()
     } finally { setAddBusy(false) }
   }
+  async function saveCode() {
+    if (!editIdFor) return
+    setEditBusy(true); setEditErr('')
+    try {
+      const r = await fetch('/api/agents', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set_code', id: editIdFor.id, code: editCode }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { setEditErr(j.error || 'Could not update the ID.'); return }
+      setEditDone({ code: j.agentCode, email: j.email ?? null })
+      await load()
+    } finally { setEditBusy(false) }
+  }
+
   async function resetPassword() {
     if (!resetFor) return
     setResetBusy(true); setResetErr('')
@@ -297,6 +318,9 @@ export default function TeamPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
+                    <button onClick={() => { setEditIdFor(a); setEditCode(a.agent_code ?? ''); setEditDone(null); setEditErr('') }} title="Edit agent ID" className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold" style={{ border: '1.5px solid #D7DCE5', color: H }}>
+                      <Pencil className="h-3.5 w-3.5" /> Edit ID
+                    </button>
                     <button onClick={() => { setResetFor(a); setResetPw(''); setResetDone(null); setResetErr('') }} title="Reset password" className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold" style={{ border: '1.5px solid #D7DCE5', color: H }}>
                       <KeyRound className="h-3.5 w-3.5" /> Password
                     </button>
@@ -399,6 +423,45 @@ export default function TeamPage() {
                 <div className="flex gap-2 justify-end mt-4">
                   <button onClick={() => setResetFor(null)} className="px-4 py-2 rounded-xl text-sm font-semibold" style={{ border: '1.5px solid #D7DCE5', color: H }}>Cancel</button>
                   <button onClick={resetPassword} disabled={resetBusy} className="px-4 py-2 rounded-xl text-sm font-bold text-white disabled:opacity-50" style={{ background: '#0E1F3D' }}>{resetBusy ? 'Resetting…' : 'Reset password'}</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit an agent's ID/code ── */}
+      {editIdFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(14,31,61,0.45)' }} onClick={e => e.target === e.currentTarget && setEditIdFor(null)}>
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5" style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
+            <p className="text-base font-bold mb-1" style={{ color: H }}>Edit agent ID</p>
+            {editDone ? (
+              <>
+                <p className="text-sm mb-3" style={{ color: SUB }}>Updated. <span className="font-semibold" style={{ color: H }}>{editIdFor.Full_name || 'The agent'}</span> now signs in with:</p>
+                <div className="rounded-xl p-3 space-y-1.5" style={{ background: '#F0F4FA', border: '1px solid #D8E2F0' }}>
+                  <div className="flex items-center justify-between gap-2"><span className="text-xs" style={{ color: SUB }}>Agent ID</span><span className="text-sm font-mono font-bold" style={{ color: H }}>{editDone.code}</span></div>
+                  {editDone.email && <div className="flex items-center justify-between gap-2"><span className="text-xs" style={{ color: SUB }}>Login email</span><span className="text-xs font-mono" style={{ color: H }}>{editDone.email}</span></div>}
+                </div>
+                <p className="text-xs mt-2" style={{ color: SUB }}>Their listings, clients and deals moved to the new ID. Their password is unchanged.</p>
+                <div className="flex justify-end mt-4">
+                  <button onClick={() => setEditIdFor(null)} className="px-4 py-2 rounded-xl text-sm font-bold text-white" style={{ background: '#0E1F3D' }}>Done</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm mb-3" style={{ color: SUB }}>Set a custom ID for <span className="font-semibold" style={{ color: H }}>{editIdFor.Full_name || 'this agent'}</span>. Letters, numbers and hyphens (e.g. JD-204). This also becomes their login email and carries over all their records.</p>
+                <input
+                  autoFocus
+                  value={editCode}
+                  onChange={e => setEditCode(e.target.value.toUpperCase())}
+                  placeholder="e.g. JD-204"
+                  className="w-full rounded-xl px-3 py-2 text-sm font-mono outline-none"
+                  style={{ border: '1.5px solid #D7DCE5', color: H }}
+                />
+                {editErr && <p className="text-xs mt-2" style={{ color: '#A23434' }}>{editErr}</p>}
+                <div className="flex gap-2 justify-end mt-4">
+                  <button onClick={() => setEditIdFor(null)} className="px-4 py-2 rounded-xl text-sm font-semibold" style={{ border: '1.5px solid #D7DCE5', color: H }}>Cancel</button>
+                  <button onClick={saveCode} disabled={editBusy || !editCode.trim() || editCode.trim().toUpperCase() === (editIdFor.agent_code ?? '').toUpperCase()} className="px-4 py-2 rounded-xl text-sm font-bold text-white disabled:opacity-50" style={{ background: '#0E1F3D' }}>{editBusy ? 'Saving…' : 'Save ID'}</button>
                 </div>
               </>
             )}

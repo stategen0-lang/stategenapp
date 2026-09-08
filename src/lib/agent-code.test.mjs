@@ -2,7 +2,18 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { generateAgentCode } from './agent-code.ts'
+import { generateAgentCode, sanitizeAgentCode } from './agent-code.ts'
+
+test('sanitizeAgentCode: normalises valid codes, rejects junk', () => {
+  assert.equal(sanitizeAgentCode('jd-204'), 'JD-204')
+  assert.equal(sanitizeAgentCode('  Rami2 '), 'RAMI2')
+  assert.equal(sanitizeAgentCode('AB'), 'AB')
+  assert.equal(sanitizeAgentCode('a'), null)              // too short
+  assert.equal(sanitizeAgentCode('-ab'), null)            // must start alphanumeric
+  assert.equal(sanitizeAgentCode('jo hn'), 'JOHN')        // spaces stripped
+  assert.equal(sanitizeAgentCode('jd@204'), null)         // invalid char
+  assert.equal(sanitizeAgentCode(''), null)
+})
 
 test('generateAgentCode: two-word name uses first+last initials', () => {
   assert.match(generateAgentCode('John Doe'), /^JD-\d{3}$/)

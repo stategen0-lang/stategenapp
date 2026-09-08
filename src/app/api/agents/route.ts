@@ -5,6 +5,9 @@ import { isManager } from '@/lib/permissions'
 import { agentLimitFor } from '@/lib/stripe-plans'
 import { seatsUsed } from '@/lib/seats'
 import { createAgentAccount } from '@/lib/agent-account'
+import { sanitizeAgentCode } from '@/lib/agent-code'
+import { reassignAgentCode } from '@/lib/agent-recode'
+import { normalizeDomain } from '@/lib/domain'
 
 // Managers: agent approvals + team management.
 //
@@ -47,13 +50,14 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!isManager(session.role)) return NextResponse.json({ error: 'Managers only' }, { status: 403 })
 
-  let id: string, action: string, fullName: string, password: string
+  let id: string, action: string, fullName: string, password: string, code: string
   try {
     const body = await req.json()
     id = String(body.id ?? '')
     action = String(body.action ?? '')
     fullName = String(body.fullName ?? '')
     password = String(body.password ?? '')
+    code = String(body.code ?? '')
   } catch {
     return NextResponse.json({ error: 'Invalid body' }, { status: 400 })
   }
@@ -75,7 +79,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, action, agentCode: result.agentCode, email: result.email })
   }
 
-  if (!id || !['approve', 'reject', 'remove', 'promote', 'demote', 'reset_password'].includes(action)) {
+  if (!id || !['approve', 'reject', 'remove', 'promote', 'demote', 'reset_password', 'set_code'].includes(action)) {
     return NextResponse.json({ error: 'id and a valid action are required' }, { status: 400 })
   }
 
@@ -104,6 +108,46 @@ export async function POST(req: NextRequest) {
     const { error } = await admin.auth.admin.updateUserById(id, { password })
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ ok: true, action })
+  }
+
+  // ── change an AGENT's ID/code ────────────────────────────────────────────────
+  // The code doubles as the ownership key AND the login-email local part
+  // (<code>@<domain>), so we: validate + de-dupe, move the auth email, update the
+  // profile, then carry every record the agent owns over to the new code.
+  if (action === 'set_code') {
+    if (target.role !== 'agent') {
+      return NextResponse.json({ error: 'Only an agent’s ID can be changed here.' }, { status: 403 })
+    }
+    const oldCode = target.agent_code as string | null
+    if (!oldCode) return NextResponse.json({ error: 'This agent has no code to change.' }, { status: 400 })
+    const newCode = sanitizeAgentCode(code)
+    if (!newCode) return NextResponse.json({ error: 'Use 2–20 letters, numbers or hyphens (e.g. JD-204).' }, { status: 400 })
+    if (newCode === oldCode) return NextResponse.json({ ok: true, action, agentCode: oldCode })
+
+    // Unique within the company (case-insensitive; codes are compared upper-cased).
+    const { data: peers } = await admin
+      .from('Profiles').select('agent_code').eq('company_id', session.companyId)
+    const taken = (peers ?? []).some(p => String(p.agent_code ?? '').toUpperCase() === newCode)
+    if (taken) return NextResponse.json({ error: `The ID “${newCode}” is already used by someone in your team.` }, { status: 409 })
+
+    // Rebuild the login email from the company domain, so the agent signs in with
+    // the new ID. (Agents have no real inbox; email stays synthetic.)
+    const { data: company } = await admin.from('Companies').select('domain').eq('id', session.companyId).maybeSingle()
+    const domain = normalizeDomain(company?.domain as string)
+    if (domain) {
+      const { error: mailErr } = await admin.auth.admin.updateUserById(id, {
+        email: `${newCode.toLowerCase()}@${domain}`, email_confirm: true,
+      })
+      if (mailErr) return NextResponse.json({ error: `Could not update the login email: ${mailErr.message}` }, { status: 500 })
+    }
+
+    const { error: profErr } = await admin.from('Profiles').update({ agent_code: newCode }).eq('id', id)
+    if (profErr) return NextResponse.json({ error: profErr.message }, { status: 500 })
+
+    // Carry all their records over to the new code.
+    const moved = await reassignAgentCode(admin, session.companyId, oldCode, newCode)
+
+    return NextResponse.json({ ok: true, action, agentCode: newCode, email: domain ? `${newCode.toLowerCase()}@${domain}` : undefined, moved })
   }
 
   async function planLimit() {
