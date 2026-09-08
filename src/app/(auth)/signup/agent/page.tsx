@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Lock, Globe, User, ChevronLeft, CheckCircle2, Clock } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
 import Logo from '@/components/brand/Logo'
 
 type Step = 'form' | 'pending'
@@ -18,8 +17,6 @@ function generateAgentCode(fullName: string): string {
 }
 
 export default function AgentSignupPage() {
-  const supabase = createClient()
-
   const [step, setStep]         = useState<Step>('form')
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState<string | null>(null)
@@ -57,24 +54,22 @@ export default function AgentSignupPage() {
     }
     const t = setTimeout(async () => {
       setDomainChecking(true)
-      const { data, error } = await supabase
-        .from('Companies')
-        .select('id, Name')
-        .eq('domain', domain.toLowerCase().trim())
-        .maybeSingle()
-      setDomainChecking(false)
-      if (error || !data) {
-        setDomainValid(false)
-        setCompanyName('')
-        setCompanyId(null)
-        setSlots(null)
-      } else {
-        setDomainValid(true)
-        setCompanyName(data.Name)
-        setCompanyId(data.id)
-        // Show remaining agent seats (and block the form if the agency is full).
-        fetch(`/api/company/agent-slots?domain=${encodeURIComponent(domain.toLowerCase().trim())}`)
-          .then(r => r.ok ? r.json() : null).then(setSlots).catch(() => setSlots(null))
+      // One robust server lookup (admin client, normalised domain) — no direct
+      // browser query, so RLS and invisible pasted characters can't hide the
+      // agency. It returns whether the company exists, its name, and seat counts.
+      try {
+        const r = await fetch(`/api/company/agent-slots?domain=${encodeURIComponent(domain)}`)
+        const d = r.ok ? await r.json() : null
+        setDomainChecking(false)
+        if (!d || !d.found) {
+          setDomainValid(false); setCompanyName(''); setCompanyId(null); setSlots(null)
+        } else {
+          setDomainValid(true); setCompanyName(d.name); setCompanyId(d.id)
+          setSlots({ used: d.used, limit: d.limit, full: d.full })
+        }
+      } catch {
+        setDomainChecking(false)
+        setDomainValid(false); setCompanyName(''); setCompanyId(null); setSlots(null)
       }
     }, 600)
     return () => clearTimeout(t)
