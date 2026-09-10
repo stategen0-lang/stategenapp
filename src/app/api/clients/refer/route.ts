@@ -67,6 +67,9 @@ export async function POST(req: NextRequest) {
       agentId: toAgent,
       referredBy: referrer,
       referredByName,
+      // Timestamp the hand-off so it lands on the Agent activity log timeline.
+      // Only the latest referral per client is kept (one blob, one timestamp).
+      referredAt: new Date().toISOString(),
     }
 
     const { error } = await supabase

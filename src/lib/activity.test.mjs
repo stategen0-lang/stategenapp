@@ -4,7 +4,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  listingItem, clientItem, dealMoveItem, offerItem, eventItem, mergeActivity, activityLine, activityAgo,
+  listingItem, clientItem, dealMoveItem, offerItem, eventItem, referralItem, mergeActivity, activityLine, activityAgo,
   summarizeByAgent,
 } from './activity.ts'
 
@@ -22,6 +22,21 @@ test('offerItem / eventItem: kind, key, summary', () => {
   assert.match(e.summary, /Scheduled viewing: Achrafieh flat/)
 })
 
+test('referralItem: attributed to the referring agent, names the receiver', () => {
+  const r = referralItem({
+    id: 12, at: '2026-09-10T09:00:00Z', clientName: 'Jess Khoury', toName: 'Nadia Haddad',
+    agentCode: 'a2', agentName: 'Rami',
+  })
+  assert.equal(r.kind, 'client_referred')
+  assert.equal(r.id, 'referral:12')
+  assert.equal(r.agentCode, 'a2')            // the referrer keeps the credit
+  assert.equal(r.summary, 'Referred Jess Khoury to Nadia Haddad')
+})
+
+test('referralItem: omits the receiver when unknown', () => {
+  const r = referralItem({ id: 3, at: '2026-09-10T09:00:00Z', clientName: 'Joe', agentCode: 'a1', agentName: 'Lara' })
+  assert.equal(r.summary, 'Referred Joe')
+})
 test('summarizeByAgent: counts per kind, busiest first', () => {
   const items = [
     listingItem({ id: 1, at: '2026-09-01T10:00:00Z', title: 'A', agentCode: 'a1', agentName: 'Lara' }),

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { dbRowToProperty, dbRowToClient } from '@/lib/db-mappers'
-import { listingItem, clientItem, dealMoveItem, offerItem, eventItem, mergeActivity, type ActivityItem } from '@/lib/activity'
+import { listingItem, clientItem, dealMoveItem, offerItem, eventItem, referralItem, mergeActivity, type ActivityItem } from '@/lib/activity'
 
 // Assemble the activity feed from the live tables. Company-scoped; pass an
 // agentCode to narrow it to one agent's own listings/clients/deals (an agent
@@ -199,6 +199,32 @@ export async function fetchAgentActivity(admin: SupabaseClient, opts: ReportOpts
     }
   } catch { /* skip */ }
 
+  // ── Client referrals (hand-offs to another agent) ──
+  // referredAt lives inside the notes blob, so it cannot be range-filtered in
+  // SQL — scan the company's clients and keep the ones referred in the window.
+  // NOTE: the blob holds ONE timestamp, so a client referred twice shows only
+  // its most recent hand-off.
+  try {
+    const { data } = await admin
+      .from('client_requests').select('id, "Client Name", notes')
+      .eq('company_id', companyId)
+    for (const row of (data ?? []) as Row[]) {
+      let blob: Record<string, unknown> = {}
+      try { blob = JSON.parse((row.notes as string) || '{}') } catch { continue }
+      const at = String(blob.referredAt ?? '')
+      // ISO strings compare lexicographically, so this is a real range check.
+      if (!at || at < from || at > to) continue
+      const code = (blob.referredBy as string) ?? null
+      if (agentCode && code !== agentCode) continue
+      const toCode = (blob.agentId as string) ?? null
+      items.push(referralItem({
+        id: String(row.id), at,
+        clientName: (row['Client Name'] as string) ?? 'a client',
+        toName: nameFor(toCode) ?? toCode,
+        agentCode: code, agentName: nameFor(code),
+      }))
+    }
+  } catch { /* skip */ }
   // Chronological, newest first; generous cap for a reporting window.
   return mergeActivity(items, 1000)
 }

@@ -14,9 +14,10 @@ const H = '#14223F'
 const SUB = '#6A7488'
 const LINE = '#EEF0F4'
 
-// The action types shown in the report (client_referred isn't timestamped yet).
+// The action types shown in the report.
 const REPORT_KINDS: ActivityKind[] = [
-  'listing_added', 'client_added', 'deal_moved', 'deal_won', 'deal_lost', 'offer_logged', 'event_scheduled',
+  'listing_added', 'client_added', 'deal_moved', 'deal_won', 'deal_lost',
+  'offer_logged', 'event_scheduled', 'client_referred',
 ]
 
 function ymd(d: Date): string {
@@ -91,7 +92,7 @@ export default function AgentReportPage() {
         <Activity className="h-5 w-5" style={{ color: H }} />
         <h1 className="text-xl md:text-2xl font-bold" style={{ color: H, letterSpacing: '-0.3px' }}>Agent activity log</h1>
       </div>
-      <p className="text-xs md:text-sm mb-4" style={{ color: SUB }}>Everything each agent did in the chosen period — listings, clients, deal moves, offers and viewings.</p>
+      <p className="text-xs md:text-sm mb-4" style={{ color: SUB }}>Everything each agent did in the chosen period — listings, clients, deal moves, offers, viewings and referrals.</p>
 
       {/* Controls */}
       <div className="rounded-2xl p-4 mb-4" style={{ border: `1px solid ${LINE}`, background: '#fff' }}>

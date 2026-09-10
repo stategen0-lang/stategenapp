@@ -120,6 +120,20 @@ export function eventItem(i: {
   }
 }
 
+/** A client handed over to another agent. Attributed to the agent who MADE the
+ *  referral (they keep the commission), not the one who received it. */
+export function referralItem(i: {
+  id: string | number; at: string; clientName: string; toName?: string | null;
+  agentCode: string | null; agentName: string | null
+}): ActivityItem {
+  return {
+    id: `referral:${i.id}`, kind: 'client_referred', at: i.at,
+    agentCode: i.agentCode, agentName: i.agentName,
+    summary: `Referred ${i.clientName}${i.toName ? ` to ${i.toName}` : ''}`,
+    detail: null,
+  }
+}
+
 /** Newest first, capped. ISO timestamps sort lexicographically. */
 export function mergeActivity(items: ActivityItem[], limit = 40): ActivityItem[] {
   return [...items].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0)).slice(0, limit)
