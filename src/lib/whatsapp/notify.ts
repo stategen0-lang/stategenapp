@@ -39,21 +39,30 @@ export async function notifyAgentNewClient(opts: NotifyOpts): Promise<{ notified
 
   const templateName = process.env.WHATSAPP_NEW_CLIENT_TEMPLATE
   const wa = waNumber(client.phone)   // the client's number, for the chat button
-  if (templateName && wa) {
+
+  // 1) Approved template first — the ONLY thing Meta delivers outside the agent's
+  //    24h window. Body {{1}} is the client data. The tap-to-chat URL button is
+  //    added only when we know the client's number; a client with no phone still
+  //    gets a body-only template (it used to skip the template entirely and fall
+  //    to free text, which silently vanished outside the window).
+  if (templateName) {
     const lang = process.env.WHATSAPP_NEW_CLIENT_TEMPLATE_LANG || 'en'
-    // Body {{1}} is the client data; the client's phone also sits inside it so
-    // WhatsApp auto-links it. The dynamic URL button's {{1}} is the number, which
-    // resolves through /wa to the client's chat in the AGENT'S own WhatsApp — the
-    // agent reaches out, the bot never messages the client.
-    const res = await sendTemplate(number, templateName, lang, [
+    const components: unknown[] = [
       { type: 'body', parameters: [{ type: 'text', text: newClientCore(client) }] },
-      { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: wa }] },
-    ])
-    return { notified: res.ok, reason: res.ok ? undefined : 'template send failed' }
+    ]
+    // The button resolves through /wa to the client's chat in the AGENT'S own
+    // WhatsApp — the agent reaches out, the bot never messages the client.
+    if (wa) components.push({ type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: wa }] })
+
+    const res = await sendTemplate(number, templateName, lang, components)
+    if (res.ok) return { notified: true }
+    // Wrong name / not approved / param mismatch — surface it, then still try
+    // free text so an in-window agent is notified rather than nothing happening.
+    console.warn('[notify] template send failed:', res.error)
   }
 
-  // No template, or no client phone for the button → free text (24h window only).
+  // 2) Free text — only lands if the agent messaged the bot in the last 24h.
   const res = await sendText(number, newClientLine(client))
   if (!res.ok) console.warn('[notify] free-text send failed:', res.error)
-  return { notified: res.ok, reason: res.ok ? undefined : (res.error ?? 'no template / no client phone') }
+  return { notified: res.ok, reason: res.ok ? undefined : (res.error ?? 'not delivered') }
 }
