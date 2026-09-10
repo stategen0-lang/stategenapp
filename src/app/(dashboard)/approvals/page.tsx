@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { UserCheck, Check, X, Clock, Users, Trash2, Shield, ShieldCheck, ShieldOff, Link2, Copy, Plus, KeyRound, Pencil } from 'lucide-react'
+import { UserCheck, Check, X, Clock, Users, Trash2, Shield, ShieldCheck, ShieldOff, Link2, Copy, Plus, KeyRound, Pencil, MoreHorizontal } from 'lucide-react'
 import { useSession } from '@/hooks/use-session'
 import { isManager } from '@/lib/permissions'
 
@@ -42,6 +42,9 @@ export default function TeamPage() {
   const [resetBusy, setResetBusy] = useState(false)
   const [resetDone, setResetDone] = useState<string | null>(null)
   const [resetErr, setResetErr] = useState('')
+  // Which agent row has its ⋯ actions menu open (mobile — the four buttons don't
+  // fit on a phone, so they collapse into one menu).
+  const [menuFor, setMenuFor] = useState<string | null>(null)
   // Edit an agent's ID/code
   const [editIdFor, setEditIdFor] = useState<Agent | null>(null)
   const [editCode, setEditCode] = useState('')
@@ -244,7 +247,7 @@ export default function TeamPage() {
                     </div>
                   </div>
                   {canDemote(m) && (
-                    <button onClick={() => setConfirm({ agent: m, action: 'demote' })} disabled={busy === m.id} className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold disabled:opacity-50" style={{ border: '1.5px solid #D7DCE5', color: H }}>
+                    <button onClick={() => setConfirm({ agent: m, action: 'demote' })} disabled={busy === m.id} className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap shrink-0 disabled:opacity-50" style={{ border: '1.5px solid #D7DCE5', color: H }}>
                       <ShieldOff className="h-3.5 w-3.5" /> Make agent
                     </button>
                   )}
@@ -330,20 +333,71 @@ export default function TeamPage() {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button onClick={() => { setEditIdFor(a); setEditCode(a.agent_code ?? ''); setEditDone(null); setEditErr('') }} title="Edit agent ID" className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold" style={{ border: '1.5px solid #D7DCE5', color: H }}>
-                      <Pencil className="h-3.5 w-3.5" /> Edit ID
-                    </button>
-                    <button onClick={() => { setResetFor(a); setResetPw(''); setResetDone(null); setResetErr('') }} title="Reset password" className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold" style={{ border: '1.5px solid #D7DCE5', color: H }}>
-                      <KeyRound className="h-3.5 w-3.5" /> Password
-                    </button>
-                    <button onClick={() => setConfirm({ agent: a, action: 'promote' })} disabled={busy === a.id} className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold disabled:opacity-50" style={{ border: '1.5px solid #CFE0F5', background: '#F5F9FE', color: '#2E5288' }}>
-                      <ShieldCheck className="h-3.5 w-3.5" /> Manager
-                    </button>
-                    <button onClick={() => setConfirm({ agent: a, action: 'remove' })} disabled={busy === a.id} className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold disabled:opacity-50" style={{ border: '1.5px solid #F3D7D7', background: '#FDF5F5', color: '#A23434' }}>
-                      <Trash2 className="h-3.5 w-3.5" /> Remove
-                    </button>
-                  </div>
+                  {(() => {
+                    // One definition of the row's actions, rendered as inline
+                    // buttons on desktop and as a ⋯ menu on mobile.
+                    const openEditId = () => { setEditIdFor(a); setEditCode(a.agent_code ?? ''); setEditDone(null); setEditErr('') }
+                    const openReset = () => { setResetFor(a); setResetPw(''); setResetDone(null); setResetErr('') }
+                    const actions = [
+                      { icon: <Pencil className="h-4 w-4" />, label: 'Edit ID', run: openEditId },
+                      { icon: <KeyRound className="h-4 w-4" />, label: 'Reset password', run: openReset },
+                      { icon: <ShieldCheck className="h-4 w-4" />, label: 'Make manager', run: () => setConfirm({ agent: a, action: 'promote' }) },
+                      { icon: <Trash2 className="h-4 w-4" />, label: 'Remove agent', run: () => setConfirm({ agent: a, action: 'remove' }), danger: true },
+                    ]
+                    return (
+                      <div className="flex items-center gap-2 shrink-0">
+                        {/* Desktop — room for the buttons inline */}
+                        <div className="hidden md:flex items-center gap-2">
+                          <button onClick={openEditId} title="Edit agent ID" className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold" style={{ border: '1.5px solid #D7DCE5', color: H }}>
+                            <Pencil className="h-3.5 w-3.5" /> Edit ID
+                          </button>
+                          <button onClick={openReset} title="Reset password" className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold" style={{ border: '1.5px solid #D7DCE5', color: H }}>
+                            <KeyRound className="h-3.5 w-3.5" /> Password
+                          </button>
+                          <button onClick={() => setConfirm({ agent: a, action: 'promote' })} disabled={busy === a.id} className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold disabled:opacity-50" style={{ border: '1.5px solid #CFE0F5', background: '#F5F9FE', color: '#2E5288' }}>
+                            <ShieldCheck className="h-3.5 w-3.5" /> Manager
+                          </button>
+                          <button onClick={() => setConfirm({ agent: a, action: 'remove' })} disabled={busy === a.id} className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold disabled:opacity-50" style={{ border: '1.5px solid #F3D7D7', background: '#FDF5F5', color: '#A23434' }}>
+                            <Trash2 className="h-3.5 w-3.5" /> Remove
+                          </button>
+                        </div>
+
+                        {/* Mobile — collapse into one ⋯ menu (room to grow later) */}
+                        <div className="relative md:hidden">
+                          <button
+                            onClick={() => setMenuFor(menuFor === a.id ? null : a.id)}
+                            aria-label={`Actions for ${a.Full_name || 'this agent'}`}
+                            className="w-10 h-10 rounded-xl flex items-center justify-center"
+                            style={{ border: '1.5px solid #D7DCE5', color: H }}
+                          >
+                            <MoreHorizontal className="h-5 w-5" />
+                          </button>
+                          {menuFor === a.id && (
+                            <>
+                              {/* tap-away to close */}
+                              <div className="fixed inset-0 z-10" onClick={() => setMenuFor(null)} />
+                              <div
+                                className="absolute right-0 top-full mt-1 z-20 rounded-xl overflow-hidden"
+                                style={{ background: '#fff', boxShadow: '0 8px 28px rgba(0,0,0,0.20)', minWidth: 200 }}
+                              >
+                                {actions.map((act, i) => (
+                                  <button
+                                    key={act.label}
+                                    onClick={() => { setMenuFor(null); act.run() }}
+                                    disabled={busy === a.id}
+                                    className="w-full flex items-center gap-2.5 px-4 py-3 text-sm font-semibold text-left disabled:opacity-50"
+                                    style={{ color: act.danger ? '#A23434' : H, borderTop: i === 0 ? undefined : '1px solid #F4F5F8' }}
+                                  >
+                                    {act.icon} {act.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               ))}
             </div>
