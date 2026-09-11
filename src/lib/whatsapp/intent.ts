@@ -153,7 +153,14 @@ using ONLY these key names (anything else is discarded):
   status must be one of: Available, Reserved, Sold, Rented
   "location" is the single area/neighbourhood (e.g. "Achrafieh") — one place, not a separate city
 For create_client, put fields using ONLY these keys: name, phone,
-clientType (buyer|renter), propertyType, location, budget, beds, baths, parkings.
+clientType (buyer|renter), propertyType, locations (ARRAY of areas), budget, beds,
+baths, parkings, size (sqm), view, furnishing, floor, balcony, advancedPayment, notes.
+Agents write briefs in Lebanese Arabizi (Arabic in Latin letters, 3=ع 5/7=خ/ح):
+"bado/bada"=wants, "hiye/huwe/hene"=she/he/they, "eza"=if, "ma 3ando mechkle"=doesn't mind,
+"3mar jdid"=new building, "b3id 3an"=far from, "GF"=ground floor, "ma7al"=shop.
+A budget range is its TOP end ("400$ - 450$" -> 450); a rent budget is monthly, so
+450 means 450 — never 450000. Several areas go in "locations". Anything that isn't a
+field (family, occupation, "prime location", "no GF", urgency) goes in "notes".
 For log_offer, put the amount in fields.amount (plain USD number: "450k"->450000,
 "1.2m"->1200000) and set fields.side to "owner" ONLY when the owner/agency is
 countering ("counter …"); otherwise omit side (it defaults to the buyer).
@@ -198,6 +205,8 @@ Examples (note the typos and varied phrasing):
 "new buyer Ahmed looking for a villa in Hamra, budget 600k, 03111222" -> {"intent":"create_client","fields":{"name":"Ahmed","clientType":"buyer","propertyType":"villa","location":"Hamra","budget":600000,"phone":"03111222"}}
 "Hi, I'm looking for a 2 bedroom apartment in Achrafieh around 250k, this is Joe Khoury 03 123456" -> {"intent":"create_client","fields":{"name":"Joe Khoury","clientType":"buyer","propertyType":"apartment","location":"Achrafieh","budget":250000,"beds":2,"phone":"03 123456"}}
 "Client Rana 71 998877 wants to rent an office in Hamra, budget 2000/month" -> {"intent":"create_client","fields":{"name":"Rana","clientType":"renter","propertyType":"office","location":"Hamra","budget":2000,"phone":"71 998877"}}
+"Dana Tohme Request: apartment for rent Prefer unfurnished Location: prefer in Zakrit-or Zouk -Kaslik -Aintoura Hiye w Ebna 3omro 13 years Bada chi 2 bedrooms 2 bathrooms" -> {"intent":"create_client","fields":{"name":"Dana Tohme","clientType":"renter","propertyType":"apartment","locations":["Zakrit","Zouk","Kaslik","Aintoura"],"furnishing":"Unfurnished","beds":2,"baths":2,"notes":"She and her 13-year-old son."}}
+"1-Name of client : woman 2-Request sale or rent : rent 3-Areas interests: 5mins up from batroun 2 br 4-Budget range: 1250 5-Comment keep in mind : not close to the beach" -> {"intent":"create_client","fields":{"name":"woman","clientType":"renter","locations":["Batroun"],"beds":2,"budget":1250,"notes":"About 5 minutes up from Batroun. Not close to the beach."}}
 "called Ahmed, he wants a viewing Saturday" -> {"intent":"feedback","clientName":"Ahmed","notes":"wants a viewing Saturday"}`
 
 /**

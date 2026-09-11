@@ -20,6 +20,16 @@ test('toMoney: shorthand, symbols and separators', () => {
   assert.equal(toMoney(' 250000 '), 250_000)
   assert.equal(toMoney(500_000), 500_000)
 })
+test('toMoney: budget ranges and qualifiers take the higher end', () => {
+  assert.equal(toMoney('400$ - 450$'), 450)     // real agent phrasing
+  assert.equal(toMoney('450$ -400$'), 450)      // written high-to-low
+  assert.equal(toMoney('up to 600$'), 600)
+  assert.equal(toMoney('max 600'), 600)
+  assert.equal(toMoney('400 to 450'), 450)
+  assert.equal(toMoney('1250'), 1250)           // monthly rent, bare number
+  assert.equal(toMoney('300k-450k'), 450_000)
+})
+
 test('toMoney: rejects junk and non-positive values', () => {
   assert.equal(toMoney('cheap'), null)
   assert.equal(toMoney(''), null)
@@ -34,6 +44,11 @@ test('toCount: plain counts only', () => {
   assert.equal(toCount('abc'), null)
   assert.equal(toCount(-1), null)
   assert.equal(toCount(5000), null)
+})
+test('toCount: reads a qualified count the way agents write it', () => {
+  assert.equal(toCount('at least 50 sqm'), 50)
+  assert.equal(toCount('2 br'), 2)
+  assert.equal(toCount('min 2 bedrooms'), 2)
 })
 test('toText: trims, drops blanks, caps length', () => {
   assert.equal(toText('  Hamra  '), 'Hamra')

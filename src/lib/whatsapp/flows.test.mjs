@@ -150,6 +150,51 @@ test('seedContext: collapses split neighbourhood/city into one area (prefers nei
   assert.equal(seedContext({ city: 'Jounieh' }).location, 'Jounieh')
   assert.equal('neighborhood' in seedContext({ neighborhood: 'Hamra', location: 'Beirut' }), false)
 })
+// ── Real client briefs from the agency (Arabizi + multi-area + ranges) ───────
+// These assert the mapping layer: given what the extractor pulls out of a real
+// WhatsApp brief, the flow must keep every field instead of dropping it.
+test('seedContext (client): a multi-area brief fills locations AND the asked location', () => {
+  const ctx = seedContext({
+    name: 'Dana Tohme', clientType: 'renter', propertyType: 'apartment',
+    locations: ['Zakrit', 'Zouk', 'Kaslik', 'Aintoura'],
+    furnishing: 'Unfurnished', beds: 2, baths: 2,
+    notes: 'She and her 13-year-old son.',
+  }, CREATE_CLIENT_STEPS)
+  assert.deepEqual(ctx.locations, ['Zakrit', 'Zouk', 'Kaslik', 'Aintoura'])
+  // The mandatory single "location" is derived, so the bot doesn't re-ask.
+  assert.equal(ctx.location, 'Zakrit, Zouk, Kaslik, Aintoura')
+  assert.equal(ctx.furnishing, 'Unfurnished')
+  assert.equal(ctx.beds, 2)
+  assert.equal(ctx.notes, 'She and her 13-year-old son.')
+  assert.equal(missingMandatory(ctx, CREATE_CLIENT_STEPS).map(s => s.key).includes('location'), false)
+})
+
+test('seedContext (client): budget range, sqm, advance payment, sea view', () => {
+  const ctx = seedContext({
+    name: 'Manale Laadam', clientType: 'renter', propertyType: 'apartment',
+    locations: ['Jounieh', 'Ghazir'], budget: '450$ -400$', size: 'at least 50',
+    view: 'Sea', balcony: true, advancedPayment: true, floor: 'No GF',
+  }, CREATE_CLIENT_STEPS)
+  assert.equal(ctx.budget, 450)          // range -> the top end
+  assert.equal(ctx.size, 50)
+  assert.equal(ctx.view, 'Sea')
+  assert.equal(ctx.balcony, true)
+  assert.equal(ctx.advancedPayment, true)
+  // "No GF" is an exclusion, not a floor preference — it must not become one.
+  assert.equal(ctx.floor, undefined)
+})
+
+test('seedContext (client): a shop brief keeps the single area and size', () => {
+  const ctx = seedContext({
+    name: 'Pascale Bou Chaaya', phone: '+961 76 099 942', clientType: 'renter',
+    propertyType: 'shop', locations: ['Zouk Mikael'], budget: 'up to 600$', size: 50,
+  }, CREATE_CLIENT_STEPS)
+  assert.equal(ctx.propertyType, 'Shop')
+  assert.equal(ctx.budget, 600)
+  assert.equal(ctx.location, 'Zouk Mikael')
+  assert.deepEqual(missingMandatory(ctx, CREATE_CLIENT_STEPS), [])   // nothing left to ask
+})
+
 test('seedContext: drops junk, ignores unknown keys, empty ok', () => {
   const ctx = seedContext({ price: 'negotiable', type: 'Spaceship', company_id: 99 })
   assert.equal(ctx.price, undefined)

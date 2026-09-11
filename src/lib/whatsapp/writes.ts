@@ -40,17 +40,37 @@ export interface BuiltUpdate {
 export function toMoney(v: unknown): number | null {
   if (typeof v === 'number') return Number.isFinite(v) && v > 0 ? v : null
   if (typeof v !== 'string') return null
-  const s = v.trim().toLowerCase().replace(/[$,\s]/g, '')
+  // Agents write budgets as "400$ - 450$", "450$ -400$", "up to 600$", "max 600".
+  // A leading qualifier is dropped, and a RANGE resolves to its higher end — that
+  // is the most they will pay, which is what the budget field means. Trailing junk
+  // ("400k or so") is still rejected rather than guessed at.
+  const s = v.trim().toLowerCase()
+    .replace(/^(?:up\s*to|upto|max(?:imum)?|around|about|approx\.?|~)\s*/, '')
+    .replace(/[$,\s]/g, '')
+  const scale = (num: string, suffix?: string) => {
+    let n = parseFloat(num)
+    if (suffix === 'k') n *= 1_000
+    if (suffix === 'm') n *= 1_000_000
+    return n
+  }
+  const range = s.match(/^(\d+(?:\.\d+)?)([km])?(?:-|–|—|to)(\d+(?:\.\d+)?)([km])?$/)
+  if (range) {
+    const hi = Math.max(scale(range[1], range[2]), scale(range[3], range[4]))
+    return Number.isFinite(hi) && hi > 0 ? hi : null
+  }
   const m = s.match(/^(\d+(?:\.\d+)?)([km])?$/)
   if (!m) return null
-  let n = parseFloat(m[1])
-  if (m[2] === 'k') n *= 1_000
-  if (m[2] === 'm') n *= 1_000_000
+  const n = scale(m[1], m[2])
   return Number.isFinite(n) && n > 0 ? n : null
 }
 
 export function toCount(v: unknown): number | null {
-  const n = typeof v === 'number' ? v : parseInt(String(v ?? '').trim(), 10)
+  if (typeof v === 'number') return Number.isFinite(v) && v >= 0 && v < 1000 ? v : null
+  // Agents qualify their counts — "at least 50 sqm", "2 br", "min 2 bedrooms" —
+  // so take the first number in the text rather than demanding a bare numeral.
+  const m = String(v ?? '').match(/\d+/)
+  if (!m) return null
+  const n = parseInt(m[0], 10)
   return Number.isFinite(n) && n >= 0 && n < 1000 ? n : null
 }
 

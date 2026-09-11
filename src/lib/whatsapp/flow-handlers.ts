@@ -100,6 +100,18 @@ async function finishClient(admin: SupabaseClient, profile: Profile, context: Fl
   if (context.beds != null) req.beds = context.beds
   if (context.baths != null) req.baths = context.baths
   if (context.parkings != null) req.parkings = context.parkings
+  // The rest of the brief. These mirror ClientReq in the web app (db-mappers
+  // reads them straight back), so a WhatsApp-added client shows the same detail
+  // as one typed into the form — areas, furnishing, view, notes and so on.
+  req.location = context.location
+  if (Array.isArray(context.locations) && context.locations.length) req.locations = context.locations
+  if (context.size != null) req.size = context.size
+  if (context.view) req.view = context.view
+  if (context.furnishing) req.furnishing = context.furnishing
+  if (context.floor) req.floor = context.floor
+  if (context.balcony != null) req.balcony = context.balcony
+  if (context.advancedPayment != null) req.advancedPayment = context.advancedPayment
+  if (context.notes) req.notes = context.notes
   // A manager assigns the client to a chosen agent (__ownerAgent, set by the
   // pick-list step); an agent adding their own client owns it themselves.
   const extras: Record<string, unknown> = {
@@ -116,6 +128,13 @@ async function finishClient(admin: SupabaseClient, profile: Profile, context: Fl
     context.beds ? `Bedrooms: ${context.beds}` : null,
     context.baths ? `Bathrooms: ${context.baths}` : null,
     context.parkings ? `Parking: ${context.parkings}` : null,
+    context.size ? `Min size: ${context.size} m²` : null,
+    context.furnishing ? `Furnishing: ${context.furnishing}` : null,
+    context.view ? `View: ${context.view}` : null,
+    context.floor ? `Floor: ${context.floor}` : null,
+    context.balcony ? 'Balcony: required' : null,
+    context.advancedPayment ? 'Can pay advance: yes' : null,
+    context.notes ? `Notes: ${context.notes}` : null,
     context.__ownerAgentName ? `Assigned to: ${context.__ownerAgentName}` : null,
   ].filter(Boolean) as string[]
 

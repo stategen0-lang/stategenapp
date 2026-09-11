@@ -23,6 +23,11 @@ test('parseFieldsJson: keeps only string/number/boolean values', () => {
   assert.deepEqual(f, { type: 'villa', beds: 4, garden: true })
 })
 
+test('parseFieldsJson: keeps a list of areas (multi-area client briefs)', () => {
+  const f = parseFieldsJson('{"fields":{"locations":["Zouk"," Kaslik ","Aintoura"],"beds":2}}')
+  assert.deepEqual(f, { locations: ['Zouk', 'Kaslik', 'Aintoura'], beds: 2 })
+})
+
 test('parseFieldsJson: trims strings', () => {
   assert.deepEqual(parseFieldsJson('{"fields":{"location":"  Beirut "}}'), { location: 'Beirut' })
 })

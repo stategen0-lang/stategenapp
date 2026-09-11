@@ -104,6 +104,52 @@ const coerceClientType = (v: unknown) => {
 }
 
 /**
+ * A list of places. Agents list areas every way imaginable —
+ * "Zouk - Kaslik - Aintoura", "Jounieh, Ghazir", "Achrafieh or Sassine" — and
+ * the model sometimes hands back an array instead. Returns null when empty so
+ * the caller treats it as "not answered".
+ */
+const toList = (v: unknown): string[] | null => {
+  const raw = Array.isArray(v) ? v.map(x => String(x ?? '')) : String(v ?? '').split(/[,;/]|\s-\s|\bor\b|\band\b/i)
+  const out = raw.map(s => s.trim()).filter(Boolean).map(s => toText(s) as string).filter(Boolean)
+  return out.length ? [...new Set(out)].slice(0, 10) : null
+}
+
+/** Furnished / semi-furnished / unfurnished, however it was phrased. */
+const coerceFurnishing = (v: unknown) => {
+  const s = String(v ?? '').trim().toLowerCase()
+  if (!s) return null
+  if (/\bsemi/.test(s)) return 'Semi-furnished'
+  if (/\bunfurnish|not furnish|non[- ]?furnish|without furniture/.test(s)) return 'Unfurnished'
+  if (/\bfurnish/.test(s)) return 'Furnished'
+  return null
+}
+
+/** Ground / mid / last floor. "GF" is how agents write ground floor. */
+const coerceFloor = (v: unknown) => {
+  const s = String(v ?? '').trim().toLowerCase()
+  if (!s) return null
+  // "No GF" / "not ground floor" is an EXCLUSION, not a preference — recording it
+  // as floor:"Ground level" would ask for the exact thing the client refuses.
+  // It belongs in notes, so reject it here.
+  if (/\b(no|not|without|non|mesh|mish|la2)\b/.test(s)) return null
+  if (/\bg\.?f\b|ground/.test(s)) return 'Ground level'
+  if (/\blast\b|\btop\b|roof/.test(s)) return 'Last floor'
+  if (/\bmid|middle/.test(s)) return 'Mid floor'
+  return null
+}
+
+/** A yes/no answer — "yes", "bado", "3ando", true. */
+const toYesNo = (v: unknown): boolean | null => {
+  if (typeof v === 'boolean') return v
+  const s = String(v ?? '').trim().toLowerCase()
+  if (!s) return null
+  if (/^(y|yes|yep|true|1|oui|na3am|eh|aa)\b|\bwant|\bneed|\bprefer|bado|bada|badda|3ando|3anda/.test(s)) return true
+  if (/^(n|no|nope|false|0|non|la2)\b|\bwithout|\bno\b/.test(s)) return false
+  return null
+}
+
+/**
  * Everything needed to register a client and let the matcher work: who they
  * are, how to reach them, and what they're after. Optional details refine
  * matching but don't block saving.
@@ -118,6 +164,17 @@ export const CREATE_CLIENT_STEPS: FlowStep[] = [
   { key: 'beds',        label: 'Bedrooms',      mandatory: false, hint: 'e.g. 3', coerce: toCount, aliases: ['beds', 'bed', 'br'] },
   { key: 'baths',       label: 'Bathrooms',     mandatory: false, hint: 'e.g. 2', coerce: toCount, aliases: ['bath', 'baths', 'wc'] },
   { key: 'parkings',    label: 'Parking spaces', mandatory: false, hint: 'e.g. 1', coerce: toCount, aliases: ['parking', 'garage', 'car spots'] },
+  // Optional extras below are never ASKED for (no `question`) — they're only
+  // filled when the agent's own message mentioned them. Real briefs carry far
+  // more than the six mandatory fields, and dropping the rest lost the brief.
+  { key: 'locations',   label: 'Areas',         mandatory: false, coerce: toList, aliases: ['areas', 'areas interests', 'preferred areas', 'locations'] },
+  { key: 'size',        label: 'Min size',      mandatory: false, hint: 'm², e.g. 50', coerce: toCount, aliases: ['sqm', 'm2', 'surface', 'area sqm'] },
+  { key: 'view',        label: 'View',          mandatory: false, hint: 'e.g. sea', coerce: toText, aliases: ['view type'] },
+  { key: 'furnishing',  label: 'Furnishing',    mandatory: false, hint: 'furnished/unfurnished', coerce: coerceFurnishing, aliases: ['furnished', 'furniture'] },
+  { key: 'floor',       label: 'Floor',         mandatory: false, hint: 'ground/mid/last', coerce: coerceFloor, aliases: ['level'] },
+  { key: 'balcony',     label: 'Balcony',       mandatory: false, coerce: toYesNo, aliases: ['terrace'] },
+  { key: 'advancedPayment', label: 'Can pay advance', mandatory: false, coerce: toYesNo, aliases: ['payment method', 'advance', 'months ahead'] },
+  { key: 'notes',       label: 'Notes',         mandatory: false, coerce: toText, aliases: ['comment', 'comments', 'keep in mind', 'remarks'] },
 ]
 
 // ── The all-at-once form ──────────────────────────────────────────────────────
@@ -298,6 +355,13 @@ export function seedContext(fields: Record<string, unknown> | undefined, steps: 
       const value = spec.coerce(rawValue)
       if (value !== null) extra[key] = value
     }
+  }
+
+  // A client brief usually lists several areas ("Zouk - Kaslik - Aintoura").
+  // `location` is the mandatory single-line answer, so derive it from the list
+  // instead of asking "which area?" when we already know all of them.
+  if (!out.location && Array.isArray(out.locations) && out.locations.length) {
+    out.location = (out.locations as string[]).join(', ')
   }
 
   if (Object.keys(extra).length) out[EXTRA_KEY] = extra
