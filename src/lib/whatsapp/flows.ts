@@ -155,26 +155,26 @@ const toYesNo = (v: unknown): boolean | null => {
  * matching but don't block saving.
  */
 export const CREATE_CLIENT_STEPS: FlowStep[] = [
-  { key: 'name',        label: 'Name',          mandatory: true,  coerce: toText, aliases: ['client name', 'full name'], question: "What's the client's name?" },
+  { key: 'name',        label: 'Name',          mandatory: true,  coerce: toText, aliases: ['client name', 'full name', 'name of client', 'client'], question: "What's the client's name?" },
   { key: 'phone',       label: 'Phone',         mandatory: true,  hint: 'e.g. 03 123456', coerce: toText, aliases: ['number', 'contact', 'mobile'], question: "What's their phone number?" },
-  { key: 'clientType',  label: 'Buyer or renter', mandatory: true, hint: 'buyer/renter', coerce: coerceClientType, aliases: ['type', 'buyer/renter'], question: 'Are they buying or renting?' },
+  { key: 'clientType',  label: 'Buyer or renter', mandatory: true, hint: 'buyer/renter', coerce: coerceClientType, aliases: ['type', 'buyer/renter', 'buying or renting', 'buy or rent', 'sale or rent', 'request sale or rent'], question: 'Are they buying or renting?' },
   { key: 'propertyType', label: 'Looking for',  mandatory: true,  hint: PROPERTY_TYPES.join('/'), coerce: coerceType, aliases: ['property type', 'wants', 'interested in'], question: 'What type of property are they after? (e.g. apartment, villa, office)' },
   { key: 'location',    label: 'Preferred area', mandatory: true, hint: 'e.g. Achrafieh', coerce: toText, aliases: ['area', 'location', 'where'], question: 'Which area are they interested in?' },
-  { key: 'budget',      label: 'Budget',        mandatory: true,  hint: 'USD, e.g. 400k', coerce: toMoney, aliases: ['budget usd', 'price'], question: "What's their budget? (USD)" },
+  { key: 'budget',      label: 'Budget',        mandatory: true,  hint: 'USD, e.g. 400k', coerce: toMoney, aliases: ['budget usd', 'budget range', 'price', 'price range'], question: "What's their budget? (USD)" },
   { key: 'beds',        label: 'Bedrooms',      mandatory: false, hint: 'e.g. 3', coerce: toCount, aliases: ['beds', 'bed', 'br'] },
   { key: 'baths',       label: 'Bathrooms',     mandatory: false, hint: 'e.g. 2', coerce: toCount, aliases: ['bath', 'baths', 'wc'] },
   { key: 'parkings',    label: 'Parking spaces', mandatory: false, hint: 'e.g. 1', coerce: toCount, aliases: ['parking', 'garage', 'car spots'] },
   // Optional extras below are never ASKED for (no `question`) — they're only
   // filled when the agent's own message mentioned them. Real briefs carry far
   // more than the six mandatory fields, and dropping the rest lost the brief.
-  { key: 'locations',   label: 'Areas',         mandatory: false, coerce: toList, aliases: ['areas', 'areas interests', 'preferred areas', 'locations'] },
+  { key: 'locations',   label: 'Areas',         mandatory: false, coerce: toList, aliases: ['areas', 'areas interests', 'areas interested', 'area interests', 'preferred areas', 'locations', 'areas of interest'] },
   { key: 'size',        label: 'Min size',      mandatory: false, hint: 'm², e.g. 50', coerce: toCount, aliases: ['sqm', 'm2', 'surface', 'area sqm'] },
   { key: 'view',        label: 'View',          mandatory: false, hint: 'e.g. sea', coerce: toText, aliases: ['view type'] },
   { key: 'furnishing',  label: 'Furnishing',    mandatory: false, hint: 'furnished/unfurnished', coerce: coerceFurnishing, aliases: ['furnished', 'furniture'] },
   { key: 'floor',       label: 'Floor',         mandatory: false, hint: 'ground/mid/last', coerce: coerceFloor, aliases: ['level'] },
   { key: 'balcony',     label: 'Balcony',       mandatory: false, coerce: toYesNo, aliases: ['terrace'] },
-  { key: 'advancedPayment', label: 'Can pay advance', mandatory: false, coerce: toYesNo, aliases: ['payment method', 'advance', 'months ahead'] },
-  { key: 'notes',       label: 'Notes',         mandatory: false, coerce: toText, aliases: ['comment', 'comments', 'keep in mind', 'remarks'] },
+  { key: 'advancedPayment', label: 'Can pay advance', mandatory: false, coerce: toYesNo, aliases: ['payment method', 'advance', 'advance payment', 'advanced payment', 'months ahead', 'can pay advance'] },
+  { key: 'notes',       label: 'Notes',         mandatory: false, coerce: toText, aliases: ['comment', 'comments', 'comment keep in mind', 'keep in mind', 'remarks', 'note'] },
 ]
 
 // ── The all-at-once form ──────────────────────────────────────────────────────
@@ -202,7 +202,18 @@ export function renderForm(intro: string, steps: FlowStep[], context: FlowContex
   ].join('\n')
 }
 
-const clean = (s: string) => s.toLowerCase().replace(/\([^)]*\)/g, '').replace(/²/g, '').replace(/\s+/g, ' ').trim()
+// A label as the agent typed it: lower case, without the hint in parentheses,
+// and without the list marker the agency's own templates put in front of it
+// ("1- Name", "3) Areas", "• Budget", "*Notes*" — all just the label).
+const clean = (s: string) => s
+  .toLowerCase()
+  .replace(/\([^)]*\)/g, '')
+  .replace(/²/g, '')
+  .replace(/^[\s*_•·–—-]*\d+\s*[-.)\]:]?\s*/, '')   // leading "1-", "2.", "3)"
+  .replace(/^[\s*_•·–—-]+/, '')                      // leading bullet/emphasis
+  .replace(/[\s*_]+$/, '')
+  .replace(/\s+/g, ' ')
+  .trim()
 
 /** Find the step an agent's label refers to, by key, label, or a known alias. */
 function findStep(rawLabel: string, steps: FlowStep[]): FlowStep | null {
@@ -212,6 +223,41 @@ function findStep(rawLabel: string, steps: FlowStep[]): FlowStep | null {
     c === clean(s.key) || c === clean(s.label) || (s.aliases ?? []).some(a => clean(a) === c),
   ) ?? null
 }
+
+/**
+ * The client brief template agents are given to fill in. It is written the way
+ * the agency already writes briefs (numbered lines, required first) and every
+ * label maps to a step, so a filled-in copy is read exactly — no model call and
+ * nothing guessed. Required lines are the six the bot would otherwise have to
+ * ask for one at a time; the rest are only used when the agent fills them.
+ */
+export const CLIENT_TEMPLATE = [
+  '📋 New client — copy this, fill in what you know, send it back.',
+  '',
+  'Required',
+  '1- Name:',
+  '2- Phone:',
+  '3- Buying or renting:',
+  '4- Looking for:',
+  '5- Areas:',
+  '6- Budget (USD):',
+  '',
+  'Optional, fill only what applies',
+  '7- Bedrooms:',
+  '8- Bathrooms:',
+  '9- Size (m2):',
+  '10- Furnished:',
+  '11- View:',
+  '12- Floor:',
+  '13- Balcony:',
+  '14- Parking:',
+  '15- Advance payment:',
+  '16- Notes:',
+  '',
+  'Several areas is fine — "Zouk, Kaslik, Aintoura". So is a range — "400$ - 450$".',
+  'Anything else (schools nearby, "not close to the beach", who is moving in) goes in Notes.',
+  "I'll ask for anything required you left out, and show you the client before it's saved.",
+].join('\n')
 
 export interface FormResult {
   context: FlowContext
@@ -240,7 +286,50 @@ export function parseForm(text: string, steps: FlowStep[], base: FlowContext = {
     if (value === null) invalid.push(step.label)
     else out[step.key] = value
   }
+  deriveLocation(out)
   return { context: out, invalid }
+}
+
+/**
+ * Is this message a filled-in template rather than prose? True when at least
+ * three different labelled lines carry a value. Three is deliberate: "info on
+ * Ahmed: budget?" has one, so normal messages can't be mistaken for a form,
+ * while a half-deleted template still counts.
+ */
+export function looksLikeForm(text: string | null | undefined, steps: FlowStep[]): boolean {
+  const seen = new Set<string>()
+  for (const line of String(text ?? '').split('\n')) {
+    const idx = line.indexOf(':')
+    if (idx === -1) continue
+    const step = findStep(line.slice(0, idx), steps)
+    if (step && line.slice(idx + 1).trim()) seen.add(step.key)
+  }
+  return seen.size >= 3
+}
+
+// Fields only one of the two forms has. Both carry Bedrooms, Size and an area,
+// and a few labels are ambiguous on their own ("Price" reads as a client's
+// budget), so the decision is which form fits BETTER — not which one fits.
+const CLIENT_ONLY = ['name', 'phone', 'clientType', 'propertyType', 'locations', 'budget']
+const LISTING_ONLY = ['type', 'transaction', 'price', 'ownerName', 'ownerContact']
+
+/** Is this a filled-in copy of CLIENT_TEMPLATE (however much of it survived)? */
+export function isClientForm(text: string | null | undefined): boolean {
+  const s = String(text ?? '')
+  if (!looksLikeForm(s, CREATE_CLIENT_STEPS)) return false
+  const asClient = parseForm(s, CREATE_CLIENT_STEPS).context
+  const clientHits = CLIENT_ONLY.filter(k => asClient[k] !== undefined).length
+  if (clientHits < 2) return false
+  const asListing = parseForm(s, CREATE_PROPERTY_STEPS).context
+  return clientHits > LISTING_ONLY.filter(k => asListing[k] !== undefined).length
+}
+
+/** Does this message ask for the client template? */
+export function isTemplateRequest(text: string | null | undefined): boolean {
+  const s = String(text ?? '').trim()
+  if (!s || s.includes('\n')) return false
+  return /^(send (me )?(the )?)?(client |new client )?(template|form|format)\s*\??$/i.test(s)
+    || /^(send (me )?(the )?)?(template|form|format) (for|to add) (a )?(new )?client\s*\??$/i.test(s)
 }
 
 /** Mandatory fields still empty in the context. */
@@ -295,6 +384,19 @@ export function isStartClient(text: string | null | undefined): boolean {
 export const LISTING_INTRO = 'Adding a listing.'
 export const CLIENT_INTRO = 'Adding a client.'
 
+/**
+ * A client brief usually lists several areas ("Zouk - Kaslik - Aintoura").
+ * `location` is the mandatory single-line answer, so derive it from the list
+ * rather than asking "which area?" when we already know all of them. Mutates in
+ * place; every path that builds a client context runs it.
+ */
+function deriveLocation(ctx: FlowContext): FlowContext {
+  if (!ctx.location && Array.isArray(ctx.locations) && ctx.locations.length) {
+    ctx.location = (ctx.locations as string[]).join(', ')
+  }
+  return ctx
+}
+
 /** Map an opening message's extracted fields onto a form's steps. */
 export function seedForm(fields: Record<string, unknown> | undefined, steps: FlowStep[]): FlowContext {
   const out: FlowContext = {}
@@ -305,7 +407,7 @@ export function seedForm(fields: Record<string, unknown> | undefined, steps: Flo
     const value = step.coerce(v)
     if (value !== null) out[step.key] = value
   }
-  return out
+  return deriveLocation(out)
 }
 
 export type FlowContext = Record<string, unknown>
@@ -357,12 +459,7 @@ export function seedContext(fields: Record<string, unknown> | undefined, steps: 
     }
   }
 
-  // A client brief usually lists several areas ("Zouk - Kaslik - Aintoura").
-  // `location` is the mandatory single-line answer, so derive it from the list
-  // instead of asking "which area?" when we already know all of them.
-  if (!out.location && Array.isArray(out.locations) && out.locations.length) {
-    out.location = (out.locations as string[]).join(', ')
-  }
+  deriveLocation(out)
 
   if (Object.keys(extra).length) out[EXTRA_KEY] = extra
   return out

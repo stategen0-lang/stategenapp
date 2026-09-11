@@ -10,6 +10,7 @@ import {
   CREATE_PROPERTY_STEPS, CREATE_CLIENT_STEPS,
   seedContext, seedForm, missingMandatory, firstMissing, nextQuestion,
   derivedTitle, answersOf, extrasOf, EXTRA_KEY, isStartListing, isStartClient,
+  parseForm, looksLikeForm,
   type FlowStep, type FlowContext,
 } from '@/lib/whatsapp/flows'
 import { extractCreateFields } from '@/lib/whatsapp/flow-extract'
@@ -272,6 +273,22 @@ export function startCreateClientFlow(admin: SupabaseClient, profile: Profile, i
   return start(admin, profile, 'create_client', seedForm(intent.fields, CREATE_CLIENT_STEPS))
 }
 
+/**
+ * A filled-in copy of CLIENT_TEMPLATE. Every line is labelled, so this is read
+ * exactly — no model call, nothing inferred — and then runs through the same
+ * missing-field questions and confirm-before-write as every other path.
+ */
+export async function startClientFormFlow(
+  admin: SupabaseClient, profile: Profile, body: string,
+): Promise<BotReply> {
+  const { context, invalid } = parseForm(body, CREATE_CLIENT_STEPS)
+  const reply = await start(admin, profile, 'create_client', context)
+  if (!invalid.length || typeof reply !== 'string') return reply
+  // Say which lines didn't parse rather than silently dropping them: the agent
+  // filled them in, so they expect to see them.
+  return `I couldn't read ${invalid.join(' or ')} — send ${invalid.length > 1 ? 'those' : 'that'} again and I'll add ${invalid.length > 1 ? 'them' : 'it'}.\n\n${reply}`
+}
+
 // ── Continuing whichever flow is open ─────────────────────────────────────────
 
 // Requests that should pull the agent OUT of a half-finished create flow rather
@@ -349,13 +366,23 @@ export async function continueFlow(
   const askedKey = typeof prev.__asked === 'string' ? prev.__asked : undefined
   const askedStep = askedKey ? cfg.steps.find(s => s.key === askedKey) : undefined
 
-  const extracted = await extractCreateFields(flow, body, askedStep?.label)
-  let context = mergeExtracted(flow, prev, extracted)
-
+  let context: FlowContext
+  let unreadable: string[] = []
   const stillEmpty = (k: string) => context[k] === undefined || context[k] === null || context[k] === ''
-  if (askedStep && stillEmpty(askedStep.key)) {
-    const v = askedStep.coerce(body)
-    if (v !== null && v !== undefined) context = { ...context, [askedStep.key]: v }
+
+  if (looksLikeForm(body, cfg.steps)) {
+    // A filled-in template. Every line is labelled, so read it exactly rather
+    // than paying for a model call to re-derive what the labels already say.
+    const parsed = parseForm(body, cfg.steps, prev)
+    context = parsed.context
+    unreadable = parsed.invalid
+  } else {
+    const extracted = await extractCreateFields(flow, body, askedStep?.label)
+    context = mergeExtracted(flow, prev, extracted)
+    if (askedStep && stillEmpty(askedStep.key)) {
+      const v = askedStep.coerce(body)
+      if (v !== null && v !== undefined) context = { ...context, [askedStep.key]: v }
+    }
   }
 
   const beforeMissing = missingMandatory(prev, cfg.steps).length
@@ -363,7 +390,8 @@ export async function continueFlow(
 
   if (missing.length === 0) {
     delete context.__asked
-    return finishOrPickAgent(admin, profile, flow, context)
+    const done = await finishOrPickAgent(admin, profile, flow, context)
+    return unreadable.length ? `I couldn't read ${unreadable.join(' or ')}.\n\n${done}` : done
   }
 
   // Something is still missing — ask the next field. Acknowledge progress, or own
@@ -371,6 +399,8 @@ export async function continueFlow(
   const advanced = missing.length < beforeMissing || Boolean(askedStep && !stillEmpty(askedStep.key))
   context.__asked = missing[0].key
   await saveFlow(admin, profile, flow, context)
-  const ack = advanced ? 'Got it.' : "Sorry, I didn't catch that."
+  const ack = unreadable.length ? `Got it, but I couldn't read ${unreadable.join(' or ')}.`
+    : advanced ? 'Got it.'
+    : "Sorry, I didn't catch that."
   return nextQuestion(context, cfg.steps, ack)
 }

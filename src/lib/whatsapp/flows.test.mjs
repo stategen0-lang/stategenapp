@@ -10,6 +10,7 @@ import {
   seedContext, seedForm, derivedTitle, isStartListing, isStartClient,
   coerceType, extrasOf, answersOf, EXTRA_KEY,
   renderForm, parseForm, missingMandatory, firstMissing, nextQuestion,
+  CLIENT_TEMPLATE, looksLikeForm, isClientForm, isTemplateRequest,
 } from './flows.ts'
 
 // ── conversational prompts ────────────────────────────────────────────────
@@ -292,4 +293,118 @@ test('isStartListing / isStartClient recognise their own commands', () => {
 test('derivedTitle: readable listing title', () => {
   assert.equal(derivedTitle(fullProp), 'Appartement in Hamra')
   assert.equal(derivedTitle({ ...fullProp, beds: 3 }), '3 bed Appartement in Hamra')
+})
+
+// ── The client brief template agents are given ───────────────────────────────
+// This is the copy-paste form the agency hands to its agents, so a filled-in
+// copy must be read exactly — no model call is involved on this path.
+
+test('CLIENT_TEMPLATE: a blank copy parses to nothing (no hint read as a value)', () => {
+  const { context, invalid } = parseClient(CLIENT_TEMPLATE)
+  assert.deepEqual(context, {})
+  assert.deepEqual(invalid, [])
+  assert.equal(looksLikeForm(CLIENT_TEMPLATE, CREATE_CLIENT_STEPS), false)
+})
+
+test('CLIENT_TEMPLATE: every line maps to a field when filled in', () => {
+  const filled = [
+    '📋 New client — copy this, fill in what you know, send it back.',
+    '1- Name: Dana Tohme',
+    '2- Phone: 03 111 222',
+    '3- Buying or renting: renting',
+    '4- Looking for: apartment',
+    '5- Areas: Zouk, Kaslik, Aintoura',
+    '6- Budget (USD): 400$ - 450$',
+    '7- Bedrooms: 2',
+    '8- Bathrooms: 2',
+    '9- Size (m2): at least 50',
+    '10- Furnished: unfurnished',
+    '11- View: sea',
+    '12- Floor: mid',
+    '13- Balcony: yes',
+    '14- Parking: 1',
+    '15- Advance payment: yes',
+    '16- Notes: not close to the beach',
+  ].join('\n')
+  const { context, invalid } = parseClient(filled)
+  assert.deepEqual(invalid, [])
+  assert.equal(context.name, 'Dana Tohme')
+  assert.equal(context.phone, '03 111 222')
+  assert.equal(context.clientType, 'Renter')
+  assert.equal(context.propertyType, 'Appartement')
+  assert.deepEqual(context.locations, ['Zouk', 'Kaslik', 'Aintoura'])
+  assert.equal(context.location, 'Zouk, Kaslik, Aintoura')   // derived, never asked
+  assert.equal(context.budget, 450)                          // range → the top end
+  assert.equal(context.beds, 2)
+  assert.equal(context.baths, 2)
+  assert.equal(context.size, 50)
+  assert.equal(context.furnishing, 'Unfurnished')
+  assert.equal(context.view, 'sea')
+  assert.equal(context.floor, 'Mid floor')
+  assert.equal(context.balcony, true)
+  assert.equal(context.parkings, 1)
+  assert.equal(context.advancedPayment, true)
+  assert.equal(context.notes, 'not close to the beach')
+  assert.deepEqual(missingClient(context), [])               // nothing left to ask
+})
+
+test('CLIENT_TEMPLATE: a half-filled copy keeps what is there and asks for the rest', () => {
+  const { context } = parseClient([
+    '1- Name: Pascale Bou Chaaya',
+    '2- Phone: +961 76 099 942',
+    '3- Buying or renting: rent',
+    '4- Looking for: store',
+    '5- Areas: Zouk Mikael',
+    '6- Budget (USD):',
+    '9- Size (m2): 50',
+  ].join('\n'))
+  assert.equal(context.propertyType, 'Shop')                 // "store" → Shop
+  assert.equal(context.size, 50)
+  assert.deepEqual(missingClient(context).map(s => s.key), ['budget'])
+})
+
+test('parseForm (client): the agency\'s own numbered brief still reads', () => {
+  // Sent verbatim by the company before this template existed.
+  const { context } = parseClient([
+    '1-Name of client : woman',
+    '2-Request sale or rent : rent',
+    '3-Areas interests: Batroun',
+    '4-Budget range: 1250',
+    '5-Comment keep in mind : not close to the beach',
+  ].join('\n'))
+  assert.equal(context.name, 'woman')
+  assert.equal(context.clientType, 'Renter')
+  assert.deepEqual(context.locations, ['Batroun'])
+  assert.equal(context.budget, 1250)
+  assert.equal(context.notes, 'not close to the beach')
+})
+
+test('isClientForm: a filled client form, not prose and not a listing form', () => {
+  assert.equal(isClientForm('1- Name: Dana\n2- Phone: 03111222\n3- Buying or renting: rent'), true)
+  assert.equal(isClientForm('info on Ahmed: what is his budget?'), false)
+  assert.equal(isClientForm('spoke to Dana: she wants Zouk'), false)
+  assert.equal(isClientForm(''), false)
+  assert.equal(isClientForm(null), false)
+  // A filled LISTING form shares Bedrooms/Size/Area, so it must not be claimed.
+  assert.equal(isClientForm([
+    'Type: villa', 'Sale or rent: sale', 'Area: Achrafieh',
+    'Price: 450k', 'Bedrooms: 3', 'Owner name: Joe', 'Owner phone: 03 111222',
+  ].join('\n')), false)
+})
+
+test('isTemplateRequest: asks for the form, and only that', () => {
+  for (const s of ['template', 'Template', 'form', 'client template', 'send me the template', 'template for a new client']) {
+    assert.equal(isTemplateRequest(s), true, `should ask for the template: ${s}`)
+  }
+  for (const s of ['add a client', 'what template did you send', '', 'Name: Dana\nPhone: 03111222']) {
+    assert.equal(isTemplateRequest(s), false, `should not: ${s}`)
+  }
+})
+
+test('seedForm (client): derives the single area from a multi-area brief', () => {
+  // The client flow seeds through seedForm, not seedContext — the derivation has
+  // to live on this path too or the bot re-asks "which area?" for every brief.
+  const ctx = seedForm({ locations: ['Zouk', 'Kaslik'], name: 'Dana' }, CREATE_CLIENT_STEPS)
+  assert.deepEqual(ctx.locations, ['Zouk', 'Kaslik'])
+  assert.equal(ctx.location, 'Zouk, Kaslik')
 })

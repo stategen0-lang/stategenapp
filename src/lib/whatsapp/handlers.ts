@@ -24,6 +24,7 @@ export const HELP_TEXT = [
   '• "what\'s in negotiation" — see your pipeline',
   '• "add a listing" — just describe it, I\'ll ask for anything missing',
   '• "add a client" — new buyer/renter, described in your own words',
+  '• "template" — the fill-in-the-blanks client form, if you prefer that',
   '• "send me the link for #23" — a shareable listing link',
   '• "write a description for #23" — an AI listing description',
   '• "spoke to Ahmed, viewing Saturday" — log a call',

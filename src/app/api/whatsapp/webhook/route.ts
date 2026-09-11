@@ -9,9 +9,9 @@ import {
   stageClientUpdate, stagePropertyUpdate, stageFeedback, stageDescribeProperty,
   applyPendingAction, handleReminderReply,
 } from '@/lib/whatsapp/write-handlers'
-import { startCreatePropertyFlow, startCreateClientFlow, continueFlow, handleFlowSubmission } from '@/lib/whatsapp/flow-handlers'
+import { startCreatePropertyFlow, startCreateClientFlow, startClientFormFlow, continueFlow, handleFlowSubmission } from '@/lib/whatsapp/flow-handlers'
 import { stageDealMove, handleQueryPipeline } from '@/lib/whatsapp/pipeline-handlers'
-import { isStartListing, isStartClient } from '@/lib/whatsapp/flows'
+import { isStartListing, isStartClient, isClientForm, isTemplateRequest, CLIENT_TEMPLATE } from '@/lib/whatsapp/flows'
 import { parseConnect, isStopMessage, normalizeCode, pairingExpired } from '@/lib/whatsapp/pairing'
 import { handleAgentActivity, handleOverdueReminders, handleActivityFeed } from '@/lib/whatsapp/manager-handlers'
 import { stageLogOffer, stageResolveOffer, handleQueryOffers, continueOfferPick } from '@/lib/whatsapp/offer-handlers'
@@ -111,6 +111,14 @@ async function route(
   // booking rather than being read as a brand-new message.
   const eventAnswer = await continueEventFlow(admin, profile, body)
   if (eventAnswer !== null) return { intent: 'create_event', answer: eventAnswer }
+
+  // The client brief template: handing it out, and reading a filled-in one back.
+  // Both are answered here rather than by the model — the labels say exactly
+  // what each value is, so classifying it would only add latency and risk.
+  if (isTemplateRequest(body)) return { intent: 'create_client', answer: CLIENT_TEMPLATE }
+  if (isClientForm(body)) {
+    return { intent: 'create_client', answer: await startClientFormFlow(admin, profile, body) }
+  }
 
   // "done" / "snooze 3d" / "not interested" only mean what they appear to while
   // a reminder is outstanding; otherwise this returns null and the message
