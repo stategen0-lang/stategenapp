@@ -384,6 +384,29 @@ export function isStartClient(text: string | null | undefined): boolean {
 export const LISTING_INTRO = 'Adding a listing.'
 export const CLIENT_INTRO = 'Adding a client.'
 
+// "Areas interests: 5mins up from batroun 2 br" — the agency's older one-line
+// briefs put the bedroom count inside the areas line. Left there it becomes part
+// of the string the matcher compares against every listing's district, so lift
+// it out into the field it belongs to.
+const BEDS_IN_AREA = /\s*\b(\d+)\s*(?:br|beds?|bedrooms?)\b\s*/i
+
+function liftBedsFromAreas(ctx: FlowContext): void {
+  if (!Array.isArray(ctx.locations)) return
+  let beds: number | null = null
+  const cleaned = (ctx.locations as string[])
+    .map(a => {
+      const m = String(a).match(BEDS_IN_AREA)
+      if (!m) return String(a)
+      if (beds === null) beds = Number(m[1])
+      return String(a).replace(BEDS_IN_AREA, ' ').trim()
+    })
+    .filter(Boolean)
+  if (beds === null) return
+  if (ctx.beds === undefined) ctx.beds = beds
+  if (cleaned.length) ctx.locations = cleaned
+  else delete ctx.locations
+}
+
 /**
  * A client brief usually lists several areas ("Zouk - Kaslik - Aintoura").
  * `location` is the mandatory single-line answer, so derive it from the list
@@ -391,6 +414,7 @@ export const CLIENT_INTRO = 'Adding a client.'
  * place; every path that builds a client context runs it.
  */
 function deriveLocation(ctx: FlowContext): FlowContext {
+  liftBedsFromAreas(ctx)
   if (!ctx.location && Array.isArray(ctx.locations) && ctx.locations.length) {
     ctx.location = (ctx.locations as string[]).join(', ')
   }

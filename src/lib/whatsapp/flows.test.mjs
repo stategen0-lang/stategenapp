@@ -408,3 +408,24 @@ test('seedForm (client): derives the single area from a multi-area brief', () =>
   assert.deepEqual(ctx.locations, ['Zouk', 'Kaslik'])
   assert.equal(ctx.location, 'Zouk, Kaslik')
 })
+
+test('client areas: a bedroom count crammed into the areas line moves to Bedrooms', () => {
+  // Verbatim from the agency's own brief. "5mins up from batroun 2 br" as an
+  // area would be compared against every listing's district as one string.
+  const { context } = parseClient('3-Areas interests: 5mins up from batroun 2 br')
+  assert.deepEqual(context.locations, ['5mins up from batroun'])
+  assert.equal(context.beds, 2)
+  assert.equal(context.location, '5mins up from batroun')
+})
+
+test('client areas: a bedroom count is not invented from a place name', () => {
+  const { context } = parseClient('5- Areas: Zouk, Kaslik')
+  assert.deepEqual(context.locations, ['Zouk', 'Kaslik'])
+  assert.equal(context.beds, undefined)
+})
+
+test('client areas: an explicit Bedrooms line wins over the one in the areas', () => {
+  const { context } = parseClient('5- Areas: Batroun 2 br\n7- Bedrooms: 3')
+  assert.equal(context.beds, 3)
+  assert.deepEqual(context.locations, ['Batroun'])
+})
