@@ -7,6 +7,7 @@ import { makeShareToken, shareSecret, publicListing } from '@/lib/share'
 import { parseRecipients, renderMarketingEmail } from '@/lib/marketing-email'
 import { mergeExtras } from '@/lib/whatsapp/writes'
 import { sendMail, mailConfigured } from '@/lib/mailer'
+import { isStoredPhoto } from '@/lib/upload'
 
 // "Send to marketing": email a listing to the company's marketing team so they
 // can post it on OLX / Instagram / Facebook.
@@ -17,6 +18,47 @@ import { sendMail, mailConfigured } from '@/lib/mailer'
 
 // A double-click or a popup + button in quick succession shouldn't email twice.
 const DOUBLE_SEND_GUARD_MS = 60_000
+
+// Gmail rejects a message over 25 MB, and attachments grow by a third when
+// encoded, so ~15 MB of photos is the safe ceiling. Photos past it are still in
+// the email, shown from their link instead of attached.
+const ATTACH_BUDGET_BYTES = 15 * 1024 * 1024
+const EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' }
+
+/**
+ * Download a listing's photos to attach them. Only from our own Supabase storage:
+ * Photos can hold any URL the edit form sent, and the server must not be made to
+ * fetch arbitrary addresses. Each photo is fetched in order and attached while it
+ * fits the budget; any failure just leaves that photo as a link.
+ */
+async function attachPhotos(photos: string[], listingId: number) {
+  const attachments: { filename: string; content: Buffer; contentType: string; cid: string }[] = []
+  const attachedCids: Record<number, string> = {}
+  let storageOrigin = ''
+  try { storageOrigin = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').origin } catch { return { attachments, attachedCids } }
+
+  const fetched = await Promise.all(photos.map(async (src, i) => {
+    try {
+      const u = new URL(src)
+      if (u.origin !== storageOrigin || !isStoredPhoto(src)) return null
+      const res = await fetch(u, { signal: AbortSignal.timeout(10_000) })
+      if (!res.ok) return null
+      const contentType = (res.headers.get('content-type') ?? '').split(';')[0].trim()
+      if (!EXT[contentType]) return null
+      return { i, contentType, content: Buffer.from(await res.arrayBuffer()) }
+    } catch { return null }
+  }))
+
+  let used = 0
+  for (const f of fetched) {
+    if (!f || used + f.content.length > ATTACH_BUDGET_BYTES) continue
+    used += f.content.length
+    const cid = `listing${listingId}-photo${f.i + 1}@stategen`
+    attachments.push({ filename: `listing-${listingId}-photo-${f.i + 1}.${EXT[f.contentType]}`, content: f.content, contentType: f.contentType, cid })
+    attachedCids[f.i] = cid
+  }
+  return { attachments, attachedCids }
+}
 
 function origin(req: NextRequest): string {
   const proto = req.headers.get('x-forwarded-proto') ?? 'https'
@@ -68,8 +110,12 @@ export async function POST(req: NextRequest) {
     .eq('company_id', session.companyId).eq('agent_code', p.agentId).maybeSingle()
   const a = (agent ?? {}) as Record<string, unknown>
 
+  const listing = publicListing(p, p.aiDescription?.trim() ?? '')
+  const { attachments, attachedCids } = await attachPhotos(listing.photos, id)
+
   const email = renderMarketingEmail({
-    listing: publicListing(p, p.aiDescription?.trim() ?? ''),
+    listing,
+    attachedCids,
     listingId: id,
     shareUrl: `${origin(req)}/l/${makeShareToken(id, shareSecret())}`,
     agentName: (a.Full_name as string) || session.fullName,
@@ -95,6 +141,7 @@ export async function POST(req: NextRequest) {
     text: email.text,
     fromName: companyName ? `${companyName} via StateGen` : 'StateGen',
     replyTo: ownerEmail,
+    attachments,
   })
   if (!sent.ok) {
     console.error('[marketing] send failed', sent.error)

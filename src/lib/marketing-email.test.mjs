@@ -83,3 +83,28 @@ test('parseRecipients: names the bad address, caps the count', () => {
   const many = Array.from({ length: MAX_MARKETING_RECIPIENTS + 1 }, (_, i) => `m${i}@x.com`).join(',')
   assert.equal(parseRecipients(many).ok, false)
 })
+
+test('marketing email: description first, then photos, then the listing card', () => {
+  const { html, text } = email()
+  const d = html.indexOf('Bright 3-bedroom'), ph = html.indexOf(property.photos[0]), card = html.indexOf('Listing #45')
+  assert.ok(d > -1 && ph > -1 && card > -1)
+  assert.ok(d < ph && ph < card, `html order wrong: description ${d}, photos ${ph}, card ${card}`)
+  assert.ok(text.indexOf('Bright 3-bedroom') < text.indexOf('Photos:'))
+  assert.ok(text.indexOf('Photos:') < text.indexOf('Listing #45'))
+  assert.ok(text.startsWith('Bright 3-bedroom'))
+})
+
+test('marketing email: an attached photo is shown from its attachment', () => {
+  const { html, text } = email({ attachedCids: { 0: 'listing45-photo1@stategen' } })
+  assert.ok(html.includes('src="cid:listing45-photo1@stategen"'))
+  assert.match(text, /Photos: 1 \(1 attached\)/)
+  // Attached photos aren't repeated as bare links in the plain-text version.
+  assert.equal(text.includes(property.photos[0]), false)
+})
+
+test('marketing email: no written description still opens with one', () => {
+  const { text } = renderMarketingEmail({
+    listing: publicListing(property, ''), listingId: 45, shareUrl: 'https://s/l/t', agentName: 'A',
+  })
+  assert.match(text, /^180 m² appartement in Kaslik, Jounieh with 3 bedrooms and 2 bathrooms, for sale at \$450,000\./)
+})

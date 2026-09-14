@@ -23,6 +23,8 @@ export interface MailInput {
   /** Display name shown in the inbox, e.g. "Haddad Realty via StateGen". */
   fromName?: string
   replyTo?: string
+  /** Files to attach. A cid makes it usable inline as <img src="cid:…">. */
+  attachments?: { filename: string; content: Buffer; contentType?: string; cid?: string }[]
 }
 
 export type MailResult = { ok: true } | { ok: false; error: string; notConfigured?: boolean }
@@ -67,6 +69,7 @@ export async function sendMail(input: MailInput): Promise<MailResult> {
       text: input.text,
       html: input.html,
       replyTo: input.replyTo,
+      attachments: input.attachments,
     })
     return { ok: true }
   } catch (e) {

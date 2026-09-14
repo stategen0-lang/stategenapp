@@ -1,9 +1,10 @@
 // "Send to marketing": the email a listing becomes when an agent hands it to the
 // marketing team to post on OLX, Instagram, Facebook and the like.
 //
-// PLACEHOLDER LAYOUT. The agency is designing its own template; when it arrives,
-// replace renderMarketingEmail below. Everything around it — who may send, where
-// it goes, what data is safe to include — stays as it is.
+// Layout, top to bottom — the order the marketing team works in:
+//   1. the description, ready to paste into a post
+//   2. the photos, full width (attached to the email, so they can be saved)
+//   3. the listing card: title, price, facts, contact and the listing page link
 //
 // Only public-safe fields reach this module (see publicListing in share.ts): the
 // email leaves the company, so the owner's name and number, internal notes and
@@ -43,6 +44,13 @@ export interface MarketingEmailInput {
   agentPhone?: string | null
   companyName?: string | null
   brandColor?: string | null
+  /**
+   * Photos attached to the email, keyed by position in listing.photos, with the
+   * Content-ID each is attached under. An attached photo is shown from the
+   * attachment (cid:) so the team can save it straight from the email; photos
+   * that didn't fit the size limit are shown from their URL instead.
+   */
+  attachedCids?: Record<number, string>
 }
 
 export interface MarketingEmail { subject: string; html: string; text: string }
@@ -79,63 +87,96 @@ export function detailRows(l: PublicListing): [string, string][] {
   return rows.filter((r): r is [string, string] => typeof r[1] === 'string' && r[1].trim() !== '')
 }
 
+/**
+ * A plain description for a listing that has none written, so the email always
+ * opens with text the team can paste into a post.
+ */
+export function fallbackDescription(l: PublicListing): string {
+  const beds = l.beds > 0
+    ? ` with ${l.beds} bedroom${l.beds > 1 ? 's' : ''}${l.baths > 0 ? ` and ${l.baths} bathroom${l.baths > 1 ? 's' : ''}` : ''}`
+    : ''
+  const extras = [l.garden && 'a private garden', l.balcony && 'a balcony', l.terrace && 'a terrace', l.view && `${l.view.toLowerCase()} views`]
+    .filter(Boolean).join(', ')
+  const where = place(l)
+  const sentence = `${l.size > 0 ? `${l.size} m² ` : ''}${l.type.toLowerCase()}${where ? ` in ${where}` : ''}${beds}, ${l.transaction.toLowerCase()} at ${priceLine(l)}.${extras ? ` Featuring ${extras}.` : ''}`
+  return sentence.charAt(0).toUpperCase() + sentence.slice(1)
+}
+
 export function renderMarketingEmail(input: MarketingEmailInput): MarketingEmail {
   const { listing: l, listingId, shareUrl, agentName, agentPhone, companyName } = input
   const accent = /^#[0-9a-f]{6}$/i.test(input.brandColor ?? '') ? input.brandColor! : '#14223F'
+  const cids = input.attachedCids ?? {}
   const where = place(l)
   const subject = `New listing #${listingId} to post: ${l.title}${where ? ` — ${where}` : ''}`
   const rows = detailRows(l)
   const contact = [agentName, agentPhone].filter(Boolean).join(' · ')
+  const description = l.description.trim() || fallbackDescription(l)
+  const attachedCount = l.photos.filter((_, i) => cids[i]).length
+  const linkedPhotos = l.photos.filter((_, i) => !cids[i])
 
   const text = [
-    `New listing to post${companyName ? ` for ${companyName}` : ''}`,
+    description,
     '',
+    l.photos.length
+      ? `Photos: ${l.photos.length}${attachedCount ? ` (${attachedCount} attached)` : ''}`
+      : 'No photos yet.',
+    ...linkedPhotos,
+    '',
+    '------------------------------',
+    `Listing #${listingId}${companyName ? ` · ${companyName}` : ''}`,
     l.title,
     ...rows.map(([k, v]) => `${k}: ${v}`),
-    '',
-    l.description,
+    ...(l.video ? [`Video: ${l.video}`] : []),
     '',
     `Contact for enquiries: ${contact}`,
     `Listing page: ${shareUrl}`,
-    '',
-    l.photos.length ? `Photos (${l.photos.length}):` : 'No photos yet.',
-    ...l.photos,
-    l.video ? `\nVideo: ${l.video}` : '',
   ].join('\n')
 
-  const photoGrid = l.photos.map((src, i) => `
-    <a href="${esc(src)}" style="display:inline-block;margin:0 6px 6px 0;text-decoration:none">
-      <img src="${esc(src)}" alt="Photo ${i + 1}" width="170" style="display:block;width:170px;height:120px;object-fit:cover;border-radius:8px;border:1px solid #EEF0F4">
-    </a>`).join('')
+  const photoBlocks = l.photos.map((src, i) => {
+    const shown = cids[i] ? `cid:${cids[i]}` : src
+    return `
+      <a href="${esc(src)}" style="display:block;margin:0 0 10px;text-decoration:none">
+        <img src="${esc(shown)}" alt="Photo ${i + 1}" width="620" style="display:block;width:100%;max-width:620px;height:auto;border-radius:10px;border:1px solid #EEF0F4">
+      </a>`
+  }).join('')
 
   const html = `<!doctype html>
 <html><body style="margin:0;padding:24px;background:#F7F8FB;font-family:Arial,Helvetica,sans-serif;color:#14223F">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #EEF0F4">
-    <tr><td style="background:${accent};padding:16px 22px;color:#ffffff;font-size:13px;font-weight:bold">
-      New listing to post${companyName ? ` · ${esc(companyName)}` : ''}
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;margin:0 auto">
+
+    <!-- 1. Description -->
+    <tr><td style="background:#ffffff;border:1px solid #EEF0F4;border-radius:14px;padding:22px">
+      <p style="margin:0;font-size:15px;line-height:1.65;white-space:pre-line">${esc(description)}</p>
     </td></tr>
-    <tr><td style="padding:22px">
-      <div style="font-size:12px;color:#6A7488">Listing #${listingId}</div>
-      <h1 style="margin:4px 0 2px;font-size:22px">${esc(l.title)}</h1>
-      <div style="font-size:14px;color:#6A7488">${esc(where)}</div>
-      <div style="margin:12px 0 18px;font-size:20px;font-weight:bold">${esc(priceLine(l))}</div>
 
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;border-top:1px solid #EEF0F4">
-        ${rows.map(([k, v]) => `<tr>
-          <td style="padding:8px 0;color:#6A7488;width:130px;border-bottom:1px solid #EEF0F4">${esc(k)}</td>
-          <td style="padding:8px 0;border-bottom:1px solid #EEF0F4">${esc(v)}</td></tr>`).join('')}
-      </table>
+    <!-- 2. Photos -->
+    <tr><td style="padding:14px 0 4px">
+      ${l.photos.length ? photoBlocks : '<p style="margin:0 0 10px;font-size:13px;color:#6A7488">No photos yet.</p>'}
+    </td></tr>
 
-      ${l.description ? `<p style="font-size:14px;line-height:1.6;white-space:pre-line;margin:18px 0">${esc(l.description)}</p>` : ''}
-
-      <div style="margin:18px 0 8px;font-size:13px;font-weight:bold">${l.photos.length ? `Photos (${l.photos.length}) — click to open full size` : 'No photos yet'}</div>
-      <div>${photoGrid}</div>
-      ${l.video ? `<p style="font-size:14px"><a href="${esc(l.video)}" style="color:${accent}">Watch the video</a></p>` : ''}
-
-      <div style="margin-top:18px;padding:14px;border-radius:10px;background:#F7F8FB;font-size:14px">
-        <strong>Contact for enquiries:</strong> ${esc(contact)}
+    <!-- 3. Listing card -->
+    <tr><td style="background:#ffffff;border:1px solid #EEF0F4;border-radius:14px;padding:0">
+      <div style="background:${accent};padding:14px 22px;color:#ffffff;font-size:13px;font-weight:bold;border-radius:14px 14px 0 0">
+        Listing #${listingId}${companyName ? ` · ${esc(companyName)}` : ''}
       </div>
-      <p style="margin:18px 0 0"><a href="${esc(shareUrl)}" style="display:inline-block;background:${accent};color:#ffffff;text-decoration:none;font-weight:bold;padding:10px 16px;border-radius:8px;font-size:14px">Open listing page</a></p>
+      <div style="padding:22px">
+        <h1 style="margin:0 0 2px;font-size:22px">${esc(l.title)}</h1>
+        <div style="font-size:14px;color:#6A7488">${esc(where)}</div>
+        <div style="margin:12px 0 18px;font-size:20px;font-weight:bold">${esc(priceLine(l))}</div>
+
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;border-top:1px solid #EEF0F4">
+          ${rows.map(([k, v]) => `<tr>
+            <td style="padding:8px 0;color:#6A7488;width:130px;border-bottom:1px solid #EEF0F4">${esc(k)}</td>
+            <td style="padding:8px 0;border-bottom:1px solid #EEF0F4">${esc(v)}</td></tr>`).join('')}
+        </table>
+
+        ${l.video ? `<p style="font-size:14px;margin:16px 0 0"><a href="${esc(l.video)}" style="color:${accent}">Watch the video</a></p>` : ''}
+
+        <div style="margin-top:18px;padding:14px;border-radius:10px;background:#F7F8FB;font-size:14px">
+          <strong>Contact for enquiries:</strong> ${esc(contact)}
+        </div>
+        <p style="margin:18px 0 0"><a href="${esc(shareUrl)}" style="display:inline-block;background:${accent};color:#ffffff;text-decoration:none;font-weight:bold;padding:10px 16px;border-radius:8px;font-size:14px">Open listing page</a></p>
+      </div>
     </td></tr>
   </table>
   <p style="text-align:center;font-size:11px;color:#9AA3B2;margin-top:14px">Sent from StateGen</p>
