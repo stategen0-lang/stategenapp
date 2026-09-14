@@ -548,6 +548,7 @@ export default function DashboardPage() {
           initial={editProp}
           onClose={() => setEditProp(null)}
           onSaved={p => { upsertProp(p); setEditProp(null); showToast('Changes saved!') }}
+          onDeleted={id => { setProps(prev => prev.filter(x => x.id !== id)); setEditProp(null); showToast('Listing deleted') }}
         />
       )}
       {newClientOpen && (
@@ -561,6 +562,7 @@ export default function DashboardPage() {
           initial={editClient}
           onClose={() => setEditClient(null)}
           onSaved={c => { upsertClient(c); setEditClient(null); showToast('Changes saved!') }}
+          onDeleted={id => { setClients(prev => prev.filter(x => x.id !== id)); setEditClient(null); showToast('Client deleted') }}
         />
       )}
     </div>

@@ -69,6 +69,14 @@ export default function PropertiesPage() {
     if (r.ok) { const d = await r.json(); if (d.properties) { const m = d.properties.map(dbRowToProperty); PROPS_CACHE = m; setList(m) } }
   }
 
+  function remove(id: number) {
+    setList(prev => {
+      const next = prev.filter(x => x.id !== id)
+      PROPS_CACHE = next
+      return next
+    })
+  }
+
   function upsert(p: Property) {
     setList(prev => {
       const next = prev.some(x => x.id === p.id) ? prev.map(x => x.id === p.id ? p : x) : [p, ...prev]
@@ -230,6 +238,11 @@ export default function PropertiesPage() {
             upsert(p)
             setEditProp(null)
             showToast('Changes saved!')
+          }}
+          onDeleted={id => {
+            remove(id)
+            setEditProp(null)
+            showToast('Listing deleted')
           }}
         />
       )}

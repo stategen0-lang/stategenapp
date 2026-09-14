@@ -8,17 +8,20 @@ import { useLockBodyScroll } from '@/hooks/use-lock-body-scroll'
 import { DescriptionTemplate, loadTemplates } from '@/lib/templates'
 import { createClient as createSupabaseBrowser } from '@/lib/supabase/client'
 import { VIDEO_BUCKET, MAX_VIDEO_BYTES } from '@/lib/upload'
+import DeleteRecord from './DeleteRecord'
 
 
 interface Props {
   onClose: () => void
   onSaved: (p: Property) => void
+  /** Editing only: when set, the form offers "Delete listing". */
+  onDeleted?: (id: number) => void
   initial?: Property
 }
 
 let _nextId = 100
 
-export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
+export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial }: Props) {
   useLockBodyScroll()
   const editing = !!initial
   const { session } = useSession()
@@ -786,6 +789,15 @@ export default function NewPropertyModal({ onClose, onSaved, initial }: Props) {
             </div>
           )}
           {saveError && <p className="text-xs mb-2" style={{ color: '#A23434' }}>{saveError}</p>}
+          {initial && onDeleted && (
+            <DeleteRecord
+              noun="listing"
+              name={initial.title}
+              consequence="Its match alerts are removed too; any deal or calendar event linked to it stays, without the listing."
+              endpoint={`/api/properties?id=${initial.id}`}
+              onDeleted={() => onDeleted(initial.id)}
+            />
+          )}
           <div className="flex gap-3">
             <button onClick={onClose} className="flex-1 rounded-xl py-2 text-sm font-semibold" style={{ border: '1.5px solid #EEF0F4', color: '#6A7488' }}>
               Cancel

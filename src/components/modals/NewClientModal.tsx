@@ -11,10 +11,13 @@ import { dbRowToProperty } from '@/lib/db-mappers'
 import { useSession } from '@/hooks/use-session'
 import { useLockBodyScroll } from '@/hooks/use-lock-body-scroll'
 import { isManager } from '@/lib/permissions'
+import DeleteRecord from './DeleteRecord'
 
 interface Props {
   onClose: () => void
   onSaved: (c: Client) => void
+  /** Editing only: when set, the form offers "Delete client". */
+  onDeleted?: (id: number) => void
   matchThreshold?: number
   initial?: Client
 }
@@ -27,7 +30,7 @@ const emptyReq = (): ClientReq => ({
   view: '', furnishing: '', floor: '', notes: '',
 })
 
-export default function NewClientModal({ onClose, onSaved, matchThreshold = MATCH_THRESHOLD, initial }: Props) {
+export default function NewClientModal({ onClose, onSaved, onDeleted, matchThreshold = MATCH_THRESHOLD, initial }: Props) {
   useLockBodyScroll()
   const editing = !!initial
   const { session } = useSession()
@@ -388,7 +391,18 @@ export default function NewClientModal({ onClose, onSaved, matchThreshold = MATC
             </div>
 
             {saveError && <p className="px-5 pt-3 text-xs" style={{ color: '#A23434' }}>{saveError}</p>}
-            <div className="px-5 py-4 flex gap-3" style={{ borderTop: '1px solid #EEF0F4' }}>
+            {initial && onDeleted && (
+              <div className="px-5 pt-4" style={{ borderTop: '1px solid #EEF0F4' }}>
+                <DeleteRecord
+                  noun="client"
+                  name={initial.name}
+                  consequence="Their deal, offers, follow-up reminders and match alerts are removed too; calendar events stay, without the client."
+                  endpoint={`/api/clients?id=${initial.id}`}
+                  onDeleted={() => onDeleted(initial.id)}
+                />
+              </div>
+            )}
+            <div className="px-5 py-4 flex gap-3" style={initial && onDeleted ? undefined : { borderTop: '1px solid #EEF0F4' }}>
               <button onClick={onClose} className="flex-1 rounded-xl py-2 text-sm font-semibold" style={{ border: '1.5px solid #EEF0F4', color: '#6A7488' }}>
                 Cancel
               </button>

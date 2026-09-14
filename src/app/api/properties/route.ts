@@ -5,6 +5,7 @@ import { getSession } from '@/lib/session'
 import { canEditProperty, isManager, owns, type Session } from '@/lib/permissions'
 import { createListingAlerts } from '@/lib/alerts-server'
 import { ensureManagerAgentCode } from '@/lib/ensure-manager-code'
+import { DOC_BUCKET } from '@/lib/upload'
 
 // The listing agent's code lives in the property's Amenities JSON.
 function propertyAgent(row: Record<string, unknown>): string | null {
@@ -209,4 +210,38 @@ export async function PATCH(req: NextRequest) {
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
+}
+
+// Delete a listing. Same rule as editing: its own agent or a manager. The
+// database cleans up what hangs off it (match alerts cascade; deals and calendar
+// events keep their row but lose the listing link).
+export async function DELETE(req: NextRequest) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const id = Number(req.nextUrl.searchParams.get('id'))
+  if (!Number.isInteger(id) || id <= 0) return NextResponse.json({ error: 'A valid listing id is required.' }, { status: 400 })
+
+  const admin = createAdminClient()
+  const { data: existing } = await admin
+    .from('Properties').select('id,Amenities').eq('id', id).eq('company_id', session.companyId).maybeSingle()
+  if (!existing) return NextResponse.json({ error: 'Listing not found.' }, { status: 404 })
+  if (!canEditProperty(session, propertyAgent(existing))) {
+    return NextResponse.json({ error: 'Only the listing\'s agent or a manager can delete it.' }, { status: 403 })
+  }
+
+  const { error } = await admin.from('Properties').delete().eq('id', id).eq('company_id', session.companyId)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // The private document (e.g. an owner's deed) must not outlive the listing in
+  // storage. Best-effort, after the response.
+  let docPath: string | null = null
+  try { docPath = (JSON.parse((existing.Amenities as string) || '{}').documentPath as string) ?? null } catch { docPath = null }
+  if (docPath && docPath.startsWith(`company-${session.companyId}/`)) {
+    after(async () => {
+      try { await admin.storage.from(DOC_BUCKET).remove([docPath!]) } catch { /* best-effort */ }
+    })
+  }
+
+  return NextResponse.json({ ok: true, id })
 }

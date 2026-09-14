@@ -65,6 +65,14 @@ export default function ClientsPage() {
     if (r.ok) { const d = await r.json(); if (d.clients) { const m = d.clients.map(dbRowToClient); CLIENTS_CACHE = m; setList(m) } }
   }
 
+  function remove(id: number) {
+    setList(prev => {
+      const next = prev.filter(x => x.id !== id)
+      CLIENTS_CACHE = next
+      return next
+    })
+  }
+
   function upsert(c: Client) {
     setList(prev => {
       const next = prev.some(x => x.id === c.id) ? prev.map(x => x.id === c.id ? c : x) : [c, ...prev]
@@ -347,6 +355,7 @@ export default function ClientsPage() {
           initial={editClient}
           onClose={() => setEditClient(null)}
           onSaved={c => { upsert(c); setEditClient(null); showToast('Changes saved!') }}
+          onDeleted={id => { remove(id); setEditClient(null); showToast('Client deleted') }}
         />
       )}
     </div>

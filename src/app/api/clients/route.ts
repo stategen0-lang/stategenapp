@@ -236,3 +236,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }
+
+// Delete a client. Same rule as editing: their own agent or a manager. The
+// database removes what belongs to them (their deal with its offers and stage
+// history, follow-up reminders, match alerts); calendar events stay but lose
+// the client link.
+export async function DELETE(req: NextRequest) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const id = Number(req.nextUrl.searchParams.get('id'))
+  if (!Number.isInteger(id) || id <= 0) return NextResponse.json({ error: 'A valid client id is required.' }, { status: 400 })
+
+  const admin = createAdminClient()
+  const { data: existing } = await admin
+    .from('client_requests').select('id,notes').eq('id', id).eq('company_id', session.companyId).maybeSingle()
+  if (!existing) return NextResponse.json({ error: 'Client not found.' }, { status: 404 })
+  if (!canEditClient(session, clientAgent(existing))) {
+    return NextResponse.json({ error: 'Only the client\'s agent or a manager can delete them.' }, { status: 403 })
+  }
+
+  const { error } = await admin.from('client_requests').delete().eq('id', id).eq('company_id', session.companyId)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true, id })
+}
