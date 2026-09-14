@@ -34,7 +34,16 @@ function mergeExtracted(flow: FlowName, prev: FlowContext, fields: Record<string
   if (!Object.keys(fields).length) return prev
   if (flow === 'create_client') return { ...prev, ...seedForm(fields, CREATE_CLIENT_STEPS) }
   const seeded = seedContext(fields)   // property: answers + an __extra bag
-  const extra = { ...extrasOf(prev), ...extrasOf(seeded) }
+  const before = extrasOf(prev)
+  const extra = { ...before, ...extrasOf(seeded) }
+  // Features given across several replies add up ("…it has a generator" then
+  // "and an elevator"), and later notes are appended rather than replacing.
+  for (const key of ['amenities', 'buildingFeatures']) {
+    if (Array.isArray(before[key]) && Array.isArray(extra[key])) {
+      extra[key] = [...new Set([...(before[key] as string[]), ...(extra[key] as string[])])]
+    }
+  }
+  if (before.notes && extra.notes && before.notes !== extra.notes) extra.notes = `${before.notes}, ${extra.notes}`
   const merged: FlowContext = { ...prev, ...answersOf(seeded) }
   if (Object.keys(extra).length) merged[EXTRA_KEY] = extra
   return merged

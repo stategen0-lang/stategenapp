@@ -12,6 +12,7 @@ import {
   renderForm, parseForm, missingMandatory, firstMissing, nextQuestion,
   CLIENT_TEMPLATE, looksLikeForm, isClientForm, isTemplateRequest,
 } from './flows.ts'
+import { buildUpdate, PROPERTY_FIELDS } from './writes.ts'
 
 // ── conversational prompts ────────────────────────────────────────────────
 test('firstMissing: returns the first empty mandatory step, null when complete', () => {
@@ -428,4 +429,45 @@ test('client areas: an explicit Bedrooms line wins over the one in the areas', (
   const { context } = parseClient('5- Areas: Batroun 2 br\n7- Bedrooms: 3')
   assert.equal(context.beds, 3)
   assert.deepEqual(context.locations, ['Batroun'])
+})
+
+// ── Listing features → the web form's checkboxes (not the notes) ─────────────
+test('seedContext (listing): features tick the form, the rest stays in notes', () => {
+  const ctx = seedContext({
+    type: 'apartment', transaction: 'For Sale', location: 'Kaslik', price: 300000,
+    features: ['mid floor', 'heating system', 'parking', 'sea view', 'elevator', 'generator', 'balcony'],
+  })
+  const extra = extrasOf(ctx)
+  assert.equal(extra.floor, 'Mid floor')
+  assert.equal(extra.view, 'Sea')
+  assert.equal(extra.balcony, true)
+  assert.deepEqual(extra.buildingFeatures, ['Elevator', 'Generator'])
+  assert.equal(ctx.parkings, 1)                         // the parking step, not a note
+  assert.equal(extra.notes, 'heating system')           // no checkbox → notes
+})
+
+test('seedContext (listing): features the model left in notes are still sorted', () => {
+  const ctx = seedContext({
+    type: 'villa', transaction: 'For Sale', location: 'Broummana', price: 900000,
+    notes: 'Mid floor, generator and solar panels, owner travelling until June',
+  })
+  const extra = extrasOf(ctx)
+  assert.equal(extra.floor, 'Mid floor')
+  assert.deepEqual(extra.buildingFeatures, ['Generator', 'Solar Panels'])
+  assert.equal(extra.notes, 'owner travelling until June')
+})
+
+test('seedContext (listing): a stated value beats one found in the feature list', () => {
+  const ctx = seedContext({ type: 'apartment', floor: 'Last floor', features: ['mid floor', 'no elevator'] })
+  const extra = extrasOf(ctx)
+  assert.equal(extra.floor, 'Last floor')
+  assert.equal(extra.buildingFeatures, undefined)       // "no elevator" never ticks it
+  assert.equal(extra.notes, 'no elevator')
+})
+
+test('buildUpdate (listing): the confirmation lists ticked features readably', () => {
+  const u = buildUpdate({ buildingFeatures: ['Elevator', 'Generator'], balcony: true, floor: 'Mid floor' }, PROPERTY_FIELDS)
+  assert.ok(u.changes.includes('Building features: Elevator, Generator'))
+  assert.ok(u.changes.includes('Balcony: ✓'))
+  assert.ok(u.changes.includes('Floor: Mid floor'))
 })

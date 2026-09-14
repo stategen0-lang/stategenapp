@@ -13,6 +13,7 @@
 // types without resolving the path alias — an aliased value import here would
 // make this module unloadable in tests (the same trap as intent.ts).
 import { toMoney, toCount, toText, toEnum, PROPERTY_FIELDS, PROPERTY_TYPES, TRANSACTIONS } from './writes.ts'
+import { sortListingFeatures, extractFeaturesFromNotes, mergeFeatureFields } from './listing-features.ts'
 
 /**
  * Property type, tolerant of how people actually write it.
@@ -452,6 +453,25 @@ export function seedContext(fields: Record<string, unknown> | undefined, steps: 
   if (area != null && String(area).trim()) {
     src.location = area
     delete src.neighborhood; delete src.district; delete src.city
+  }
+
+  // A listing's features ("mid floor, parking, generator, sea view") go to the
+  // web form's own checkboxes and fields, not the internal notes. Both the list
+  // the model extracted and any feature-only clauses it left in the notes are
+  // sorted; what has no field stays in the notes, in the agent's words.
+  if (steps === CREATE_PROPERTY_STEPS && (src.features !== undefined || src.notes !== undefined)) {
+    const fromList = sortListingFeatures(src.features)
+    const fromNotes = extractFeaturesFromNotes(src.notes)
+    delete src.features
+    const found = mergeFeatureFields(fromList.fields, fromNotes.fields)
+    for (const [k, v] of Object.entries(found)) {
+      // A value stated under its own key ("floor": "Last floor") wins; lists union.
+      if (Array.isArray(v)) src[k] = [...new Set([...(Array.isArray(src[k]) ? src[k] as string[] : []), ...v])]
+      else if (src[k] === undefined || src[k] === null || src[k] === '') src[k] = v
+    }
+    const leftover = [fromNotes.notes, ...fromList.unmatched].filter(Boolean).join(', ')
+    if (leftover) src.notes = leftover
+    else delete src.notes
   }
 
   // Details the agent volunteered that aren't form fields (rent, view, garden,

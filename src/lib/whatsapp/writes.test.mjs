@@ -9,7 +9,7 @@ import {
   toMoney, toCount, toText, toEnum, toPlace,
   buildUpdate, buildNewProperty, hasChanges,
   mergeExtras, appendLog, confirmationText,
-  CLIENT_FIELDS, PROPERTY_FIELDS,
+  CLIENT_FIELDS, PROPERTY_FIELDS, expandListingFeatures,
 } from './writes.ts'
 
 // ── Coercions ───────────────────────────────────────────────────────────────
@@ -208,4 +208,21 @@ test('buildNewProperty: complete input has nothing missing', () => {
 test('buildNewProperty: a price that will not parse counts as missing', () => {
   const b = buildNewProperty({ title: 'Flat', price: 'negotiable', location: 'Beirut' })
   assert.deepEqual(b.missing, ['Price'])
+})
+
+test('mergeExtras: adding a feature keeps the ones already ticked', () => {
+  const before = JSON.stringify({ agentId: 'a1', buildingFeatures: ['Elevator'], amenities: ['Pool'] })
+  const after = JSON.parse(mergeExtras(before, { buildingFeatures: ['Generator', 'Elevator'] }))
+  assert.deepEqual(after.buildingFeatures, ['Elevator', 'Generator'])
+  assert.deepEqual(after.amenities, ['Pool'])
+  assert.equal(after.agentId, 'a1')
+})
+
+test('expandListingFeatures: an update naming features fills the fields', () => {
+  const { fields, unmatched } = expandListingFeatures({ status: 'Available', features: ['generator', 'parking', 'heating'] })
+  const u = buildUpdate(fields, PROPERTY_FIELDS)
+  assert.deepEqual(u.extras.buildingFeatures, ['Generator'])
+  assert.equal(u.extras.parkings, 1)
+  assert.deepEqual(unmatched, ['heating'])
+  assert.equal('features' in fields, false)
 })

@@ -15,7 +15,9 @@ export type ExtractedValue = string | number | boolean | string[]
 const PROPERTY_KEYS =
   'type (apartment/villa/office/shop/land/building/chalet/showroom), transaction ("For Sale" or "For Rent"), ' +
   'location (the area/neighbourhood, ONE place e.g. "Achrafieh" — not a separate city), price (USD number), rent (USD per month number), ' +
-  'beds, baths, size (sqm), parkings, ownerName, ownerContact (phone), view, notes'
+  'beds, baths, size (sqm), parkings, ownerName, ownerContact (phone), ' +
+  'features (ARRAY of EVERY feature or amenity mentioned, in the agent\'s words, e.g. ["mid floor","parking","elevator","generator","sea view","furnished","balcony","heating system"]), ' +
+  'notes (ONLY what is not a feature: the owner\'s situation, negotiable price, availability date…)'
 
 const CLIENT_KEYS =
   'name, phone, clientType ("buyer" or "renter"), propertyType (apartment/villa/studio/office/shop/land/…), ' +
@@ -52,6 +54,15 @@ const CLIENT_RULES = [
   `- A placeholder name ("woman", "a client") is still the name; don't invent one.`,
 ].join('\n')
 
+// Features go in their own list so the app can tick the listing form's boxes;
+// only genuine context goes in the notes.
+const LISTING_RULES = [
+  `Rules for a listing:`,
+  `- Every feature, amenity, floor, view or furnishing goes in the "features" ARRAY, never in "notes":`,
+  `  "mid floor, generator, parking, sea view, heating" -> features ["mid floor","generator","parking","sea view","heating"].`,
+  `- Keep a negation with its feature: "no elevator" -> features ["no elevator"].`,
+].join('\n')
+
 function systemPrompt(flow: CreateFlow, askedLabel?: string): string {
   const keys = flow === 'create_property' ? PROPERTY_KEYS : CLIENT_KEYS
   const noun = flow === 'create_property' ? 'a property listing' : 'a client / lead'
@@ -63,7 +74,7 @@ function systemPrompt(flow: CreateFlow, askedLabel?: string): string {
     `Money is a plain USD number: "500k" -> 500000, "1.2m" -> 1200000, "2000/month" -> 2000 (and set the rent/renter case).`,
     `Read through typos and casual phrasing.`,
     ARABIZI,
-    flow === 'create_client' ? CLIENT_RULES : '',
+    flow === 'create_client' ? CLIENT_RULES : LISTING_RULES,
     ``,
     `Examples:`,
     `"3 bed apartment in Hamra Beirut for sale 450k, 180sqm" -> {"fields":{"type":"apartment","transaction":"For Sale","location":"Hamra","price":450000,"beds":3,"size":180}}`,

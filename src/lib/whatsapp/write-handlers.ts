@@ -19,7 +19,7 @@ import { dbRowToProperty } from '@/lib/db-mappers'
 import { generateDescription, type DescriptionInput } from '@/lib/ai/property-description'
 import {
   buildUpdate, buildNewProperty, confirmationText, hasChanges,
-  mergeExtras, appendLog, CLIENT_FIELDS, PROPERTY_FIELDS,
+  mergeExtras, appendLog, CLIENT_FIELDS, PROPERTY_FIELDS, expandListingFeatures,
 } from '@/lib/whatsapp/writes'
 import { reminderOutcome } from '@/lib/whatsapp/reminders'
 import { splitClientRef } from '@/lib/whatsapp/client-ref'
@@ -197,7 +197,10 @@ export async function stagePropertyUpdate(
     return `#${intent.propertyId} was listed by another agent, so I can't change it.`
   }
 
-  const update = buildUpdate(intent.fields, PROPERTY_FIELDS)
+  // "#23 has a generator and parking" — features become the form's fields.
+  const expanded = expandListingFeatures(intent.fields)
+  const update = buildUpdate(expanded.fields, PROPERTY_FIELDS)
+  update.rejected.push(...expanded.unmatched)
   if (!hasChanges(update)) {
     const bad = update.rejected.length ? ` I can't set: ${update.rejected.join(', ')}.` : ''
     return `I didn't catch what to change on #${intent.propertyId}.${bad}\n\nTry "mark property #23 as sold" or "set property #23 price to 520k".`

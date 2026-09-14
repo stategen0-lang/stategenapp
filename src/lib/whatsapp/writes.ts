@@ -14,6 +14,28 @@
 //
 // Everything here is pure so it can be unit-tested without a database.
 
+import { sortListingFeatures } from './listing-features.ts'
+
+// ── Listing feature coercions (the web form's checkboxes and selects) ────────
+// Each reuses the feature sorter, so "mid floor", "Mid floor" and "middle level"
+// all land on the form's exact option, and anything else is rejected.
+const featureField = <K extends 'floor' | 'furnishing'>(key: K) =>
+  (v: unknown) => sortListingFeatures(String(v ?? '')).fields[key] ?? null
+
+const toYes = (v: unknown): boolean | null => {
+  if (typeof v === 'boolean') return v || null     // only a "yes" ticks a box
+  return /^(?:yes|y|true|1|has|with)$/i.test(String(v ?? '').trim()) ? true : null
+}
+
+/** A checkbox list: every item must map to one of the form's own options. */
+const toCheckboxList = (key: 'amenities' | 'buildingFeatures') => (v: unknown): string[] | null => {
+  const sorted = sortListingFeatures(v).fields
+  // A name the model put under the "wrong" list still belongs to its real one;
+  // this spec only keeps its own.
+  const list = sorted[key] ?? []
+  return list.length ? list : null
+}
+
 export interface FieldSpec {
   /** Real column, or "extras" to store inside the row's JSON blob. */
   column: string
@@ -158,6 +180,18 @@ export const PROPERTY_FIELDS: Record<string, FieldSpec> = {
   transaction:  { column: 'extras.transaction', label: 'Listing',     coerce: toEnum(TRANSACTIONS), oneOf: TRANSACTIONS },
   ownerName:    { column: 'extras.ownerName',    label: 'Owner',      coerce: toText },
   ownerContact: { column: 'extras.ownerContact', label: 'Owner phone', coerce: toText },
+  // The listing form's other fields and tick-boxes (all in the Amenities blob,
+  // under the exact keys dbRowToProperty reads back).
+  view:             { column: 'extras.view',             label: 'View',              coerce: toText },
+  floor:            { column: 'extras.floor',            label: 'Floor',             coerce: featureField('floor') },
+  furnishing:       { column: 'extras.furnishing',       label: 'Furnishing',        coerce: featureField('furnishing') },
+  buildingAge:      { column: 'extras.buildingAge',      label: 'Building age',      coerce: toCount },
+  garden:           { column: 'extras.garden',           label: 'Garden',            coerce: toYes },
+  balcony:          { column: 'extras.balcony',          label: 'Balcony',           coerce: toYes },
+  terrace:          { column: 'extras.terrace',          label: 'Terrace',           coerce: toYes },
+  needsRenovation:  { column: 'extras.needsRenovation',  label: 'Needs renovation',  coerce: toYes },
+  amenities:        { column: 'extras.amenities',        label: 'Amenities',         coerce: toCheckboxList('amenities') },
+  buildingFeatures: { column: 'extras.buildingFeatures', label: 'Building features', coerce: toCheckboxList('buildingFeatures') },
 }
 
 // ── Building an update ──────────────────────────────────────────────────────
@@ -166,6 +200,8 @@ function fmt(label: string, value: unknown): string {
   if (typeof value === 'number' && /budget|price|rent/i.test(label)) {
     return `${label}: $${value.toLocaleString('en-US')}`
   }
+  if (Array.isArray(value)) return `${label}: ${value.join(', ')}`
+  if (value === true) return `${label}: ✓`
   return `${label}: ${value}`
 }
 
@@ -219,7 +255,15 @@ export function mergeExtras(existingJson: unknown, extras: Record<string, unknow
     const parsed = JSON.parse(String(existingJson || '{}'))
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) base = parsed
   } catch { /* corrupt blob: start clean rather than fail the write */ }
-  return JSON.stringify({ ...base, ...extras })
+  const merged = { ...base, ...extras }
+  // Tick-box lists add to what's there: "#23 has a generator" must not untick
+  // the elevator the listing already had.
+  for (const key of ['amenities', 'buildingFeatures']) {
+    if (Array.isArray(base[key]) && Array.isArray(extras[key])) {
+      merged[key] = [...new Set([...(base[key] as unknown[]), ...(extras[key] as unknown[])])]
+    }
+  }
+  return JSON.stringify(merged)
 }
 
 /** Append a dated entry to the client's activity log inside its notes blob. */
@@ -271,4 +315,26 @@ export function buildNewProperty(fields: Record<string, unknown> | undefined): B
     if (!present) missing.push(label)
   }
   return { columns: u.columns, extras: u.extras, changes: u.changes, missing }
+}
+
+/**
+ * A listing update that names features ("#23 has a generator and parking"):
+ * sort the model's `features` list into the real fields before the whitelist
+ * sees them. Stated keys win and tick-box lists union. Features with no field
+ * come back as `unmatched`, so the confirmation can say they were ignored rather
+ * than silently overwriting the listing's notes.
+ */
+export function expandListingFeatures(fields: Record<string, unknown> | undefined): {
+  fields: Record<string, unknown> | undefined
+  unmatched: string[]
+} {
+  if (!fields || fields.features === undefined) return { fields, unmatched: [] }
+  const { features, ...rest } = fields
+  const sorted = sortListingFeatures(features)
+  const out: Record<string, unknown> = { ...rest }
+  for (const [k, v] of Object.entries(sorted.fields)) {
+    if (Array.isArray(v)) out[k] = [...new Set([...(Array.isArray(out[k]) ? out[k] as string[] : []), ...v])]
+    else if (out[k] === undefined || out[k] === null || out[k] === '') out[k] = v
+  }
+  return { fields: out, unmatched: sorted.unmatched }
 }

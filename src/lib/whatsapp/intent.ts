@@ -146,7 +146,8 @@ For update_client, update_property and create_property, put the changes in "fiel
 using ONLY these key names (anything else is discarded):
 - client: budget, status, location, beds, phone, rating
   status must be one of: Searching, Viewing, Negotiating, Closed, Inactive
-- property: type, transaction, status, price, rent, size, beds, baths, title, location, ownerName, ownerContact, notes
+- property: type, transaction, status, price, rent, size, beds, baths, title, location, ownerName, ownerContact, features, notes
+  features is an ARRAY of every feature/amenity/floor/view/furnishing mentioned, in the agent's words ("mid floor, parking, generator, sea view" → ["mid floor","parking","generator","sea view"]); notes is ONLY what isn't a feature
   type is the property type ("apartment","villa","office","shop","land","building","chalet","showroom") — extract it whenever named
   transaction is "For Sale" or "For Rent" (a sale price or "for sale"/"selling" → For Sale; "for rent"/monthly → For Rent)
   ownerName and ownerContact are the owner's name and phone when given ("owner Joe Khoury 03 123456" → ownerName "Joe Khoury", ownerContact "03 123456")
