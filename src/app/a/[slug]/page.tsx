@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { dbRowToProperty } from '@/lib/db-mappers'
 import { makeShareToken, shareSecret } from '@/lib/share'
 import { formatPrice, TYPE_GRADIENTS } from '@/lib/data'
+import CardPhotos from '@/components/listing/CardPhotos'
 import MicrositeContactForm from '@/components/microsite/MicrositeContactForm'
 
 // Public agency microsite: a branded page listing an agency's available
@@ -14,7 +15,7 @@ export const dynamic = 'force-dynamic'
 type Row = Record<string, unknown>
 
 interface Brand { name: string; logoUrl: string | null; color: string }
-interface Card { token: string; title: string; type: string; transaction: string; price: number; rent: number; district: string; city: string; beds: number; baths: number; size: number; photo: string | null; hasVideo: boolean }
+interface Card { token: string; title: string; type: string; transaction: string; price: number; rent: number; district: string; city: string; beds: number; baths: number; size: number; photos: string[]; hasVideo: boolean }
 interface Site { brand: Brand; cards: Card[] }
 
 function readableOn(hex: string): string {
@@ -55,7 +56,7 @@ async function loadSite(slug: string): Promise<{ site: Site; companyId: number }
       title: p.title, type: p.type, transaction: p.transaction,
       price: p.price, rent: p.rent, district: p.district, city: p.city,
       beds: p.beds, baths: p.baths, size: p.size,
-      photo: (p.photos ?? [])[0] ?? null,
+      photos: (p.photos ?? []).filter(Boolean),
       hasVideo: !!p.video,
     }))
 
@@ -70,7 +71,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return {
     title: `${brand.name} — Properties`,
     description: `Browse ${cards.length} propert${cards.length === 1 ? 'y' : 'ies'} from ${brand.name}. Contact us to arrange a viewing.`,
-    openGraph: { title: brand.name, description: `Properties from ${brand.name}`, images: cards[0]?.photo ? [cards[0].photo] : [] },
+    openGraph: { title: brand.name, description: `Properties from ${brand.name}`, images: cards[0]?.photos[0] ? [cards[0].photos[0]] : [] },
   }
 }
 
@@ -131,11 +132,8 @@ export default async function MicrositePage({ params, searchParams }: { params: 
               return (
                 <a key={card.token} href={`/l/${card.token}`} className="block rounded-2xl bg-white overflow-hidden transition-transform hover:-translate-y-0.5"
                   style={{ border: '1px solid #EEF0F4', boxShadow: '0 2px 10px rgba(20,34,63,0.06)' }}>
-                  <div className="relative w-full" style={{ aspectRatio: '16 / 10', background: TYPE_GRADIENTS[card.type as keyof typeof TYPE_GRADIENTS] ?? '#E3E7EE' }}>
-                    {card.photo && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={card.photo} alt={card.title} className="w-full h-full object-cover" />
-                    )}
+                  {/* Swipe through the listing's photos; badges sit on the first one. */}
+                  <CardPhotos photos={card.photos} title={card.title} fallback={TYPE_GRADIENTS[card.type as keyof typeof TYPE_GRADIENTS] ?? '#E3E7EE'}>
                     <span className="absolute top-2.5 left-2.5 text-xs font-semibold px-2.5 py-1 rounded-full text-white" style={{ background: 'rgba(0,0,0,0.42)', backdropFilter: 'blur(4px)' }}>
                       {card.type} · {card.transaction}
                     </span>
@@ -144,7 +142,7 @@ export default async function MicrositePage({ params, searchParams }: { params: 
                         🎥
                       </span>
                     )}
-                  </div>
+                  </CardPhotos>
                   <div className="p-3.5">
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-sm font-bold truncate" style={{ color: H }}>{card.title}</p>
