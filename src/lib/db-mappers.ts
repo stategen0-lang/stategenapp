@@ -46,6 +46,8 @@ export function dbRowToProperty(row: Record<string, unknown>, idx: number): Prop
     ownerContact: extras.ownerContact as string | undefined,
     documentPath: extras.documentPath as string | undefined,
     documentName: extras.documentName as string | undefined,
+    marketingSentAt: extras.marketingSentAt as string | undefined,
+    marketingSentBy: extras.marketingSentBy as string | undefined,
     photos: (() => { try { return JSON.parse(row.Photos as string || '[]') } catch { return [] } })(),
   }
 }

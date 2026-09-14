@@ -13,6 +13,7 @@ import { STAGES, type Stage } from '@/lib/pipeline'
 import PropertyDetailModal from '@/components/modals/PropertyDetailModal'
 import ClientDetailModal from '@/components/modals/ClientDetailModal'
 import NewPropertyModal from '@/components/modals/NewPropertyModal'
+import { MarketingPrompt } from '@/components/marketing/SendToMarketing'
 import NewClientModal from '@/components/modals/NewClientModal'
 import { useSession } from '@/hooks/use-session'
 import { isManager } from '@/lib/permissions'
@@ -44,6 +45,7 @@ export default function DashboardPage() {
   const [detailClient, setDetailClient] = useState<Client | null>(null)
   const [detailDeal, setDetailDeal]     = useState<DealView | null>(null)
   const [newPropOpen, setNewPropOpen]   = useState(false)
+  const [marketingProp, setMarketingProp] = useState<Property | null>(null)
   const [newClientOpen, setNewClientOpen] = useState(false)
   const [props, setProps]               = useState<Property[]>([])
   const [clients, setClients]           = useState<Client[]>([])
@@ -535,8 +537,11 @@ export default function DashboardPage() {
       {newPropOpen && (
         <NewPropertyModal
           onClose={() => setNewPropOpen(false)}
-          onSaved={p => { upsertProp(p); setNewPropOpen(false); showToast('Listing saved!') }}
+          onSaved={p => { upsertProp(p); setNewPropOpen(false); showToast('Listing saved!'); setMarketingProp(p) }}
         />
+      )}
+      {marketingProp && (
+        <MarketingPrompt property={marketingProp} onClose={() => setMarketingProp(null)} />
       )}
       {editProp && (
         <NewPropertyModal

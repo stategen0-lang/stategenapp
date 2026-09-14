@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ChevronRight, Plus, Trash2, Check, Download, MessageCircle, ExternalLink, KeyRound, Palette } from 'lucide-react'
+import { ChevronRight, Plus, Trash2, Check, Download, MessageCircle, ExternalLink, KeyRound, Palette, Megaphone } from 'lucide-react'
 import { AGENTS } from '@/lib/data'
 import { createClient } from '@/lib/supabase/client'
 import { useSession } from '@/hooks/use-session'
 import { isManager } from '@/lib/permissions'
 import { DescriptionTemplate, DEFAULT_TEMPLATES, STORAGE_KEY, loadTemplates } from '@/lib/templates'
 import { EXPORTS, EXPORT_LABELS, type ExportKind } from '@/lib/export-columns'
+import { refreshMarketingConfig } from '@/components/marketing/SendToMarketing'
 
 const COMMISSION_RATE = 2.5
 const H   = '#1A2B4A'
@@ -197,6 +198,31 @@ export default function ProfilePage() {
 
   // ── Public listing branding (managers only) ──
   type Brand = { name: string | null; logoUrl: string | null; brandColor: string | null; domain?: string | null }
+  // ── Marketing team email (where "Send to marketing" delivers a listing) ──
+  const [mktEmail, setMktEmail] = useState('')
+  const [mktSaved, setMktSaved] = useState('')
+  const [mktBusy, setMktBusy] = useState(false)
+  const [mktMsg, setMktMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  useEffect(() => {
+    if (!manager) return
+    fetch('/api/company/marketing').then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) { setMktEmail(d.email ?? ''); setMktSaved(d.email ?? '') } }).catch(() => {})
+  }, [manager])
+
+  async function saveMarketingEmail(value: string) {
+    setMktBusy(true); setMktMsg(null)
+    const r = await fetch('/api/company/marketing', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: value }),
+    }).catch(() => null)
+    const d = r ? await r.json().catch(() => ({})) : {}
+    setMktBusy(false)
+    if (!r || !r.ok) { setMktMsg({ ok: false, text: d.error ?? 'Could not save. Please try again.' }); return }
+    refreshMarketingConfig()
+    setMktEmail(d.email ?? ''); setMktSaved(d.email ?? '')
+    setMktMsg({ ok: true, text: d.email ? 'Saved. Agents can now send listings to marketing.' : 'Removed. Sending to marketing is turned off.' })
+  }
+
   const [brand, setBrand] = useState<Brand>({ name: null, logoUrl: null, brandColor: null, domain: null })
   const [copiedSite, setCopiedSite] = useState(false)
   const [brandBusy, setBrandBusy] = useState(false)
@@ -310,6 +336,50 @@ export default function ProfilePage() {
           {exportError && (
             <p className="px-5 pb-4 text-xs" style={{ color: '#A23434' }}>{exportError}</p>
           )}
+        </div>
+      )}
+
+      {/* Marketing team email — managers only */}
+      {manager && (
+        <div className="rounded-2xl bg-white overflow-hidden" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #EEF0F4' }}>
+          <div className="px-5 py-4 flex items-center gap-2.5" style={{ borderBottom: '1px solid #EEF0F4' }}>
+            <Megaphone className="h-5 w-5" style={{ color: '#2E5288' }} />
+            <div>
+              <p className="text-sm font-bold" style={{ color: H }}>Marketing team</p>
+              <p className="text-xs mt-0.5" style={{ color: SUB }}>Where agents send new listings to be posted on OLX, Instagram &amp; Facebook</p>
+            </div>
+          </div>
+          <div className="p-5 space-y-3">
+            {mktMsg && (
+              <p className="text-xs px-3 py-2 rounded-lg" style={mktMsg.ok ? { background: '#E3F4EA', color: '#1F7A4D' } : { background: '#FBE7E7', color: '#A23434' }}>{mktMsg.text}</p>
+            )}
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="text" inputMode="email" autoComplete="off" spellCheck={false}
+                value={mktEmail}
+                onChange={e => setMktEmail(e.target.value)}
+                placeholder="marketing@youragency.com"
+                className="flex-1 min-w-0 rounded-xl px-3 py-2.5 text-base sm:text-sm outline-none"
+                style={{ border: '1.5px solid #EEF0F4', color: H }}
+              />
+              <button
+                onClick={() => saveMarketingEmail(mktEmail)}
+                disabled={mktBusy || mktEmail.trim() === mktSaved.trim()}
+                className="rounded-xl px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50 whitespace-nowrap"
+                style={{ background: H }}
+              >
+                {mktBusy ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+            <p className="text-xs" style={{ color: SUB }}>
+              Separate several addresses with commas. Leave it empty and the send-to-marketing option is hidden. The owner&apos;s details and private notes are never included in the email.
+            </p>
+            {mktSaved && (
+              <button onClick={() => saveMarketingEmail('')} disabled={mktBusy} className="text-xs font-semibold" style={{ color: '#A23434' }}>
+                Turn off
+              </button>
+            )}
+          </div>
         </div>
       )}
 

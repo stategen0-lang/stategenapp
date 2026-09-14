@@ -101,6 +101,9 @@ export interface Property {
   documentPath?: string
   /** Original filename of the attached document, for display. */
   documentName?: string
+  /** When the listing was last emailed to the marketing team, and by whom. */
+  marketingSentAt?: string
+  marketingSentBy?: string
   status: PropertyStatus
   agentId: AgentId
 }

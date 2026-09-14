@@ -7,6 +7,7 @@ import { filterProperties } from '@/lib/search'
 import PropertyCard from '@/components/properties/MeridianPropertyCard'
 import PropertyDetailModal from '@/components/modals/PropertyDetailModal'
 import NewPropertyModal from '@/components/modals/NewPropertyModal'
+import { MarketingPrompt } from '@/components/marketing/SendToMarketing'
 import ImportModal from '@/components/import/ImportModal'
 import { dbRowToProperty } from '@/lib/db-mappers'
 import { useSession } from '@/hooks/use-session'
@@ -52,6 +53,8 @@ export default function PropertiesPage() {
   }
   const [detailId, setDetailId] = useState<number | null>(null)
   const [addOpen, setAddOpen] = useState(false)
+  // A listing just added — offer to send it to the marketing team.
+  const [marketingProp, setMarketingProp] = useState<Property | null>(null)
   const [importOpen, setImportOpen] = useState(false)
   const [editProp, setEditProp] = useState<Property | null>(null)
   const [toast, setToast] = useState('')
@@ -215,6 +218,7 @@ export default function PropertiesPage() {
             upsert(p)
             setAddOpen(false)
             showToast('Listing saved!')
+            setMarketingProp(p)
           }}
         />
       )}
@@ -228,6 +232,9 @@ export default function PropertiesPage() {
             showToast('Changes saved!')
           }}
         />
+      )}
+      {marketingProp && (
+        <MarketingPrompt property={marketingProp} onClose={() => setMarketingProp(null)} />
       )}
       {importOpen && (
         <ImportModal

@@ -7,6 +7,7 @@ import { useLockBodyScroll } from '@/hooks/use-lock-body-scroll'
 import MatchCards from '@/components/matching/MatchCards'
 import OffersSection from '@/components/offers/OffersSection'
 import ClientDetailModal from './ClientDetailModal'
+import { SendToMarketingButton } from '@/components/marketing/SendToMarketing'
 
 interface Props {
   property: Property
@@ -292,6 +293,9 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
                 )}
               </div>
             )}
+
+            {/* Hands the listing to the marketing team (lister + managers only). */}
+            <SendToMarketingButton property={p} />
 
             <div className="flex items-center gap-3 pt-2" style={{ borderTop: '1px solid #EEF0F4' }}>
               <div

@@ -143,6 +143,11 @@ export async function PATCH(req: NextRequest) {
     const { data: existing } = await supabase
       .from('Properties').select('id,Amenities').eq('id', id).eq('company_id', session.companyId).maybeSingle()
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    // Server-owned keys the edit form never sends. Rebuilding the blob from the
+    // form alone would erase them (the listing would forget it was already sent
+    // to marketing), so carry them over.
+    let prevExtras: Record<string, unknown> = {}
+    try { prevExtras = JSON.parse((existing.Amenities as string) || '{}') } catch { prevExtras = {} }
     if (!canEditProperty(session, propertyAgent(existing))) {
       return NextResponse.json({ error: 'Forbidden — this listing belongs to another agent' }, { status: 403 })
     }
@@ -174,6 +179,8 @@ export async function PATCH(req: NextRequest) {
       documentPath: body.documentPath,
       documentName: body.documentName,
       status: body.status,
+      marketingSentAt: prevExtras.marketingSentAt,
+      marketingSentBy: prevExtras.marketingSentBy,
     }
 
     const { data, error } = await supabase
