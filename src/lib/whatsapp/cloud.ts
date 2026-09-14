@@ -119,6 +119,14 @@ export function parseInbound(payload: unknown): InboundMessage | null {
       const img = msg.image as { id?: string; mime_type?: string; caption?: string } | undefined
       if (img?.id) image = { id: String(img.id), mime: img.mime_type, caption: img.caption }
       text = String(img?.caption ?? '')
+    } else if (type === 'document') {
+      // A photo sent as a file ("HD" / from the Files app) arrives as a document.
+      // Treat an image document exactly like a photo; other files stay documents.
+      const doc = msg.document as { id?: string; mime_type?: string; caption?: string } | undefined
+      if (doc?.id && /^image\//i.test(String(doc.mime_type ?? ''))) {
+        image = { id: String(doc.id), mime: doc.mime_type, caption: doc.caption }
+      }
+      text = String(doc?.caption ?? '')
     } else if (type === 'interactive') {
       const inter = msg.interactive as {
         button_reply?: { title?: string }
@@ -138,7 +146,7 @@ export function parseInbound(payload: unknown): InboundMessage | null {
     const contacts = value.contacts as { profile?: { name?: string } }[] | undefined
     const name = String(contacts?.[0]?.profile?.name ?? '')
 
-    const base: InboundMessage = { from, text, name, messageId, type: flow ? 'flow' : type }
+    const base: InboundMessage = { from, text, name, messageId, type: flow ? 'flow' : image ? 'image' : type }
     if (flow) return { ...base, flow }
     if (image) return { ...base, image }
     return base

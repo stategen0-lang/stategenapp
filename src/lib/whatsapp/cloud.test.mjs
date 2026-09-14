@@ -156,3 +156,26 @@ test('parseInbound: reads an image message (media id + caption)', () => {
   assert.equal(m.text, 'front')
   assert.deepEqual(m.image, { id: 'MID123', mime: 'image/jpeg', caption: 'front' })
 })
+
+// ── Photos ──────────────────────────────────────────────────────────────────
+const mediaMessage = (msg) => inboundPayload({ messages: [{ from: '9613870377', id: 'wamid.P1', timestamp: '1', ...msg }] })
+
+test('parseInbound: a photo carries its media id and caption', () => {
+  const m = parseInbound(mediaMessage({ type: 'image', image: { id: 'MEDIA1', mime_type: 'image/jpeg', caption: '#23' } }))
+  assert.equal(m.type, 'image')
+  assert.deepEqual(m.image, { id: 'MEDIA1', mime: 'image/jpeg', caption: '#23' })
+  assert.equal(m.text, '#23')
+})
+
+test('parseInbound: a photo sent as a file (document) is still a photo', () => {
+  const m = parseInbound(mediaMessage({ type: 'document', document: { id: 'MEDIA2', mime_type: 'image/png', filename: 'IMG_1.png' } }))
+  assert.equal(m.type, 'image')
+  assert.equal(m.image.id, 'MEDIA2')
+  assert.equal(m.text, '')
+})
+
+test('parseInbound: a non-image document is not treated as a photo', () => {
+  const m = parseInbound(mediaMessage({ type: 'document', document: { id: 'MEDIA3', mime_type: 'application/pdf' } }))
+  assert.equal(m.type, 'document')
+  assert.equal(m.image, undefined)
+})

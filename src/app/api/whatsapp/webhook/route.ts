@@ -15,7 +15,7 @@ import { isStartListing, isStartClient, isClientForm, isTemplateRequest, CLIENT_
 import { parseConnect, isStopMessage, normalizeCode, pairingExpired } from '@/lib/whatsapp/pairing'
 import { handleAgentActivity, handleOverdueReminders, handleActivityFeed } from '@/lib/whatsapp/manager-handlers'
 import { stageLogOffer, stageResolveOffer, handleQueryOffers, continueOfferPick } from '@/lib/whatsapp/offer-handlers'
-import { continuePhotoCollection } from '@/lib/whatsapp/photo-handlers'
+import { continuePhotoCollection, NO_REPLY } from '@/lib/whatsapp/photo-handlers'
 import { stageCreateEvent, continueEventFlow, handleQuerySchedule } from '@/lib/whatsapp/calendar-handlers'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -311,7 +311,21 @@ async function handleInbound(
   const photoReply = await continuePhotoCollection(admin, profile, inbound)
   if (photoReply !== null) {
     await stamp({ intent: 'collect_photo' })
-    await answerWith(photoReply, 'collect_photo', profile)
+    // NO_REPLY: one of several photos sent together that has already been
+    // answered — stay quiet rather than repeat the same message per photo.
+    if (photoReply !== NO_REPLY) await answerWith(photoReply, 'collect_photo', profile)
+    return
+  }
+
+  // Nothing to read: media with no caption, or a reaction/system event. Routing
+  // an empty body only ever produced "didn't understand" plus the help menu.
+  if (!body && !inbound.flow) {
+    if (['video', 'audio', 'document', 'sticker'].includes(inbound.type)) {
+      await stamp({ intent: 'unsupported_media' })
+      await answerWith('I can only read text messages and listing photos here. Type what you need, or send "help".', 'unsupported_media', profile)
+    } else {
+      await stamp({ intent: 'ignored_empty' })   // e.g. a 👍 reaction
+    }
     return
   }
 
