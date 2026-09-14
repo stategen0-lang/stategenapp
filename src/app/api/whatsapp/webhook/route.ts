@@ -16,6 +16,8 @@ import { parseConnect, isStopMessage, normalizeCode, pairingExpired } from '@/li
 import { handleAgentActivity, handleOverdueReminders, handleActivityFeed } from '@/lib/whatsapp/manager-handlers'
 import { stageLogOffer, stageResolveOffer, handleQueryOffers, continueOfferPick } from '@/lib/whatsapp/offer-handlers'
 import { continuePhotoCollection, NO_REPLY } from '@/lib/whatsapp/photo-handlers'
+import { parseMarketingRequest } from '@/lib/whatsapp/marketing-intent'
+import { requestMarketing } from '@/lib/whatsapp/marketing-handlers'
 import { stageCreateEvent, continueEventFlow, handleQuerySchedule } from '@/lib/whatsapp/calendar-handlers'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -72,7 +74,7 @@ async function route(
   profile: Profile,
   body: string,
   origin: string,
-): Promise<{ intent: Intent | 'confirm_pending'; answer: BotReply }> {
+): Promise<{ intent: Intent | 'confirm_pending' | 'send_marketing'; answer: BotReply }> {
   // A write waiting on "yes" outranks anything a model might infer.
   const { data: pending } = await admin
     .from('pending_actions')
@@ -93,7 +95,9 @@ async function route(
       intent: 'confirm_pending',
       answer: confirmation === 'confirm'
         ? await applyPendingAction(admin, profile, pending.action_type, pending.payload)
-        : 'Cancelled — nothing was saved.',
+        : pending.action_type === 'send_marketing'
+          ? `OK, not sent. Send "send #${(pending.payload as { id?: number } | null)?.id ?? '…'} to marketing" any time.`
+          : 'Cancelled — nothing was saved.',
     }
   }
 
@@ -116,6 +120,11 @@ async function route(
   // Both are answered here rather than by the model — the labels say exactly
   // what each value is, so classifying it would only add latency and risk.
   if (isTemplateRequest(body)) return { intent: 'create_client', answer: CLIENT_TEMPLATE }
+
+  // "send #45 to marketing" — staged, then sent on YES.
+  const marketingId = parseMarketingRequest(body)
+  if (marketingId) return { intent: 'send_marketing', answer: await requestMarketing(admin, profile, marketingId, origin) }
+
   if (isClientForm(body)) {
     return { intent: 'create_client', answer: await startClientFormFlow(admin, profile, body) }
   }
@@ -308,7 +317,7 @@ async function handleInbound(
 
   // Just added a listing? A photo now gets attached to it; "done" or any other
   // message ends the window (and, if it wasn't a photo, routes normally below).
-  const photoReply = await continuePhotoCollection(admin, profile, inbound)
+  const photoReply = await continuePhotoCollection(admin, profile, inbound, origin)
   if (photoReply !== null) {
     await stamp({ intent: 'collect_photo' })
     // NO_REPLY: one of several photos sent together that has already been
@@ -341,7 +350,7 @@ async function handleInbound(
   }
 
   let answer: BotReply
-  let intent: Intent | 'confirm_pending' = 'unknown'
+  let intent: Intent | 'confirm_pending' | 'send_marketing' = 'unknown'
   try {
     const routed = await route(admin, profile, body, origin)
     intent = routed.intent

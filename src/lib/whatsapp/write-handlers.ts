@@ -28,6 +28,7 @@ import { createListingAlerts } from '@/lib/alerts-server'
 import { applyOfferAction } from '@/lib/offers-server'
 import { notifyAgentNewClient } from '@/lib/whatsapp/notify'
 import { after } from 'next/server'
+import { sendListingToMarketing } from '@/lib/marketing-send'
 
 export interface Profile {
   id: string
@@ -65,7 +66,7 @@ export function clientLabel(profile: Profile, row: Record<string, unknown>): str
 
 /** What a pending_actions row carries between the confirmation and the write. */
 export interface Payload {
-  table: 'client_requests' | 'Properties' | 'calendar_events' | 'deals' | 'offers'
+  table: 'client_requests' | 'Properties' | 'calendar_events' | 'deals' | 'offers' | 'marketing'
   /** Row to update; absent for an insert. */
   id?: number | string
   columns: Record<string, unknown>
@@ -424,6 +425,19 @@ export async function applyPendingAction(
   try {
     // Offers have their own logic (insert a round / settle it + advance the deal).
     if (p.table === 'offers') return await applyOfferAction(admin, profile, actionType, p)
+
+    // Send to marketing: an email, not a row. Re-checked at send time (the
+    // listing or the setting may have changed since the agent was asked).
+    if (p.table === 'marketing') {
+      const sent = await sendListingToMarketing(admin, {
+        userId: profile.id, companyId: profile.company_id, role: profile.role as 'owner' | 'manager' | 'agent',
+        agentCode: profile.agent_code, fullName: profile.Full_name ?? 'Agent',
+      }, Number(p.id), String(p.extras?.origin ?? ''))
+      return sent.ok
+        ? `📧 Sent #${p.id} to marketing (${sent.to.join(', ')}). Photos are attached to the email.`
+        : sent.error
+    }
+
 
     // Insert (new listing, or a calendar event)
     if (!p.id) {

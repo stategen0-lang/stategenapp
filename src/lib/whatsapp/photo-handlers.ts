@@ -19,6 +19,7 @@ import { canEditProperty } from '@/lib/permissions'
 import {
   isPhotoDone, isPhotoChatter, parsePhotoTarget, parseCaptionTarget, appendPhoto, photoCount,
 } from '@/lib/whatsapp/photo-intent'
+import { offerMarketing } from '@/lib/whatsapp/marketing-handlers'
 
 type Row = Record<string, unknown>
 const WINDOW_MS = 24 * 3600_000
@@ -142,7 +143,9 @@ async function strayPhoto(admin: SupabaseClient, profile: Profile): Promise<BotR
   return { text, buttons: [{ id: `photos_${latest.id}`, title: `Photos for #${latest.id}` }] }
 }
 
-export async function continuePhotoCollection(admin: SupabaseClient, profile: Profile, inbound: InboundMessage): Promise<BotReply | null> {
+export async function continuePhotoCollection(
+  admin: SupabaseClient, profile: Profile, inbound: InboundMessage, origin: string,
+): Promise<BotReply | null> {
   const { data: state } = await admin
     .from('conversation_state').select('current_flow, context, updated_at').eq('profile_id', profile.id).maybeSingle()
   const clear = () => admin.from('conversation_state').delete().eq('profile_id', profile.id)
@@ -186,11 +189,21 @@ export async function continuePhotoCollection(admin: SupabaseClient, profile: Pr
   if (isPhotoDone(text)) {
     await clear()
     const { data: row } = await admin
-      .from('Properties').select('Photos').eq('id', windowId).eq('company_id', profile.company_id).maybeSingle()
+      .from('Properties').select('Photos, Amenities').eq('id', windowId).eq('company_id', profile.company_id).maybeSingle()
     const n = photoCount((row as Row | null)?.Photos)
-    return n > 0
+    const summary = n > 0
       ? `✅ #${windowId} now has ${n} photo${n === 1 ? '' : 's'}.`
       : `No photos added to #${windowId} — send "photos for #${windowId}" any time, or add them on the web.`
+
+    // The listing is ready: offer to send it to the marketing team, unless it
+    // already went (the agent can still send "send #45 to marketing" again).
+    let alreadySent = false
+    try { alreadySent = !!JSON.parse(String((row as Row | null)?.Amenities || '{}')).marketingSentAt } catch { /* treat as unsent */ }
+    if (alreadySent) return summary
+    const offer = await offerMarketing(admin, profile, windowId, origin, `${summary}
+
+`)
+    return offer ?? summary
   }
 
   if (OTHER_MEDIA.has(inbound.type)) {

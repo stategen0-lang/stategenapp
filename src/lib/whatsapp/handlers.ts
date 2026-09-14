@@ -26,6 +26,8 @@ export const HELP_TEXT = [
   '• "add a client" — new buyer/renter, described in your own words',
   '• "template" — the fill-in-the-blanks client form, if you prefer that',
   '• "send me the link for #23" — a shareable listing link',
+  '• "photos for #23" — add photos to a listing',
+  '• "send #23 to marketing" — email a listing to your marketing team',
   '• "write a description for #23" — an AI listing description',
   '• "spoke to Ahmed, viewing Saturday" — log a call',
   '• "book a viewing tomorrow at 3pm" — add to your calendar',
