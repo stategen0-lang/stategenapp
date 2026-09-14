@@ -2,7 +2,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseRecipients, renderMarketingEmail, priceLine, detailRows, MAX_MARKETING_RECIPIENTS } from './marketing-email.ts'
+import { parseRecipients, renderMarketingEmail, priceLine, detailRows, photoDownloadUrl, MAX_MARKETING_RECIPIENTS } from './marketing-email.ts'
 import { publicListing } from './share.ts'
 
 const property = {
@@ -94,9 +94,13 @@ test('marketing email: description first, then photos, then the listing card', (
   assert.ok(text.startsWith('Bright 3-bedroom'))
 })
 
-test('marketing email: an attached photo is shown from its attachment', () => {
-  const { html, text } = email({ attachedCids: { 0: 'listing45-photo1@stategen' } })
-  assert.ok(html.includes('src="cid:listing45-photo1@stategen"'))
+test('marketing email: attached photos are real attachments, and clicking one downloads it', () => {
+  const { html, text } = email({ attachedFiles: { 0: 'listing-45-photo-1.jpg' } })
+  // Never embedded inline — Gmail hides inline images from the attachment strip.
+  assert.equal(html.includes('cid:'), false)
+  assert.ok(html.includes(`src="${property.photos[0]}"`))
+  assert.ok(html.includes('?download=listing-45-photo-1.jpg'))
+  assert.match(html, /Download all/)
   assert.match(text, /Photos: 1 \(1 attached\)/)
   // Attached photos aren't repeated as bare links in the plain-text version.
   assert.equal(text.includes(property.photos[0]), false)
@@ -107,4 +111,12 @@ test('marketing email: no written description still opens with one', () => {
     listing: publicListing(property, ''), listingId: 45, shareUrl: 'https://s/l/t', agentName: 'A',
   })
   assert.match(text, /^180 m² appartement in Kaslik, Jounieh with 3 bedrooms and 2 bathrooms, for sale at \$450,000\./)
+})
+
+test('photoDownloadUrl: storage photos download, other links untouched', () => {
+  assert.equal(
+    photoDownloadUrl('https://x.supabase.co/storage/v1/object/public/property-photos/c/a.jpg', 'listing-1-photo-1.jpg'),
+    'https://x.supabase.co/storage/v1/object/public/property-photos/c/a.jpg?download=listing-1-photo-1.jpg',
+  )
+  assert.equal(photoDownloadUrl('https://example.com/a.jpg', 'x.jpg'), 'https://example.com/a.jpg')
 })

@@ -32,10 +32,10 @@ const EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', '
  * fits the budget; any failure just leaves that photo as a link.
  */
 async function attachPhotos(photos: string[], listingId: number) {
-  const attachments: { filename: string; content: Buffer; contentType: string; cid: string }[] = []
-  const attachedCids: Record<number, string> = {}
+  const attachments: { filename: string; content: Buffer; contentType: string }[] = []
+  const attachedFiles: Record<number, string> = {}
   let storageOrigin = ''
-  try { storageOrigin = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').origin } catch { return { attachments, attachedCids } }
+  try { storageOrigin = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').origin } catch { return { attachments, attachedFiles } }
 
   const fetched = await Promise.all(photos.map(async (src, i) => {
     try {
@@ -53,11 +53,13 @@ async function attachPhotos(photos: string[], listingId: number) {
   for (const f of fetched) {
     if (!f || used + f.content.length > ATTACH_BUDGET_BYTES) continue
     used += f.content.length
-    const cid = `listing${listingId}-photo${f.i + 1}@stategen`
-    attachments.push({ filename: `listing-${listingId}-photo-${f.i + 1}.${EXT[f.contentType]}`, content: f.content, contentType: f.contentType, cid })
-    attachedCids[f.i] = cid
+    const filename = `listing-${listingId}-photo-${f.i + 1}.${EXT[f.contentType]}`
+    // A regular attachment (no cid): Gmail only offers hover-download and
+    // "Download all" for attachments that aren't embedded in the body.
+    attachments.push({ filename, content: f.content, contentType: f.contentType })
+    attachedFiles[f.i] = filename
   }
-  return { attachments, attachedCids }
+  return { attachments, attachedFiles }
 }
 
 function origin(req: NextRequest): string {
@@ -111,11 +113,11 @@ export async function POST(req: NextRequest) {
   const a = (agent ?? {}) as Record<string, unknown>
 
   const listing = publicListing(p, p.aiDescription?.trim() ?? '')
-  const { attachments, attachedCids } = await attachPhotos(listing.photos, id)
+  const { attachments, attachedFiles } = await attachPhotos(listing.photos, id)
 
   const email = renderMarketingEmail({
     listing,
-    attachedCids,
+    attachedFiles,
     listingId: id,
     shareUrl: `${origin(req)}/l/${makeShareToken(id, shareSecret())}`,
     agentName: (a.Full_name as string) || session.fullName,

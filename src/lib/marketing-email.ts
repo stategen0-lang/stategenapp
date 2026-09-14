@@ -45,12 +45,34 @@ export interface MarketingEmailInput {
   companyName?: string | null
   brandColor?: string | null
   /**
-   * Photos attached to the email, keyed by position in listing.photos, with the
-   * Content-ID each is attached under. An attached photo is shown from the
-   * attachment (cid:) so the team can save it straight from the email; photos
-   * that didn't fit the size limit are shown from their URL instead.
+   * Photos attached to the email as regular files, keyed by position in
+   * listing.photos, with the attachment's filename. They are deliberately NOT
+   * referenced inline (cid:): Gmail hides inline images from the attachment
+   * strip, which removed hover-download and "Download all". The body shows each
+   * photo from its URL instead, and clicking it downloads the file.
    */
-  attachedCids?: Record<number, string>
+  attachedFiles?: Record<number, string>
+}
+
+const STORED = '/storage/v1/object/public/'
+
+/**
+ * The link a photo opens. For a photo in our Supabase storage, `?download=` makes
+ * storage serve it as a file download (named) rather than showing it full screen
+ * in the browser with no way to save it. Other URLs are left untouched.
+ */
+export function photoDownloadUrl(src: string, filename: string): string {
+  if (!src.includes(STORED)) return src
+  try {
+    const u = new URL(src)
+    u.searchParams.set('download', filename)
+    return u.toString()
+  } catch { return src }
+}
+
+const photoFilename = (listingId: number, i: number, src: string) => {
+  const ext = /\.(jpe?g|png|webp|gif)(?:$|\?)/i.exec(src)?.[1]?.toLowerCase().replace('jpeg', 'jpg') ?? 'jpg'
+  return `listing-${listingId}-photo-${i + 1}.${ext}`
 }
 
 export interface MarketingEmail { subject: string; html: string; text: string }
@@ -105,22 +127,28 @@ export function fallbackDescription(l: PublicListing): string {
 export function renderMarketingEmail(input: MarketingEmailInput): MarketingEmail {
   const { listing: l, listingId, shareUrl, agentName, agentPhone, companyName } = input
   const accent = /^#[0-9a-f]{6}$/i.test(input.brandColor ?? '') ? input.brandColor! : '#14223F'
-  const cids = input.attachedCids ?? {}
+  const files = input.attachedFiles ?? {}
   const where = place(l)
   const subject = `New listing #${listingId} to post: ${l.title}${where ? ` — ${where}` : ''}`
   const rows = detailRows(l)
   const contact = [agentName, agentPhone].filter(Boolean).join(' · ')
   const description = l.description.trim() || fallbackDescription(l)
-  const attachedCount = l.photos.filter((_, i) => cids[i]).length
-  const linkedPhotos = l.photos.filter((_, i) => !cids[i])
+  const attachedCount = l.photos.filter((_, i) => files[i]).length
+  const linkedPhotos = l.photos.filter((_, i) => !files[i])
+  const downloadOf = (src: string, i: number) => photoDownloadUrl(src, files[i] ?? photoFilename(listingId, i, src))
+
+  const photoNote = !l.photos.length ? ''
+    : attachedCount === l.photos.length
+      ? `All ${attachedCount} photo${attachedCount === 1 ? ' is' : 's are'} attached to this email — tap one to download it, or use "Download all" in the attachments.`
+      : attachedCount
+        ? `${attachedCount} of ${l.photos.length} photos are attached (the rest were too large to attach). Tap any photo to download it.`
+        : 'Tap a photo to download it.'
 
   const text = [
     description,
     '',
-    l.photos.length
-      ? `Photos: ${l.photos.length}${attachedCount ? ` (${attachedCount} attached)` : ''}`
-      : 'No photos yet.',
-    ...linkedPhotos,
+    l.photos.length ? `Photos: ${l.photos.length}${attachedCount ? ` (${attachedCount} attached)` : ''}` : 'No photos yet.',
+    ...linkedPhotos.map(src => photoDownloadUrl(src, photoFilename(listingId, l.photos.indexOf(src), src))),
     '',
     '------------------------------',
     `Listing #${listingId}${companyName ? ` · ${companyName}` : ''}`,
@@ -132,13 +160,11 @@ export function renderMarketingEmail(input: MarketingEmailInput): MarketingEmail
     `Listing page: ${shareUrl}`,
   ].join('\n')
 
-  const photoBlocks = l.photos.map((src, i) => {
-    const shown = cids[i] ? `cid:${cids[i]}` : src
-    return `
-      <a href="${esc(src)}" style="display:block;margin:0 0 10px;text-decoration:none">
-        <img src="${esc(shown)}" alt="Photo ${i + 1}" width="620" style="display:block;width:100%;max-width:620px;height:auto;border-radius:10px;border:1px solid #EEF0F4">
-      </a>`
-  }).join('')
+  const photoBlocks = (photoNote ? `<p style="margin:0 0 10px;font-size:13px;color:#6A7488">${esc(photoNote)}</p>` : '')
+    + l.photos.map((src, i) => `
+      <a href="${esc(downloadOf(src, i))}" download="${esc(files[i] ?? photoFilename(listingId, i, src))}" style="display:block;margin:0 0 10px;text-decoration:none">
+        <img src="${esc(src)}" alt="Photo ${i + 1}" width="620" style="display:block;width:100%;max-width:620px;height:auto;border-radius:10px;border:1px solid #EEF0F4">
+      </a>`).join('')
 
   const html = `<!doctype html>
 <html><body style="margin:0;padding:24px;background:#F7F8FB;font-family:Arial,Helvetica,sans-serif;color:#14223F">

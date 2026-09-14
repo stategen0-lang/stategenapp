@@ -23,8 +23,8 @@ export interface MailInput {
   /** Display name shown in the inbox, e.g. "Haddad Realty via StateGen". */
   fromName?: string
   replyTo?: string
-  /** Files to attach. A cid makes it usable inline as <img src="cid:…">. */
-  attachments?: { filename: string; content: Buffer; contentType?: string; cid?: string }[]
+  /** Files to attach (shown in the recipient's attachment list). */
+  attachments?: { filename: string; content: Buffer; contentType?: string }[]
 }
 
 export type MailResult = { ok: true } | { ok: false; error: string; notConfigured?: boolean }
