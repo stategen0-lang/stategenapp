@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Resend } from 'resend'
 import { getSession } from '@/lib/session'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { canEditProperty } from '@/lib/permissions'
@@ -7,6 +6,7 @@ import { dbRowToProperty } from '@/lib/db-mappers'
 import { makeShareToken, shareSecret, publicListing } from '@/lib/share'
 import { parseRecipients, renderMarketingEmail } from '@/lib/marketing-email'
 import { mergeExtras } from '@/lib/whatsapp/writes'
+import { sendMail, mailConfigured } from '@/lib/mailer'
 
 // "Send to marketing": email a listing to the company's marketing team so they
 // can post it on OLX / Instagram / Facebook.
@@ -15,10 +15,8 @@ import { mergeExtras } from '@/lib/whatsapp/writes'
 // publicListing() — the same allowlist as the public share page — so the owner's
 // details, internal notes and private documents never leave the company.
 
-// Must be an address on a domain verified in Resend, or every send is rejected.
-const FROM = process.env.MARKETING_EMAIL_FROM || 'StateGen <listings@stategen.app>'
 // A double-click or a popup + button in quick succession shouldn't email twice.
-const RESEND_GUARD_MS = 60_000
+const DOUBLE_SEND_GUARD_MS = 60_000
 
 function origin(req: NextRequest): string {
   const proto = req.headers.get('x-forwarded-proto') ?? 'https'
@@ -56,11 +54,11 @@ export async function POST(req: NextRequest) {
   let extras: Record<string, unknown> = {}
   try { extras = JSON.parse((r.Amenities as string) || '{}') } catch { extras = {} }
   const last = Date.parse(String(extras.marketingSentAt ?? ''))
-  if (Number.isFinite(last) && Date.now() - last < RESEND_GUARD_MS) {
+  if (Number.isFinite(last) && Date.now() - last < DOUBLE_SEND_GUARD_MS) {
     return NextResponse.json({ error: 'This listing was just sent. Wait a minute before sending it again.' }, { status: 429 })
   }
 
-  if (!process.env.RESEND_API_KEY) {
+  if (!mailConfigured()) {
     return NextResponse.json({ error: 'Email sending is not configured on the server.' }, { status: 503 })
   }
 
@@ -80,17 +78,27 @@ export async function POST(req: NextRequest) {
     brandColor: (c.brand_color as string) || null,
   })
 
-  const resend = new Resend(process.env.RESEND_API_KEY)
-  const { error: mailErr } = await resend.emails.send({
-    from: FROM,
+  // Every agency sends through the one StateGen mailbox, so without this a
+  // marketing team's reply would land in StateGen's inbox, not the agency's.
+  // Route replies to the company owner's real login email.
+  const { data: owner } = await admin
+    .from('Profiles').select('id').eq('company_id', session.companyId).eq('role', 'owner').maybeSingle()
+  const ownerEmail = owner
+    ? (await admin.auth.admin.getUserById((owner as { id: string }).id)).data?.user?.email ?? undefined
+    : undefined
+
+  const companyName = (c.Name as string) || ''
+  const sent = await sendMail({
     to: recipients.emails,
     subject: email.subject,
     html: email.html,
     text: email.text,
+    fromName: companyName ? `${companyName} via StateGen` : 'StateGen',
+    replyTo: ownerEmail,
   })
-  if (mailErr) {
-    console.error('[marketing] send failed', mailErr)
-    return NextResponse.json({ error: `The email couldn't be sent: ${mailErr.message}` }, { status: 502 })
+  if (!sent.ok) {
+    console.error('[marketing] send failed', sent.error)
+    return NextResponse.json({ error: `The email couldn't be sent: ${sent.error}` }, { status: 502 })
   }
 
   // Record the send on the listing (merged, so nothing else in the blob changes).

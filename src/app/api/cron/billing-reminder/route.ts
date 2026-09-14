@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { Resend } from 'resend'
+import { sendMail } from '@/lib/mailer'
 
 // Daily cron: find companies expiring in 3 days or today, email the manager.
 // Vercel invokes this with the CRON_SECRET header.
 
-const FROM = 'StateGen <billing@stategenapp.vercel.app>'
 
 export async function GET(req: NextRequest) {
-  const resend = new Resend(process.env.RESEND_API_KEY)
   // Verify this is called by Vercel Cron, not a random request
   const secret = req.headers.get('authorization')
   if (secret !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -66,15 +64,10 @@ export async function GET(req: NextRequest) {
       ? `Hi ${profile.Full_name},\n\nYour StateGen subscription for ${company.Name} (${company.domain}) expires today.\n\nYour agents will lose access to the platform at midnight. Please contact us to renew your subscription and keep your account active.\n\nReply to this email or reach out directly to continue.\n\n— StateGen`
       : `Hi ${profile.Full_name},\n\nThis is a reminder that your StateGen subscription for ${company.Name} (${company.domain}) expires in 3 days, on ${expiresOn.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.\n\nPlease arrange payment before then to avoid any interruption for your agents.\n\nReply to this email or reach out directly to renew.\n\n— StateGen`
 
-    const { error: mailErr } = await resend.emails.send({
-      from: FROM,
-      to: email,
-      subject,
-      text: body,
-    })
+    const mail = await sendMail({ to: email, subject, text: body, fromName: 'StateGen Billing' })
 
-    if (mailErr) {
-      errors.push(`${email}: ${mailErr.message}`)
+    if (!mail.ok) {
+      errors.push(`${email}: ${mail.error}`)
     } else {
       sent++
     }
