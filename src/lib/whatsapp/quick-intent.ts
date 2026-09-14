@@ -217,6 +217,23 @@ export function quickIntent(raw: string | null | undefined): IntentResult | null
     }
   }
 
+  // ── "find the listing of Khoury", "edit property owned by Haddad" ─────────
+  // Finding an EXISTING listing by what the agent remembers about it. Runs before
+  // the client lookup ("pull up …") and the budget search below: both would
+  // otherwise read "the listing of Khoury" as a client name or an area.
+  const LISTING_WORD = '(?:listings?|propert(?:y|ies)|prop|unit|apartment|appartement|flat|villa|office|shop|chalet|building|land|studio|duplex)'
+  const finder =
+    text.match(new RegExp(`^(?:find|search(?:\\s+for)?|look\\s+(?:up|for)|open|edit|update|change|pull\\s+up|show(?:\\s+me)?|get|bring\\s+up)\\s+(?:me\\s+)?(?:the\\s+|a\\s+|my\\s+)?${LISTING_WORD}\\s+(?:of|for|owned\\s+by|belonging\\s+to|with\\s+owner|from|by|owner|named|called|titled)\\s+(.+?)\\s*\\??$`, 'i'))
+    || text.match(new RegExp(`^${LISTING_WORD}\\s+(?:of|owned\\s+by|belonging\\s+to|owner)\\s+(.+?)\\s*\\??$`, 'i'))
+    || text.match(/^(?:find|search(?:\s+for)?|look\s+up)\s+(?:the\s+)?owner\s+(.+?)\s*\??$/i)
+    || text.match(/^owner\s+(.+?)\s*\??$/i)
+  if (finder && finder[1].trim()) return { intent: 'find_listing', search: finder[1].trim() }
+  // "search listings kaslik villa" — but a budget ("under 500k") is a match query.
+  const searchListings = text.match(new RegExp(`^(?:find|search(?:\\s+for)?)\\s+(?:the\\s+|all\\s+)?${LISTING_WORD}\\s+(.+?)\\s*\\??$`, 'i'))
+  if (searchListings && !/\d\s*k\b|\$|\bbudget\b|\bunder\b|\bbelow\b|\bmatch/i.test(searchListings[1])) {
+    return { intent: 'find_listing', search: searchListings[1].trim() }
+  }
+
   // ── "info on Ahmed", "who is Ahmed", "pull up Ahmed" ──────────────────────
   // Checked after the update patterns so "set Ahmed's budget" isn't read as a
   // query. Several phrasings, all meaning "tell me about this client".

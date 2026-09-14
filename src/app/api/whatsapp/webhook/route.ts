@@ -19,6 +19,9 @@ import { continuePhotoCollection, NO_REPLY } from '@/lib/whatsapp/photo-handlers
 import { parseMarketingRequest } from '@/lib/whatsapp/marketing-intent'
 import { requestMarketing } from '@/lib/whatsapp/marketing-handlers'
 import { stageCreateEvent, continueEventFlow, handleQuerySchedule } from '@/lib/whatsapp/calendar-handlers'
+import { findListings, continueListingPick, focusedListing, focusListing, queryFromIntent } from '@/lib/whatsapp/listing-finder'
+import { hasCriteria } from '@/lib/listing-search-core'
+import type { IntentResult } from '@/lib/whatsapp/intent'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 interface Profile {
@@ -62,6 +65,38 @@ async function log(
 }
 
 /**
+ * Resolve which listing a request is about when it has no #number: the words
+ * that identify it ("Khoury's flat in Kaslik"), else the listing the agent
+ * opened last. One search match runs the action on it; several give a
+ * numbered list (carrying an update's change, so the pick applies it).
+ */
+async function withListing(
+  admin: SupabaseClient, profile: Profile, result: IntentResult,
+  run: (r: IntentResult) => Promise<string>, isUpdate = false,
+): Promise<string> {
+  if (result.propertyId) {
+    const answer = await run(result)
+    // A listing acted on by number becomes the current one, for follow-ups.
+    await focusListing(admin, profile, { id: result.propertyId, title: `#${result.propertyId}` })
+    return answer
+  }
+
+  // For an update, the fields are the CHANGE, not search filters — search only
+  // by the identifying words and area.
+  const query = isUpdate ? { text: result.search, location: result.location } : queryFromIntent(result)
+  if (hasCriteria(query)) {
+    const changes = isUpdate && result.fields && Object.keys(result.fields).length ? result.fields : undefined
+    const found = await findListings(admin, profile, query, changes)
+    if (found.resolvedId) return withListing(admin, profile, { ...result, propertyId: found.resolvedId }, run, isUpdate)
+    return found.reply
+  }
+
+  const focus = await focusedListing(admin, profile)
+  if (focus) return run({ ...result, propertyId: focus.id })
+  return run(result)   // the handler's own "which listing?" prompt
+}
+
+/**
  * Decide the reply. Split out from POST so each branch simply returns, rather
  * than assigning into a variable that later branches could still overwrite.
  *
@@ -100,6 +135,12 @@ async function route(
           : 'Cancelled — nothing was saved.',
     }
   }
+
+  // A reply to "which listing?" — opens that listing, and applies the change the
+  // agent asked for if the request carried one ("mark Khoury's flat as sold").
+  const listingPick = await continueListingPick(admin, profile, body,
+    (propertyId, fields) => stagePropertyUpdate(admin, profile, { intent: 'update_property', propertyId, fields }))
+  if (listingPick !== null) return { intent: 'find_listing', answer: listingPick }
 
   // A pending "which client?" pick (e.g. mid-offer) — a numeric reply picks the
   // client and continues the offer, rather than being re-read as a new message.
@@ -160,8 +201,9 @@ async function route(
   switch (intent) {
     case 'query_client':   return { intent, answer: await handleQueryClient(admin, profile, result) }
     case 'query_property': return { intent, answer: await handleQueryProperty(admin, profile, result) }
-    case 'share_listing':  return { intent, answer: await handleShareListing(admin, profile, result, origin) }
-    case 'describe_property': return { intent, answer: await stageDescribeProperty(admin, profile, result) }
+    case 'find_listing':   return { intent, answer: (await findListings(admin, profile, queryFromIntent(result))).reply }
+    case 'share_listing':  return { intent, answer: await withListing(admin, profile, result, r => handleShareListing(admin, profile, r, origin)) }
+    case 'describe_property': return { intent, answer: await withListing(admin, profile, result, r => stageDescribeProperty(admin, profile, r)) }
     case 'log_offer':      return { intent, answer: await stageLogOffer(admin, profile, result) }
     case 'query_offers':   return { intent, answer: await handleQueryOffers(admin, profile, result) }
     case 'accept_offer':   return { intent, answer: await stageResolveOffer(admin, profile, result, 'accept') }
@@ -175,7 +217,7 @@ async function route(
     case 'create_event':   return { intent, answer: await stageCreateEvent(admin, profile, body) }
     case 'help':           return { intent, answer: HELP_TEXT }
     case 'update_client':  return { intent, answer: await stageClientUpdate(admin, profile, result) }
-    case 'update_property':return { intent, answer: await stagePropertyUpdate(admin, profile, result) }
+    case 'update_property':return { intent, answer: await withListing(admin, profile, result, r => stagePropertyUpdate(admin, profile, r), true) }
     case 'update_deal':    return { intent, answer: await stageDealMove(admin, profile, result) }
     case 'query_pipeline': return { intent, answer: await handleQueryPipeline(admin, profile, result) }
     // Starts the multi-step flow, which finishes at the same confirmation step.

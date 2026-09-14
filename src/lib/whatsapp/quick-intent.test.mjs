@@ -279,3 +279,25 @@ test('reminder replies are not claimed here', () => {
     assert.equal(quickIntent(s), null, s)
   }
 })
+
+// ── Finding an existing listing ─────────────────────────────────────────────
+test('quickIntent: finding a listing by owner / title / area', () => {
+  const cases = {
+    'find the listing of Georges Khoury': 'Georges Khoury',
+    'edit the property owned by Haddad': 'Haddad',
+    'edit property of khoury': 'khoury',
+    'open the villa of Rita Haddad?': 'Rita Haddad',
+    'listings of Khoury': 'Khoury',
+    'owner Khoury': 'Khoury',
+    'find owner 70 123 456': '70 123 456',
+    'search listings kaslik villa': 'kaslik villa',
+  }
+  for (const [msg, search] of Object.entries(cases)) {
+    assert.deepEqual(quickIntent(msg), { intent: 'find_listing', search }, msg)
+  }
+})
+
+test('quickIntent: a budget search and a client lookup are not listing finds', () => {
+  assert.equal(quickIntent('search listings under 500k in Beirut')?.intent, 'query_property')
+  assert.equal(quickIntent('info on Khoury')?.intent, 'query_client')
+})

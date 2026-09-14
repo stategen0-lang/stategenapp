@@ -21,6 +21,7 @@ export type Intent =
   | 'create_property'
   | 'query_client'
   | 'query_property'
+  | 'find_listing'
   | 'query_agents'
   | 'query_activity'
   | 'query_schedule'
@@ -46,6 +47,8 @@ export interface IntentResult {
   propertyId?: number
   /** Budget in USD mentioned in a property query. */
   budget?: number
+  /** Words identifying an EXISTING listing: owner name/phone, title words. */
+  search?: string
   /** Location mentioned in a property query. */
   location?: string
   /** Field → value pairs for update intents. */
@@ -56,7 +59,7 @@ export interface IntentResult {
 
 const VALID: Intent[] = [
   'reminder_response', 'feedback', 'update_client', 'update_property', 'update_deal', 'query_pipeline',
-  'create_property', 'query_client', 'query_property', 'query_agents', 'query_activity', 'query_schedule', 'create_event',
+  'create_property', 'query_client', 'query_property', 'find_listing', 'query_agents', 'query_activity', 'query_schedule', 'create_event',
   'create_client', 'share_listing', 'describe_property', 'log_offer', 'query_offers', 'accept_offer', 'reject_offer',
   'query_overdue', 'confirm', 'cancel', 'help', 'unknown',
 ]
@@ -83,6 +86,7 @@ export function parseIntentJson(raw: string | null | undefined): IntentResult {
 
   if (typeof parsed.clientName === 'string' && parsed.clientName.trim()) out.clientName = parsed.clientName.trim()
   if (typeof parsed.location === 'string' && parsed.location.trim()) out.location = parsed.location.trim()
+  if (typeof parsed.search === 'string' && parsed.search.trim()) out.search = parsed.search.trim().slice(0, 120)
   if (typeof parsed.notes === 'string' && parsed.notes.trim()) out.notes = parsed.notes.trim()
 
   const pid = Number(parsed.propertyId)
@@ -118,7 +122,8 @@ Intents:
 - create_event: wants a calendar entry ("book a viewing with Ahmed tomorrow at 3pm")
 - query_overdue: asking which follow-ups or reminders are late ("what follow-ups are overdue")
 - update_client: wants to change a client record ("update Ahmed's budget to 400k")
-- update_property: wants to change a listing ("mark property #23 as sold")
+- find_listing: looking for an EXISTING listing to open, check or edit, identified by its owner's name or phone, words from its title, or its area — NOT matching a budget ("find the listing of Georges Khoury", "edit the property owned by Haddad", "which listing is Rita's", "open the villa in Broummana", "search listings owner 70 123 456"). Put the identifying words (owner name, phone, title words) in "search", the area in "location", and filters in fields: type, transaction, beds, status.
+- update_property: wants to change a listing ("mark property #23 as sold"). With NO #number, put what identifies the listing (owner name, title words) in "search" and its area in "location" ("mark Khoury's apartment in Kaslik as sold" -> search "Khoury apartment", location "Kaslik", fields.status "Sold"). "info on Khoury" alone is a CLIENT (query_client); a listing/property/owner word makes it a listing. A short change that names no listing and no client ("price 300k", "change the price to 280k", "mark it sold", "it has a generator and parking", "now rented") is update_property with just the fields — it applies to the listing the agent has open — NOT a budget search.
 - update_deal: wants to move a client's deal along the sales pipeline ("move Ahmed to negotiating", "mark Ahmed's deal as won")
 - query_pipeline: asking about the deal pipeline or deals in a stage ("what's in negotiation", "show my pipeline", "what am I closing")
 - create_property: wants to add a new listing (describes a property to add)
@@ -135,7 +140,7 @@ Intents:
 - unknown: anything else
 
 JSON shape (omit keys you cannot fill):
-{"intent":"...","clientName":"...","propertyId":123,"budget":500000,"location":"...","fields":{"budget":400000},"notes":"..."}
+{"intent":"...","clientName":"...","propertyId":123,"search":"...","budget":500000,"location":"...","fields":{"budget":400000},"notes":"..."}
 
 Rules:
 - budget is a plain number in USD: "400k" -> 400000, "1.2m" -> 1200000
@@ -203,6 +208,9 @@ Examples (note the typos and varied phrasing):
 "what did the team do today" -> {"intent":"query_activity"}
 "any updates" -> {"intent":"query_activity"}
 "add a client" -> {"intent":"create_client"}
+"find the listing of Georges Khoury" -> {"intent":"find_listing","search":"Georges Khoury"}
+"edit the villa in Broummana owned by Haddad" -> {"intent":"find_listing","search":"Haddad villa","location":"Broummana"}
+"mark Khoury's listing as sold" -> {"intent":"update_property","search":"Khoury","fields":{"status":"Sold"}}
 "new buyer Ahmed looking for a villa in Hamra, budget 600k, 03111222" -> {"intent":"create_client","fields":{"name":"Ahmed","clientType":"buyer","propertyType":"villa","location":"Hamra","budget":600000,"phone":"03111222"}}
 "Hi, I'm looking for a 2 bedroom apartment in Achrafieh around 250k, this is Joe Khoury 03 123456" -> {"intent":"create_client","fields":{"name":"Joe Khoury","clientType":"buyer","propertyType":"apartment","location":"Achrafieh","budget":250000,"beds":2,"phone":"03 123456"}}
 "Client Rana 71 998877 wants to rent an office in Hamra, budget 2000/month" -> {"intent":"create_client","fields":{"name":"Rana","clientType":"renter","propertyType":"office","location":"Hamra","budget":2000,"phone":"71 998877"}}
