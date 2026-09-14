@@ -16,7 +16,7 @@ import { parseConnect, isStopMessage, normalizeCode, pairingExpired } from '@/li
 import { handleAgentActivity, handleOverdueReminders, handleActivityFeed } from '@/lib/whatsapp/manager-handlers'
 import { stageLogOffer, stageResolveOffer, handleQueryOffers, continueOfferPick } from '@/lib/whatsapp/offer-handlers'
 import { continuePhotoCollection, NO_REPLY } from '@/lib/whatsapp/photo-handlers'
-import { parseMarketingRequest } from '@/lib/whatsapp/marketing-intent'
+import { parseMarketingRequest, isMarketingRequestWithoutId } from '@/lib/whatsapp/marketing-intent'
 import { requestMarketing } from '@/lib/whatsapp/marketing-handlers'
 import { stageCreateEvent, continueEventFlow, handleQuerySchedule } from '@/lib/whatsapp/calendar-handlers'
 import { findListings, continueListingPick, focusedListing, focusListing, queryFromIntent } from '@/lib/whatsapp/listing-finder'
@@ -165,6 +165,16 @@ async function route(
   // "send #45 to marketing" — staged, then sent on YES.
   const marketingId = parseMarketingRequest(body)
   if (marketingId) return { intent: 'send_marketing', answer: await requestMarketing(admin, profile, marketingId, origin) }
+  if (isMarketingRequestWithoutId(body)) {
+    // "send it to marketing" — the listing the agent opened.
+    const focus = await focusedListing(admin, profile)
+    return {
+      intent: 'send_marketing',
+      answer: focus
+        ? await requestMarketing(admin, profile, focus.id, origin)
+        : 'Which listing? Send "send #23 to marketing", or find it first — e.g. "find the listing of Khoury".',
+    }
+  }
 
   if (isClientForm(body)) {
     return { intent: 'create_client', answer: await startClientFormFlow(admin, profile, body) }

@@ -4,7 +4,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  isPhotoDone, isPhotoChatter, parsePhotoTarget, parseCaptionTarget, appendPhoto, photoCount,
+  isPhotoDone, isPhotoChatter, isPhotoRequest, parsePhotoTarget, parseCaptionTarget, appendPhoto, photoCount,
 } from './photo-intent.ts'
 
 // The reported bug: small talk before the photos closed the window, so every
@@ -84,4 +84,13 @@ test('photoCount: tolerant', () => {
   assert.equal(photoCount('["a","b"]'), 2)
   assert.equal(photoCount(null), 0)
   assert.equal(photoCount('junk'), 0)
+})
+
+test('isPhotoRequest: asking to add photos without naming a listing', () => {
+  for (const s of ['photos', 'Photos', 'add photos', 'send pics', 'upload pictures', 'I want to add photos', 'add more photos to it', 'sowar']) {
+    assert.equal(isPhotoRequest(s), true, s)
+  }
+  for (const s of ['photos for #23', 'here are the photos of the villa in Kaslik which the owner sent', 'mark sold', '', 'the photos are bad']) {
+    assert.equal(isPhotoRequest(s), false, s)
+  }
 })

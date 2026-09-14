@@ -16,3 +16,13 @@ export function parseMarketingRequest(text: string | null | undefined): number |
     || s.match(/\bmarketing\s+(\d{1,9})\s*$/i)
   return m ? Number(m[1]) : null
 }
+
+/**
+ * "send it to marketing", "send to marketing", "marketing" — no listing number.
+ * Used with the listing the agent opened (listing-finder).
+ */
+export function isMarketingRequestWithoutId(text: string | null | undefined): boolean {
+  const s = String(text ?? '').trim()
+  if (!s || s.length > 50 || /\d/.test(s)) return false
+  return /^(?:send|email|mail|forward|share)?\s*(?:it|this|this\s+one|this\s+listing|the\s+listing|listing|property)?\s*(?:to\s+)?(?:the\s+)?marketing(?:\s+team)?\s*(?:please|pls)?[.!?]*$/i.test(s)
+}

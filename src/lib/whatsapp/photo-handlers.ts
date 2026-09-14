@@ -17,7 +17,7 @@ import { downloadMedia, type BotReply, type InboundMessage } from '@/lib/whatsap
 import { storePhotoBytes } from '@/lib/upload-server'
 import { canEditProperty } from '@/lib/permissions'
 import {
-  isPhotoDone, isPhotoChatter, parsePhotoTarget, parseCaptionTarget, appendPhoto, photoCount,
+  isPhotoDone, isPhotoChatter, isPhotoRequest, parsePhotoTarget, parseCaptionTarget, appendPhoto, photoCount,
 } from '@/lib/whatsapp/photo-intent'
 import { offerMarketing } from '@/lib/whatsapp/marketing-handlers'
 
@@ -25,6 +25,9 @@ type Row = Record<string, unknown>
 const WINDOW_MS = 24 * 3600_000
 const FLOW = 'collecting_photos'
 const HELP_FLOW = 'photo_help'
+// Set by listing-finder when an agent opens a listing (kept in step with it).
+const FOCUS_FLOW = 'listing_focus'
+const FOCUS_MS = 60 * 60_000
 // Media we can't attach (a video, a voice note, a non-image file).
 const OTHER_MEDIA = new Set(['video', 'audio', 'document', 'sticker'])
 
@@ -143,6 +146,16 @@ async function strayPhoto(admin: SupabaseClient, profile: Profile): Promise<BotR
   return { text, buttons: [{ id: `photos_${latest.id}`, title: `Photos for #${latest.id}` }] }
 }
 
+/** Open the photo window for a listing the agent may edit. */
+async function startWindow(admin: SupabaseClient, profile: Profile, id: number): Promise<string> {
+  const listing = await editableListing(admin, profile, id)
+  if (listing === 'missing') return `There's no listing #${id}. Check the number and try again.`
+  if (listing === 'forbidden') return `#${id} belongs to another agent, so I can't add photos to it.`
+  await openWindow(admin, profile, id)
+  const have = photoCount(listing.Photos)
+  return `📸 Send the photos for #${id} "${listing.Title}" now (one or several)${have ? ` — it has ${have} already` : ''}. Reply "done" when finished.`
+}
+
 export async function continuePhotoCollection(
   admin: SupabaseClient, profile: Profile, inbound: InboundMessage, origin: string,
 ): Promise<BotReply | null> {
@@ -157,29 +170,39 @@ export async function continuePhotoCollection(
   const windowId = open ? Number(((state as Row).context as Row | null)?.propertyId) || null : null
   const text = inbound.text.trim()
 
+  // The listing the agent opened with "find the listing of …" (listing-finder),
+  // so "photos" — or just sending them — needs no #number.
+  const focusId = flow === FOCUS_FLOW
+    && Date.now() - new Date(String((state as Row).updated_at)).getTime() < FOCUS_MS
+    ? Number(((state as Row).context as Row | null)?.propertyId) || null
+    : null
+
   // ── A photo ────────────────────────────────────────────────────────────────
   if (inbound.image) {
     const captioned = parseCaptionTarget(inbound.image.caption, { allowBareNumber: !windowId })
-    const target = captioned ?? windowId
+    const target = captioned ?? windowId ?? focusId
     if (!target) return strayPhoto(admin, profile)
-    if (captioned && captioned !== windowId) {
-      const listing = await editableListing(admin, profile, captioned)
-      if (listing === 'missing') return `There's no listing #${captioned}. Check the number and resend the photo.`
-      if (listing === 'forbidden') return `#${captioned} belongs to another agent, so I can't add photos to it.`
+    // Named in the caption, or the opened listing (which may be another agent's —
+    // anyone can find a listing by its title): check they may edit it.
+    if (target !== windowId) {
+      const listing = await editableListing(admin, profile, target)
+      if (listing === 'missing') return `There's no listing #${target}. Check the number and resend the photo.`
+      if (listing === 'forbidden') return `#${target} belongs to another agent, so I can't add photos to it.`
     }
     return savePhoto(admin, profile, target, inbound.image.id)
   }
 
+  // ── "photos" with a listing open: open its photo window ───────────────────
+  if (isPhotoRequest(text) && !open) {
+    if (!focusId) {
+      return 'Which listing are the photos for? Send "photos for #23", or find it first — e.g. "find the listing of Khoury".'
+    }
+    return startWindow(admin, profile, focusId)
+  }
+
   // ── "photos for #23": open (or switch) the window ─────────────────────────
   const target = parsePhotoTarget(text)
-  if (target) {
-    const listing = await editableListing(admin, profile, target)
-    if (listing === 'missing') return `There's no listing #${target}. Check the number and try again.`
-    if (listing === 'forbidden') return `#${target} belongs to another agent, so I can't add photos to it.`
-    await openWindow(admin, profile, target)
-    const have = photoCount(listing.Photos)
-    return `📸 Send the photos for #${target} now (one or several)${have ? ` — it has ${have} already` : ''}. Reply "done" when finished.`
-  }
+  if (target) return startWindow(admin, profile, target)
 
   // A leftover "which listing?" marker: drop it and route this message normally.
   if (flow === HELP_FLOW) { await clear(); return null }

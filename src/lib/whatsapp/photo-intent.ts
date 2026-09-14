@@ -27,6 +27,16 @@ export function isPhotoChatter(text: string | null | undefined): boolean {
 }
 
 /**
+ * A request to add photos that names no listing: "photos", "add photos", "send
+ * pics", "I want to upload pictures". Used with the listing the agent opened.
+ */
+export function isPhotoRequest(text: string | null | undefined): boolean {
+  const s = String(text ?? '').trim()
+  if (!s || s.length > 50 || /\d/.test(s) || !PHOTO_TALK.test(s)) return false
+  return /^(?:(?:i\s+)?(?:want|need|would\s+like)\s+to\s+)?(?:add|send|upload|attach|put|take)?\s*(?:some|more|the|new)?\s*(?:photos?|pics?|pictures?|images?|sowar|swar)(?:\s+(?:to\s+it|for\s+it|to\s+this|please|pls))?\s*[.!?]*$/i.test(s)
+}
+
+/**
  * Which listing a text asks to add photos to: "photos for #23", "add pics to
  * 23", "#23 photos", "photos 23". Needs a photo word, so "mark #23 as sold" is
  * never read as one.

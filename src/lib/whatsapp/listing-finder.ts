@@ -84,8 +84,8 @@ function openedText(h: ListingHit | { id: number; title: string }, lead = 'Opene
     'What would you like to do? For example:',
     '• "price 300k" or "mark sold"',
     '• "it has a generator and parking"',
-    '• "send me the link"',
-    `• "photos for #${h.id}" · "send #${h.id} to marketing"`,
+    '• "photos" — then send them',
+    '• "send me the link" · "send to marketing"',
   ].join('\n')
 }
 
