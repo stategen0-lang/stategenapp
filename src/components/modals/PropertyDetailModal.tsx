@@ -7,6 +7,7 @@ import { useLockBodyScroll } from '@/hooks/use-lock-body-scroll'
 import MatchCards from '@/components/matching/MatchCards'
 import OffersSection from '@/components/offers/OffersSection'
 import ClientDetailModal from './ClientDetailModal'
+import { Lightbox } from '@/components/listing/PhotoGallery'
 import { SendToMarketingButton } from '@/components/marketing/SendToMarketing'
 
 interface Props {
@@ -25,6 +26,8 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
   const sc = statusStyle(p.status)
   const photos = p.photos ?? []
   const [activePhoto, setActivePhoto] = useState(0)
+  // Tapping the main photo opens every photo full screen, starting on this one.
+  const [fullscreen, setFullscreen] = useState(false)
   const [stackedClient, setStackedClient] = useState<Client | null>(null)
   const [shareOpen, setShareOpen] = useState(false)
   const [shareBusy, setShareBusy] = useState(false)
@@ -95,7 +98,11 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
           <div className="relative shrink-0" style={{ height: 200 }}>
             {photos.length > 0 ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={photos[activePhoto]} alt={p.title} className="w-full h-full object-cover" />
+              <img
+                src={photos[activePhoto]} alt={p.title}
+                className="w-full h-full object-cover cursor-zoom-in"
+                onClick={() => setFullscreen(true)}
+              />
             ) : (
               <div className="w-full h-full" style={{ background: TYPE_GRADIENTS[p.type] ?? 'linear-gradient(135deg,#16294A,#2E5288)' }} />
             )}
@@ -339,6 +346,15 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
       </div>
 
       {/* Stacked client modal — comes later in DOM so renders above at same z-index */}
+      {fullscreen && photos.length > 0 && (
+        <Lightbox
+          photos={photos}
+          title={p.title}
+          start={activePhoto}
+          // Closing lands the details view on the photo you ended on.
+          onClose={last => { setActivePhoto(last); setFullscreen(false) }}
+        />
+      )}
       {stackedClient && (
         <ClientDetailModal
           client={stackedClient}

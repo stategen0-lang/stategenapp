@@ -132,7 +132,7 @@ function Scrim() {
 }
 
 /** Full-screen viewer: swipe (or arrow keys) between photos, ✕ / Esc to close. */
-function Lightbox({ photos, title, start, onClose }: {
+export function Lightbox({ photos, title, start, onClose }: {
   photos: string[]; title: string; start: number; onClose: (lastIndex: number) => void
 }) {
   const scroller = useRef<HTMLDivElement>(null)
