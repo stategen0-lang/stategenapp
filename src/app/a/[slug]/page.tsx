@@ -4,6 +4,7 @@ import { dbRowToProperty } from '@/lib/db-mappers'
 import { makeShareToken, shareSecret } from '@/lib/share'
 import { formatPrice, TYPE_GRADIENTS } from '@/lib/data'
 import CardPhotos from '@/components/listing/CardPhotos'
+import FactBadges from '@/components/listing/FactBadges'
 import MicrositeContactForm from '@/components/microsite/MicrositeContactForm'
 
 // Public agency microsite: a branded page listing an agency's available
@@ -15,7 +16,7 @@ export const dynamic = 'force-dynamic'
 type Row = Record<string, unknown>
 
 interface Brand { name: string; logoUrl: string | null; color: string }
-interface Card { token: string; title: string; type: string; transaction: string; price: number; rent: number; district: string; city: string; beds: number; baths: number; size: number; photos: string[]; hasVideo: boolean }
+interface Card { token: string; title: string; type: string; transaction: string; price: number; rent: number; district: string; city: string; beds: number; baths: number; size: number; parkings: number; view: string; terrace: boolean; balcony: boolean; garden: boolean; photos: string[]; hasVideo: boolean }
 interface Site { brand: Brand; cards: Card[] }
 
 function readableOn(hex: string): string {
@@ -56,6 +57,8 @@ async function loadSite(slug: string): Promise<{ site: Site; companyId: number }
       title: p.title, type: p.type, transaction: p.transaction,
       price: p.price, rent: p.rent, district: p.district, city: p.city,
       beds: p.beds, baths: p.baths, size: p.size,
+      // Client-safe listing facts for the badges (the same ones the public listing page shows).
+      parkings: p.parkings ?? 0, view: p.view ?? '', terrace: !!p.terrace, balcony: !!p.balcony, garden: !!p.garden,
       photos: (p.photos ?? []).filter(Boolean),
       hasVideo: !!p.video,
     }))
@@ -149,9 +152,7 @@ export default async function MicrositePage({ params, searchParams }: { params: 
                       <p className="text-sm font-extrabold whitespace-nowrap" style={{ color: brand.color === '#14223F' ? '#1F7A4D' : brand.color }}>{price}</p>
                     </div>
                     <p className="text-xs mt-0.5" style={{ color: SUB }}>{[card.district, card.city].filter(Boolean).join(', ')}</p>
-                    <p className="text-xs mt-1.5" style={{ color: '#9AA3B2' }}>
-                      {[card.beds > 0 ? `${card.beds} bd` : null, card.baths > 0 ? `${card.baths} ba` : null, card.size > 0 ? `${card.size} m²` : null].filter(Boolean).join(' · ')}
-                    </p>
+                    <FactBadges listing={card} className="mt-2" />
                   </div>
                 </a>
               )
