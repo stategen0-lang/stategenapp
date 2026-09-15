@@ -41,17 +41,20 @@ export default function PropertyCard({ property: p, agent, onClick }: Props) {
       onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.11)')}
       onMouseLeave={e => (e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.07)')}
     >
-      {/* Header — the listing photo when there is one, else the type gradient */}
+      {/* Header — the listing photo when there is one, else the type gradient.
+          A photo-shaped 16:10 area that grows with the card, not a fixed strip
+          (it was 112px tall at any width, which cropped photos to a sliver). */}
       <div
-        className="h-28 relative overflow-hidden"
-        style={{ background: TYPE_GRADIENTS[p.type] ?? 'linear-gradient(135deg,#16294A,#2E5288)' }}
+        className="relative overflow-hidden"
+        style={{ aspectRatio: '16 / 10', background: TYPE_GRADIENTS[p.type] ?? 'linear-gradient(135deg,#16294A,#2E5288)' }}
       >
         {p.photos?.[0] && (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={p.photos[0]} alt="" className="absolute inset-0 w-full h-full object-cover" />
-            {/* Scrim so the white chips/title stay legible over any photo */}
-            <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(10,20,40,0.30) 0%, rgba(10,20,40,0.62) 100%)' }} />
+            {/* Shade only the top (chips) and bottom (title) edges so the text
+                stays legible while the middle of the photo shows clearly. */}
+            <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(10,20,40,0.38) 0%, rgba(10,20,40,0) 26%, rgba(10,20,40,0) 52%, rgba(10,20,40,0.72) 100%)' }} />
           </>
         )}
         <div className="relative h-full px-4 pt-3 pb-3 flex flex-col justify-between">
