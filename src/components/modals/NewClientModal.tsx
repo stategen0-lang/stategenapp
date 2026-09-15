@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import {
   Client, ClientType, ClientStatus, ClientReq,
   PROPERTIES, CURRENT_AGENT_ID, formatPrice, CLIENT_TAG_PRESETS, tagStyle,
-  PROPERTY_TYPES, propertyTypeLabel, FURNISHINGS, FLOORS, propertyLocation
+  PROPERTY_TYPES, propertyTypeLabel, FURNISHINGS, FLOORS, propertyLocation, PROPERTY_AMENITIES, BUILDING_FEATURES
 } from '@/lib/data'
 import { matchProperties, MATCH_THRESHOLD, PropertyMatch } from '@/lib/matching'
 import { dbRowToProperty } from '@/lib/db-mappers'
@@ -26,7 +26,8 @@ let _nextId = 200
 
 const emptyReq = (): ClientReq => ({
   transaction: '', type: '', location: '', locations: [], priceMin: 0, priceMax: 0,
-  beds: 0, baths: 0, size: 0, garden: false, balcony: false,
+  beds: 0, baths: 0, size: 0, garden: false, balcony: false, terrace: false,
+  amenities: [], buildingFeatures: [],
   view: '', furnishing: '', floor: '', notes: '',
 })
 
@@ -93,6 +94,35 @@ export default function NewClientModal({ onClose, onSaved, onDeleted, matchThres
 
   function setR(k: keyof ClientReq, v: string | number | boolean) {
     setReq(r => ({ ...r, [k]: v }))
+  }
+
+  /** Tick / untick one must-have feature in a list. */
+  function toggleFeature(k: 'amenities' | 'buildingFeatures', name: string) {
+    setReq(r => {
+      const list = r[k] ?? []
+      return { ...r, [k]: list.includes(name) ? list.filter(x => x !== name) : [...list, name] }
+    })
+  }
+
+  // Same look as the listing form's feature chips, so a client's must-haves read
+  // exactly like a listing's features.
+  function featureChip(labelText: string, on: boolean, onClick: () => void) {
+    return (
+      <button
+        key={labelText}
+        type="button"
+        onClick={onClick}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors"
+        style={{
+          border: on ? '1.5px solid #2E5288' : '1.5px solid #EEF0F4',
+          background: on ? '#EAF0FA' : '#F7F8FB',
+          color: on ? '#2E5288' : '#6A7488',
+        }}
+      >
+        <span className="w-4 h-4 rounded flex items-center justify-center text-[10px] text-white" style={{ background: on ? '#2E5288' : '#fff', border: on ? 'none' : '1.5px solid #C4CAD6' }}>{on ? '✓' : ''}</span>
+        {labelText}
+      </button>
+    )
   }
 
   function addLocation() {
@@ -300,6 +330,10 @@ export default function NewClientModal({ onClose, onSaved, onDeleted, matchThres
                   <input className={inp} style={inpStyle} type="number" value={req.baths || ''} onChange={e => setR('baths', parseInt(e.target.value) || 0)} placeholder="2" />
                 </div>
                 <div>
+                  <label className={label} style={labelStyle}>Parking spaces</label>
+                  <input className={inp} style={inpStyle} type="number" value={req.parkings || ''} onChange={e => setR('parkings', parseInt(e.target.value) || 0)} placeholder="1" />
+                </div>
+                <div>
                   <label className={label} style={labelStyle}>Min size (m²)</label>
                   <input className={inp} style={inpStyle} type="number" value={req.size || ''} onChange={e => setR('size', parseInt(e.target.value) || 0)} placeholder="100" />
                 </div>
@@ -327,15 +361,24 @@ export default function NewClientModal({ onClose, onSaved, onDeleted, matchThres
                 </div>
               </div>
 
+              {/* Must-have features — the same options as a listing, so they match */}
+              <div>
+                <label className={label} style={labelStyle}>Must-have features</label>
+                <div className="flex gap-2 flex-wrap">
+                  {featureChip('Garden', req.garden, () => setR('garden', !req.garden))}
+                  {featureChip('Balcony', req.balcony, () => setR('balcony', !req.balcony))}
+                  {featureChip('Terrace', !!req.terrace, () => setR('terrace', !req.terrace))}
+                  {PROPERTY_AMENITIES.map(a => featureChip(a, (req.amenities ?? []).includes(a), () => toggleFeature('amenities', a)))}
+                </div>
+              </div>
+              <div>
+                <label className={label} style={labelStyle}>Building features</label>
+                <div className="flex gap-2 flex-wrap">
+                  {BUILDING_FEATURES.map(a => featureChip(a, (req.buildingFeatures ?? []).includes(a), () => toggleFeature('buildingFeatures', a)))}
+                </div>
+              </div>
+
               <div className="flex flex-wrap gap-4 pt-1">
-                <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: '#14223F' }}>
-                  <input type="checkbox" checked={req.garden} onChange={e => setR('garden', e.target.checked)} />
-                  Garden required
-                </label>
-                <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: '#14223F' }}>
-                  <input type="checkbox" checked={req.balcony} onChange={e => setR('balcony', e.target.checked)} />
-                  Balcony required
-                </label>
                 {type === 'Renter' && (
                   <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: '#14223F' }}>
                     <input type="checkbox" checked={req.advancedPayment ?? false} onChange={e => setR('advancedPayment', e.target.checked)} />

@@ -160,7 +160,8 @@ using ONLY these key names (anything else is discarded):
   "location" is the single area/neighbourhood (e.g. "Achrafieh") — one place, not a separate city
 For create_client, put fields using ONLY these keys: name, phone,
 clientType (buyer|renter), propertyType, locations (ARRAY of areas), budget, beds,
-baths, parkings, size (sqm), view, furnishing, floor, balcony, advancedPayment, notes.
+baths, parkings, size (sqm), view, furnishing, floor, balcony, advancedPayment,
+features (ARRAY of wanted features: parking, elevator, generator, AC, pool…), notes.
 Agents write briefs in Lebanese Arabizi (Arabic in Latin letters, 3=ع 5/7=خ/ح):
 "bado/bada"=wants, "hiye/huwe/hene"=she/he/they, "eza"=if, "ma 3ando mechkle"=doesn't mind,
 "3mar jdid"=new building, "b3id 3an"=far from, "GF"=ground floor, "ma7al"=shop.

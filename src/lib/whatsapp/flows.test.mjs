@@ -10,7 +10,7 @@ import {
   seedContext, seedForm, derivedTitle, isStartListing, isStartClient,
   coerceType, extrasOf, answersOf, EXTRA_KEY,
   renderForm, parseForm, missingMandatory, firstMissing, nextQuestion,
-  CLIENT_TEMPLATE, looksLikeForm, isClientForm, isTemplateRequest,
+  CLIENT_TEMPLATE, looksLikeForm, isClientForm, isTemplateRequest, sortClientFeatures,
 } from './flows.ts'
 import { buildUpdate, PROPERTY_FIELDS } from './writes.ts'
 
@@ -470,4 +470,37 @@ test('buildUpdate (listing): the confirmation lists ticked features readably', (
   assert.ok(u.changes.includes('Building features: Elevator, Generator'))
   assert.ok(u.changes.includes('Balcony: ✓'))
   assert.ok(u.changes.includes('Floor: Mid floor'))
+})
+
+// ── Client features → the client form's must-have boxes ─────────────────────
+test('sortClientFeatures: a brief\'s features tick the client form, the rest stays in notes', () => {
+  const ctx = sortClientFeatures({
+    name: 'Dana', features: ['mid floor', 'parking', 'elevator', 'generator', 'balcony', 'sea view', 'near schools'],
+    notes: 'She and her son, no GF',
+  })
+  assert.equal(ctx.floor, 'Mid floor')
+  assert.equal(ctx.parkings, 1)
+  assert.equal(ctx.balcony, true)
+  assert.equal(ctx.view, 'Sea')
+  assert.deepEqual(ctx.buildingFeatures, ['Elevator', 'Generator'])
+  assert.equal('features' in ctx, false)
+  assert.equal(ctx.notes, 'She and her son, no GF, near schools')
+})
+
+test('sortClientFeatures: stated fields win; nothing to sort leaves the context alone', () => {
+  const ctx = sortClientFeatures({ floor: 'Last floor', parkings: 2, features: ['mid floor', 'parking'] })
+  assert.equal(ctx.floor, 'Last floor')
+  assert.equal(ctx.parkings, 2)
+  const plain = { name: 'Rami', budget: 1000 }
+  assert.equal(sortClientFeatures(plain), plain)
+})
+
+test('client template: the Features line reaches the flow context', () => {
+  const { context } = parseClient('1- Name: Dana\n16- Features: parking, elevator, mid floor\n17- Notes: near schools')
+  assert.deepEqual(context.features, ['parking', 'elevator', 'mid floor'])
+  const sorted = sortClientFeatures(context)
+  assert.equal(sorted.parkings, 1)
+  assert.deepEqual(sorted.buildingFeatures, ['Elevator'])
+  assert.equal(sorted.floor, 'Mid floor')
+  assert.equal(sorted.notes, 'near schools')
 })

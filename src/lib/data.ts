@@ -149,6 +149,11 @@ export interface ClientReq {
   parkings?: number
   garden: boolean
   balcony: boolean
+  terrace?: boolean
+  /** Must-have unit amenities / building features — the same option names as a
+   *  listing's (PROPERTY_AMENITIES / BUILDING_FEATURES), so they can be matched. */
+  amenities?: string[]
+  buildingFeatures?: string[]
   view?: string               // preferred view (Sea, Mountain…)
   furnishing?: Furnishing | ''
   buildingAge?: number        // max acceptable building age (yrs)

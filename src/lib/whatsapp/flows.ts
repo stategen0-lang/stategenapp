@@ -175,6 +175,9 @@ export const CREATE_CLIENT_STEPS: FlowStep[] = [
   { key: 'floor',       label: 'Floor',         mandatory: false, hint: 'ground/mid/last', coerce: coerceFloor, aliases: ['level'] },
   { key: 'balcony',     label: 'Balcony',       mandatory: false, coerce: toYesNo, aliases: ['terrace'] },
   { key: 'advancedPayment', label: 'Can pay advance', mandatory: false, coerce: toYesNo, aliases: ['payment method', 'advance', 'advance payment', 'advanced payment', 'months ahead', 'can pay advance'] },
+  // Wanted features ("parking, elevator, mid floor") — sorted into the client form's
+  // fields and must-have boxes when the client is saved (sortClientFeatures).
+  { key: 'features',    label: 'Features',      mandatory: false, coerce: toList, aliases: ['must haves', 'must-haves', 'must have', 'amenities', 'extras', 'wants', 'requirements'] },
   { key: 'notes',       label: 'Notes',         mandatory: false, coerce: toText, aliases: ['comment', 'comments', 'comment keep in mind', 'keep in mind', 'remarks', 'note'] },
 ]
 
@@ -253,10 +256,11 @@ export const CLIENT_TEMPLATE = [
   '13- Balcony:',
   '14- Parking:',
   '15- Advance payment:',
-  '16- Notes:',
+  '16- Features:',
+  '17- Notes:',
   '',
   'Several areas is fine — "Zouk, Kaslik, Aintoura". So is a range — "400$ - 450$".',
-  'Anything else (schools nearby, "not close to the beach", who is moving in) goes in Notes.',
+  'List wanted features like "parking, elevator, mid floor, sea view". Anything else (schools nearby, "not close to the beach", who is moving in) goes in Notes.',
   "I'll ask for anything required you left out, and show you the client before it's saved.",
 ].join('\n')
 
@@ -532,4 +536,37 @@ export function derivedTitle(context: FlowContext): string {
     context.neighborhood || context.location ? `in ${context.neighborhood || context.location}` : null,
   ].filter(Boolean)
   return parts.join(' ')
+}
+
+/**
+ * A client brief's features — the "features" list the model extracted plus any
+ * feature-only clauses left in the notes — folded into the same fields the web
+ * client form shows: floor, furnishing, view, parking, garden/balcony/terrace
+ * and the must-have amenity / building-feature tick-boxes. A value stated under
+ * its own key wins; what has no field (or is negated, "no GF") stays in notes.
+ */
+export function sortClientFeatures(context: FlowContext): FlowContext {
+  if (context.features === undefined && !context.notes) return context
+  const fromList = sortListingFeatures(context.features)
+  const fromNotes = extractFeaturesFromNotes(context.notes)
+  const found = mergeFeatureFields(fromList.fields, fromNotes.fields)
+  const out: FlowContext = { ...context }
+  delete out.features
+
+  for (const key of ['floor', 'furnishing', 'view', 'parkings'] as const) {
+    if ((out[key] === undefined || out[key] === null || out[key] === '') && found[key] !== undefined) out[key] = found[key]
+  }
+  for (const key of ['garden', 'balcony', 'terrace'] as const) {
+    if (found[key]) out[key] = true
+  }
+  for (const key of ['amenities', 'buildingFeatures'] as const) {
+    const merged = [...new Set([...(Array.isArray(out[key]) ? out[key] as string[] : []), ...(found[key] ?? [])])]
+    if (merged.length) out[key] = merged
+  }
+
+  // A client doesn't "have" renovation; keep what they said about it as a note.
+  const leftover = [fromNotes.notes, found.needsRenovation ? 'needs renovation' : '', ...fromList.unmatched].filter(Boolean).join(', ')
+  if (leftover) out.notes = leftover
+  else delete out.notes
+  return out
 }

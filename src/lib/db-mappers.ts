@@ -82,6 +82,9 @@ export function dbRowToClient(row: Record<string, unknown>, idx: number): Client
     // These live in the notes blob and were previously not read back on edit.
     garden: !!reqExtras.garden,
     balcony: !!reqExtras.balcony,
+    terrace: !!reqExtras.terrace,
+    amenities: Array.isArray(reqExtras.amenities) ? (reqExtras.amenities as unknown[]).filter((a): a is string => typeof a === 'string') : [],
+    buildingFeatures: Array.isArray(reqExtras.buildingFeatures) ? (reqExtras.buildingFeatures as unknown[]).filter((a): a is string => typeof a === 'string') : [],
     view: (reqExtras.view as string) ?? '',
     furnishing: reqExtras.furnishing as ClientReq['furnishing'],
     buildingAge: reqExtras.buildingAge as number | undefined,

@@ -289,8 +289,13 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
                   ...(c.req.furnishing ? [{ label: 'Furnishing', value: c.req.furnishing }] : []),
                   ...(c.req.buildingAge ? [{ label: 'Max age', value: `${c.req.buildingAge} yrs` }] : []),
                   ...(c.req.floor ? [{ label: 'Floor', value: c.req.floor }] : []),
+                  ...((c.req.parkings ?? 0) > 0 ? [{ label: 'Parking', value: String(c.req.parkings) }] : []),
                   { label: 'Garden',      value: c.req.garden  ? 'Required' : 'No pref' },
                   { label: 'Balcony',     value: c.req.balcony ? 'Required' : 'No pref' },
+                  ...(c.req.terrace ? [{ label: 'Terrace', value: 'Required' }] : []),
+                  ...([...(c.req.amenities ?? []), ...(c.req.buildingFeatures ?? [])].length
+                    ? [{ label: 'Must have', value: [...(c.req.amenities ?? []), ...(c.req.buildingFeatures ?? [])].join(', ') }]
+                    : []),
                   ...(c.req.transaction === 'For Rent' || c.type === 'Renter'
                     ? [{ label: 'Advanced pay', value: c.req.advancedPayment ? 'Can pay' : 'Cannot pay' }]
                     : []),

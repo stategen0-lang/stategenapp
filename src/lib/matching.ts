@@ -33,6 +33,11 @@ export function propFeatures(p: Property): string[] {
   if (p.garden)  out.push('garden')
   if (p.balcony) out.push('balcony')
   if (p.view && p.view !== 'Street') out.push(`${p.view.toLowerCase()} view`)
+  if (p.terrace) out.push('terrace')
+  if ((p.parkings ?? 0) > 0) out.push('parking')
+  // Prefixed so one name can't match inside another ("pool" is not "shared pool").
+  for (const a of p.amenities ?? []) out.push(`unit:${norm(a)}`)
+  for (const b of p.buildingFeatures ?? []) out.push(`building:${norm(b)}`)
   return out
 }
 
@@ -121,6 +126,11 @@ export function computeScore(prop: Property, client: ClientLike): ScoreResult {
   const wish: string[] = [
     ...(client.req.garden  ? ['garden']  : []),
     ...(client.req.balcony ? ['balcony'] : []),
+    // The client form's other must-haves, in propFeatures' terms.
+    ...(client.req.terrace ? ['terrace'] : []),
+    ...((client.req.parkings ?? 0) > 0 ? ['parking'] : []),
+    ...(client.req.amenities ?? []).map(a => `unit:${norm(a)}`),
+    ...(client.req.buildingFeatures ?? []).map(b => `building:${norm(b)}`),
   ]
   const rawBudget = scoreBudget(price, client.budget)
   const typeOk = !client.req.type || prop.type === client.req.type

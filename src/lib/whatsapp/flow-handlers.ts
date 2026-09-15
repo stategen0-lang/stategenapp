@@ -8,7 +8,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   CREATE_PROPERTY_STEPS, CREATE_CLIENT_STEPS,
-  seedContext, seedForm, missingMandatory, firstMissing, nextQuestion,
+  seedContext, seedForm, missingMandatory, firstMissing, nextQuestion, sortClientFeatures,
   derivedTitle, answersOf, extrasOf, EXTRA_KEY, isStartListing, isStartClient,
   parseForm, looksLikeForm,
   type FlowStep, type FlowContext,
@@ -32,7 +32,16 @@ interface FlowConfig {
 // onto the running context, reusing the same seeders the opening message uses.
 function mergeExtracted(flow: FlowName, prev: FlowContext, fields: Record<string, unknown>): FlowContext {
   if (!Object.keys(fields).length) return prev
-  if (flow === 'create_client') return { ...prev, ...seedForm(fields, CREATE_CLIENT_STEPS) }
+  if (flow === 'create_client') {
+    const seeded = seedForm(fields, CREATE_CLIENT_STEPS)
+    const merged: FlowContext = { ...prev, ...seeded }
+    // Wanted features and notes given across several replies add up.
+    if (Array.isArray(prev.features) && Array.isArray(seeded.features)) {
+      merged.features = [...new Set([...(prev.features as string[]), ...(seeded.features as string[])])]
+    }
+    if (prev.notes && seeded.notes && prev.notes !== seeded.notes) merged.notes = `${prev.notes}, ${seeded.notes}`
+    return merged
+  }
   const seeded = seedContext(fields)   // property: answers + an __extra bag
   const before = extrasOf(prev)
   const extra = { ...before, ...extrasOf(seeded) }
@@ -83,8 +92,11 @@ async function finishProperty(admin: SupabaseClient, profile: Profile, context: 
   })
 }
 
-async function finishClient(admin: SupabaseClient, profile: Profile, context: FlowContext): Promise<string> {
+async function finishClient(admin: SupabaseClient, profile: Profile, briefContext: FlowContext): Promise<string> {
   await clearFlow(admin, profile.id)
+  // Features ("parking, elevator, mid floor") become the client form's fields and
+  // must-have boxes; only what has no field stays in the notes.
+  const context = sortClientFeatures(briefContext)
 
   const clientType = String(context.clientType)              // Buyer | Renter
   const transaction = clientType === 'Renter' ? 'For Rent' : 'For Sale'
@@ -120,6 +132,10 @@ async function finishClient(admin: SupabaseClient, profile: Profile, context: Fl
   if (context.furnishing) req.furnishing = context.furnishing
   if (context.floor) req.floor = context.floor
   if (context.balcony != null) req.balcony = context.balcony
+  if (context.garden) req.garden = true
+  if (context.terrace) req.terrace = true
+  if (Array.isArray(context.amenities) && context.amenities.length) req.amenities = context.amenities
+  if (Array.isArray(context.buildingFeatures) && context.buildingFeatures.length) req.buildingFeatures = context.buildingFeatures
   if (context.advancedPayment != null) req.advancedPayment = context.advancedPayment
   if (context.notes) req.notes = context.notes
   // A manager assigns the client to a chosen agent (__ownerAgent, set by the
@@ -143,6 +159,11 @@ async function finishClient(admin: SupabaseClient, profile: Profile, context: Fl
     context.view ? `View: ${context.view}` : null,
     context.floor ? `Floor: ${context.floor}` : null,
     context.balcony ? 'Balcony: required' : null,
+    context.garden ? 'Garden: required' : null,
+    context.terrace ? 'Terrace: required' : null,
+    [...(Array.isArray(context.amenities) ? context.amenities : []), ...(Array.isArray(context.buildingFeatures) ? context.buildingFeatures : [])].length
+      ? `Must have: ${[...(Array.isArray(context.amenities) ? context.amenities : []), ...(Array.isArray(context.buildingFeatures) ? context.buildingFeatures : [])].join(', ')}`
+      : null,
     context.advancedPayment ? 'Can pay advance: yes' : null,
     context.notes ? `Notes: ${context.notes}` : null,
     context.__ownerAgentName ? `Assigned to: ${context.__ownerAgentName}` : null,

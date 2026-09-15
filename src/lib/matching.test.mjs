@@ -240,3 +240,13 @@ test('matchClients: sorts best-first and honours the threshold', () => {
   assert.equal(res.length, 1)
   assert.ok(res[0].score.total >= MATCH_THRESHOLD)
 })
+
+test('propFeatures + wishlist: client must-haves match a listing\'s features', () => {
+  const listing = prop({ price: 500000, amenities: ['Pool'], buildingFeatures: ['Elevator', 'Generator'], parkings: 1, terrace: true })
+  const wantAll = client({ budget: 500000, req: { type: 'Appartement', location: 'Beirut', beds: 3, amenities: ['Pool'], buildingFeatures: ['Elevator'], parkings: 1, terrace: true } })
+  assert.equal(computeScore(listing, wantAll).amenityScore, 100)
+  // "Pool" (private) must not be satisfied by a shared pool.
+  const shared = prop({ price: 500000, buildingFeatures: ['Shared Pool'] })
+  const wantPool = client({ budget: 500000, req: { type: 'Appartement', location: 'Beirut', beds: 3, amenities: ['Pool'] } })
+  assert.equal(computeScore(shared, wantPool).amenityScore, 0)
+})

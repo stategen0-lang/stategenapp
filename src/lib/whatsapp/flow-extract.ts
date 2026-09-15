@@ -24,7 +24,9 @@ const CLIENT_KEYS =
   'locations (ARRAY of the areas they want, e.g. ["Zouk","Kaslik"]), budget (USD number), ' +
   'beds, baths, parkings, size (sqm number), view, furnishing ("Furnished"/"Semi-furnished"/"Unfurnished"), ' +
   'floor ("Ground level"/"Mid floor"/"Last floor"), balcony (true/false), ' +
-  'advancedPayment (true if they can pay months up front), notes (everything else worth keeping)'
+  'advancedPayment (true if they can pay months up front), ' +
+  'features (ARRAY of every feature the client wants, in the agent\'s words, e.g. ["parking","elevator","generator","mid floor","sea view","balcony","maid\'s room"]), ' +
+  'notes (everything else worth keeping that is not a feature)'
 
 // Lebanese agents write briefs in Arabizi — Arabic in Latin letters, with digits
 // for sounds that have no Latin letter (3=ع, 5/7=خ/ح, 2=ء). Without this the
@@ -51,6 +53,7 @@ const CLIENT_RULES = [
   `- Anything that is NOT a field — family/occupation, "prime location", "not close to the beach",`,
   `  "no GF", "far from the highway", urgency — goes into "notes", kept close to the agent's words.`,
   `- An EXCLUSION is never a preference: "No GF" is a note, not floor:"Ground level".`,
+  `- Wanted features (parking, elevator, generator, AC, pool, balcony, terrace, garden, maid's room…) go in the "features" ARRAY, not in notes.`,
   `- A placeholder name ("woman", "a client") is still the name; don't invent one.`,
 ].join('\n')
 
