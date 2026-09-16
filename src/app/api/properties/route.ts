@@ -6,7 +6,7 @@ import { canEditProperty, isManager } from '@/lib/permissions'
 import { loadProperties, propertyAgent } from '@/lib/api-loaders'
 import { createListingAlerts } from '@/lib/alerts-server'
 import { ensureManagerAgentCode } from '@/lib/ensure-manager-code'
-import { DOC_BUCKET } from '@/lib/upload'
+import { DOC_BUCKET, PHOTO_BUCKET, VIDEO_BUCKET, companyObjectPath, unreferencedPaths } from '@/lib/upload'
 
 export async function GET() {
   try {
@@ -217,7 +217,7 @@ export async function DELETE(req: NextRequest) {
 
   const admin = createAdminClient()
   const { data: existing } = await admin
-    .from('Properties').select('id,Amenities').eq('id', id).eq('company_id', session.companyId).maybeSingle()
+    .from('Properties').select('id,Amenities,Photos').eq('id', id).eq('company_id', session.companyId).maybeSingle()
   if (!existing) return NextResponse.json({ error: 'Listing not found.' }, { status: 404 })
   if (!canEditProperty(session, propertyAgent(existing))) {
     return NextResponse.json({ error: 'Only the listing\'s agent or a manager can delete it.' }, { status: 403 })
@@ -226,13 +226,68 @@ export async function DELETE(req: NextRequest) {
   const { error } = await admin.from('Properties').delete().eq('id', id).eq('company_id', session.companyId)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // The private document (e.g. an owner's deed) must not outlive the listing in
-  // storage. Best-effort, after the response.
-  let docPath: string | null = null
-  try { docPath = (JSON.parse((existing.Amenities as string) || '{}').documentPath as string) ?? null } catch { docPath = null }
-  if (docPath && docPath.startsWith(`company-${session.companyId}/`)) {
+  // The listing's files must not outlive it in storage: its photos, its
+  // walkthrough video, and its private document (e.g. an owner's deed). Runs after
+  // the response and is best-effort — a failure leaves files behind, never breaks
+  // the delete.
+  //
+  // Two safety rules (see companyObjectPath / unreferencedPaths in lib/upload):
+  //   • only files inside this company's own storage folder are touched;
+  //   • a photo or video another listing — or the company logo — still points at
+  //     is kept (imports and copied listings can share a file).
+  const companyId = session.companyId
+  let extras: Record<string, unknown> = {}
+  try { extras = JSON.parse((existing.Amenities as string) || '{}') } catch { extras = {} }
+  let photoUrls: unknown[] = []
+  try { const parsed = JSON.parse((existing.Photos as string) || '[]'); if (Array.isArray(parsed)) photoUrls = parsed } catch { photoUrls = [] }
+
+  const photoPaths = photoUrls.map(u => companyObjectPath(u, PHOTO_BUCKET, companyId)).filter((x): x is string => !!x)
+  const videoPath = companyObjectPath(extras.video, VIDEO_BUCKET, companyId)
+  const docPath = typeof extras.documentPath === 'string' && extras.documentPath.startsWith(`company-${companyId}/`) && !extras.documentPath.includes('..')
+    ? extras.documentPath : null
+
+  if (photoPaths.length || videoPath || docPath) {
     after(async () => {
-      try { await admin.storage.from(DOC_BUCKET).remove([docPath!]) } catch { /* best-effort */ }
+      try {
+        // A private document is only ever attached to one listing — remove it outright.
+        if (docPath) await admin.storage.from(DOC_BUCKET).remove([docPath])
+
+        if (photoPaths.length || videoPath) {
+          // The company logo shares the photo bucket.
+          const { data: company } = await admin.from('Companies').select('*').eq('id', companyId).maybeSingle()
+          const logo = String((company as Record<string, unknown> | null)?.logo_url ?? '')
+
+          // Ask the database, one file at a time, whether any remaining listing
+          // still points at it. (Reading every listing instead would stop at
+          // Supabase's 1,000-row default and could miss a reference in a large
+          // agency.) Paths are "company-<id>/<random>.<ext>", so quoting them is
+          // enough to keep them safe inside the filter.
+          const usedElsewhere = async (path: string) => {
+            const { data, error } = await admin
+              .from('Properties').select('id')
+              .eq('company_id', companyId)
+              .or(`Photos.ilike."*${path}*",Amenities.ilike."*${path}*"`)
+              .limit(1)
+            // If the check itself fails, assume it IS used: a leftover file is
+            // harmless, a deleted one another listing needs is not.
+            return !!error || (data ?? []).length > 0
+          }
+          const keepIfUsed = async (paths: string[]) => {
+            const out: string[] = []
+            for (const path of unreferencedPaths(paths, [logo])) {
+              if (!(await usedElsewhere(path))) out.push(path)
+            }
+            return out
+          }
+
+          const photos = await keepIfUsed(photoPaths)
+          if (photos.length) await admin.storage.from(PHOTO_BUCKET).remove(photos)
+          const videos = videoPath ? await keepIfUsed([videoPath]) : []
+          if (videos.length) await admin.storage.from(VIDEO_BUCKET).remove(videos)
+        }
+      } catch (err) {
+        console.error('[properties] file cleanup failed', err)
+      }
     })
   }
 

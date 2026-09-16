@@ -141,3 +141,33 @@ export function videoPath(companyId: number, ext: string, rand: string = randomI
 export function isStoredPhoto(url: string): boolean {
   return typeof url === 'string' && url.includes(`/storage/v1/object/public/${PHOTO_BUCKET}/`)
 }
+
+// ── Cleaning up a deleted listing's files ────────────────────────────────────
+
+/**
+ * The storage path of a file in one of our public buckets, from its URL — but
+ * only if it sits in THIS company's folder. Anything else (another company's
+ * file, a pasted external link, a path trying to climb out with "..") returns
+ * null, so a cleanup can never delete something that isn't the company's own.
+ */
+export function companyObjectPath(url: unknown, bucket: string, companyId: number): string | null {
+  if (typeof url !== 'string') return null
+  const marker = `/storage/v1/object/public/${bucket}/`
+  const at = url.indexOf(marker)
+  if (at === -1) return null
+  let path = url.slice(at + marker.length).split(/[?#]/)[0]
+  try { path = decodeURIComponent(path) } catch { return null }
+  if (!path.startsWith(`company-${companyId}/`) || path.includes('..') || path.endsWith('/')) return null
+  return path
+}
+
+/**
+ * Which of a deleted listing's files are safe to remove: those no remaining
+ * listing (or the company logo) still points at. `stillReferenced` is the raw
+ * text of everything else that can hold a file URL — other listings' Photos and
+ * Amenities, the logo — so a photo shared by two listings survives until both go.
+ */
+export function unreferencedPaths(candidates: string[], stillReferenced: string[]): string[] {
+  const haystack = stillReferenced.join('\n')
+  return [...new Set(candidates)].filter(path => !haystack.includes(path))
+}
