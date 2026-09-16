@@ -5,6 +5,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { isManager } from '@/lib/permissions'
+import { companyHasAccess } from '@/lib/billing'
 import type { Role, Session } from '@/lib/permissions'
 
 const COMPANY_ID = Number(process.env.DEMO_COMPANY_ID ?? 1)
@@ -72,4 +73,18 @@ export async function getCompanyAccess(
     status: (data?.access_status as string) ?? 'active',
     until: (data?.access_until as string | null) ?? null,
   }
+}
+
+/**
+ * Is this company's (manually-billed) access still active?
+ *
+ * The dashboard layout used to be the only thing enforcing this, which made it
+ * UI-only: an expired agency could still read its data by calling the API
+ * directly. Data routes call this so the rule is enforced where it matters — a
+ * StateGen operator is never blocked.
+ */
+export async function companyAccessBlocked(session: Session): Promise<boolean> {
+  if (session.isPlatformAdmin) return false
+  const access = await getCompanyAccess(session.companyId)
+  return !companyHasAccess(access.status, access.until)
 }

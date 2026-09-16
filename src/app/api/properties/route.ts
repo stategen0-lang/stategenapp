@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getSession } from '@/lib/session'
+import { getSession, companyAccessBlocked } from '@/lib/session'
 import { canEditProperty, isManager, owns, type Session } from '@/lib/permissions'
 import { createListingAlerts } from '@/lib/alerts-server'
 import { ensureManagerAgentCode } from '@/lib/ensure-manager-code'
@@ -29,6 +29,11 @@ export async function GET() {
   try {
     const session = await getSession()
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // An expired/suspended agency reads and writes nothing (the UI also redirects
+    // to /renew, but that is only a redirect — this is the rule).
+    if (await companyAccessBlocked(session)) {
+      return NextResponse.json({ error: "Your agency's access has expired." }, { status: 402 })
+    }
 
     const supabase = await createClient()
     const { data, error } = await supabase
@@ -49,6 +54,11 @@ export async function POST(req: NextRequest) {
   try {
     const session = await getSession()
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // An expired/suspended agency reads and writes nothing (the UI also redirects
+    // to /renew, but that is only a redirect — this is the rule).
+    if (await companyAccessBlocked(session)) {
+      return NextResponse.json({ error: "Your agency's access has expired." }, { status: 402 })
+    }
 
     const body = await req.json()
     const supabase = await createClient()
@@ -133,6 +143,11 @@ export async function PATCH(req: NextRequest) {
   try {
     const session = await getSession()
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // An expired/suspended agency reads and writes nothing (the UI also redirects
+    // to /renew, but that is only a redirect — this is the rule).
+    if (await companyAccessBlocked(session)) {
+      return NextResponse.json({ error: "Your agency's access has expired." }, { status: 402 })
+    }
 
     const body = await req.json()
     const { id } = body
@@ -218,6 +233,9 @@ export async function PATCH(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (await companyAccessBlocked(session)) {
+    return NextResponse.json({ error: "Your agency's access has expired." }, { status: 402 })
+  }
 
   const id = Number(req.nextUrl.searchParams.get('id'))
   if (!Number.isInteger(id) || id <= 0) return NextResponse.json({ error: 'A valid listing id is required.' }, { status: 400 })

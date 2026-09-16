@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import type { Session } from '@/lib/permissions'
-import { setCacheOwner } from '@/lib/device-cache'
+import { setCacheOwner, readCache, writeCache } from '@/lib/device-cache'
 
 // Current user's role + agent code, for deciding what the UI renders.
 // Authorisation itself is always enforced server-side.
@@ -26,14 +26,19 @@ function fetchSession(): Promise<Session | null> {
       // Tie any on-device cache to this user: a different user (or none) wipes
       // the previous one's data before a page can read it.
       setCacheOwner(s?.userId ?? null)
+      // Kept so the next page paints with the right name/role instead of 'Agent'.
+      if (s) writeCache('session', s)
       return s
     })
   return inflight
 }
 
 export function useSession() {
-  const [session, setSession] = useState<Session | null>(cached ?? null)
-  const [loading, setLoading] = useState(cached === undefined)
+  // Seed from the device so the frame renders as the right user immediately;
+  // /api/me still runs below and replaces it (and wipes the cache if the user
+  // changed). Permissions are never decided here — the server re-checks each call.
+  const [session, setSession] = useState<Session | null>(() => cached ?? readCache<Session>('session') ?? null)
+  const [loading, setLoading] = useState(() => cached === undefined && readCache<Session>('session') == null)
 
   useEffect(() => {
     if (cached !== undefined) { setSession(cached); setLoading(false); return }
