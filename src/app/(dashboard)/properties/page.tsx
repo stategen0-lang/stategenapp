@@ -12,19 +12,22 @@ import ImportModal from '@/components/import/ImportModal'
 import { dbRowToProperty } from '@/lib/db-mappers'
 import { useSession } from '@/hooks/use-session'
 import { isManager } from '@/lib/permissions'
+import { readCache, writeCache } from '@/lib/device-cache'
 
 type AgentMap = Record<string, { name: string; initials: string; color: string; whatsapp: string | null }>
 
-// Module-scope caches so revisiting shows the last data instantly (revalidated
-// in the background). Cleared on a full reload.
+// Revisiting a page shows the last data instantly while it revalidates: from
+// memory within a session, and from the device (localStorage) after a reload —
+// a data call from Lebanon costs ~230ms, reading the last one costs nothing.
 let PROPS_CACHE: Property[] | null = null
 let PROP_AGENTS_CACHE: AgentMap | null = null
 
 export default function PropertiesPage() {
   const [scope, setScope] = useState<'me' | 'company'>('company')
-  const [list, setList] = useState<Property[]>(PROPS_CACHE ?? [])
-  const [loaded, setLoaded] = useState(PROPS_CACHE != null)
-  const [agents, setAgents] = useState<AgentMap>(PROP_AGENTS_CACHE ?? {})
+  // Lazy initialisers: localStorage is read once, on the client, never on the server.
+  const [list, setList] = useState<Property[]>(() => PROPS_CACHE ?? readCache<Property[]>('properties') ?? [])
+  const [loaded, setLoaded] = useState(() => PROPS_CACHE != null || readCache<Property[]>('properties') != null)
+  const [agents, setAgents] = useState<AgentMap>(() => PROP_AGENTS_CACHE ?? readCache<AgentMap>('agents') ?? {})
   const { session } = useSession()
 
   useEffect(() => {
@@ -35,12 +38,12 @@ export default function PropertiesPage() {
       .then(data => {
         // Always reflect the real result — even an empty one — so a new agency
         // sees its (empty) list, not leftover demo data.
-        if (data.properties) { const m = data.properties.map(dbRowToProperty); PROPS_CACHE = m; setList(m) }
+        if (data.properties) { const m = data.properties.map(dbRowToProperty); PROPS_CACHE = m; writeCache('properties', m); setList(m) }
       })
       .catch(() => clearTimeout(t))
       .finally(() => setLoaded(true))
     // Real agent names/colours/WhatsApp, so listings show who they belong to.
-    fetch('/api/company/agents').then(r => r.ok ? r.json() : null).then(d => { if (d?.agents) { PROP_AGENTS_CACHE = d.agents; setAgents(d.agents) } }).catch(() => {})
+    fetch('/api/company/agents').then(r => r.ok ? r.json() : null).then(d => { if (d?.agents) { PROP_AGENTS_CACHE = d.agents; writeCache('agents', d.agents); setAgents(d.agents) } }).catch(() => {})
   }, [])
 
   // Real agent for a listing's code, falling back to the demo helper for codes
@@ -66,13 +69,14 @@ export default function PropertiesPage() {
 
   async function reloadProperties() {
     const r = await fetch('/api/properties')
-    if (r.ok) { const d = await r.json(); if (d.properties) { const m = d.properties.map(dbRowToProperty); PROPS_CACHE = m; setList(m) } }
+    if (r.ok) { const d = await r.json(); if (d.properties) { const m = d.properties.map(dbRowToProperty); PROPS_CACHE = m; writeCache('properties', m); setList(m) } }
   }
 
   function remove(id: number) {
     setList(prev => {
       const next = prev.filter(x => x.id !== id)
       PROPS_CACHE = next
+      writeCache('properties', next)
       return next
     })
   }
@@ -81,6 +85,7 @@ export default function PropertiesPage() {
     setList(prev => {
       const next = prev.some(x => x.id === p.id) ? prev.map(x => x.id === p.id ? p : x) : [p, ...prev]
       PROPS_CACHE = next
+      writeCache('properties', next)
       return next
     })
   }

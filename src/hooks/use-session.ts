@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import type { Session } from '@/lib/permissions'
+import { setCacheOwner } from '@/lib/device-cache'
 
 // Current user's role + agent code, for deciding what the UI renders.
 // Authorisation itself is always enforced server-side.
@@ -19,7 +20,14 @@ function fetchSession(): Promise<Session | null> {
     .then(r => (r.ok ? r.json() : null))
     .then(d => (d?.session ?? null) as Session | null)
     .catch(() => null)
-    .then(s => { cached = s; inflight = null; return s })
+    .then(s => {
+      cached = s
+      inflight = null
+      // Tie any on-device cache to this user: a different user (or none) wipes
+      // the previous one's data before a page can read it.
+      setCacheOwner(s?.userId ?? null)
+      return s
+    })
   return inflight
 }
 

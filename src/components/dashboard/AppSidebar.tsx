@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { type User as SupabaseUser } from '@supabase/supabase-js'
 import Logo from '@/components/brand/Logo'
+import { clearDeviceCache } from '@/lib/device-cache'
 
 const navItems = [
   { href: '/dashboard',   label: 'Dashboard',  icon: LayoutDashboard },
@@ -86,6 +87,8 @@ export default function AppSidebar({ profile, user }: AppSidebarProps) {
   }, [pathname, profile?.role])
 
   async function handleSignOut() {
+    // The device cache holds client contact details — never leave it behind.
+    clearDeviceCache()
     await supabase.auth.signOut()
     router.push('/login')
     router.refresh()

@@ -17,6 +17,7 @@ import { MarketingPrompt } from '@/components/marketing/SendToMarketing'
 import NewClientModal from '@/components/modals/NewClientModal'
 import { useSession } from '@/hooks/use-session'
 import { isManager } from '@/lib/permissions'
+import { readCache, writeCache } from '@/lib/device-cache'
 
 type Panel = 'listings' | 'clients' | 'deals' | 'volume' | null
 
@@ -47,11 +48,14 @@ export default function DashboardPage() {
   const [newPropOpen, setNewPropOpen]   = useState(false)
   const [marketingProp, setMarketingProp] = useState<Property | null>(null)
   const [newClientOpen, setNewClientOpen] = useState(false)
-  const [props, setProps]               = useState<Property[]>([])
-  const [clients, setClients]           = useState<Client[]>([])
-  const [deals, setDeals]               = useState<DealView[]>([])
-  const [loaded, setLoaded]             = useState(false)
-  const [agents, setAgents]             = useState<Record<string, { name: string; initials: string; color: string; whatsapp: string | null }>>({})
+  // The dashboard is the first screen after sign-in, so it paints from the last
+  // known data on this device and refreshes underneath (a data call from Lebanon
+  // costs ~230ms; reading the last one costs nothing).
+  const [props, setProps]               = useState<Property[]>(() => readCache<Property[]>('properties') ?? [])
+  const [clients, setClients]           = useState<Client[]>(() => readCache<Client[]>('clients') ?? [])
+  const [deals, setDeals]               = useState<DealView[]>(() => readCache<DealView[]>('deals') ?? [])
+  const [loaded, setLoaded]             = useState(() => readCache<Property[]>('properties') != null)
+  const [agents, setAgents]             = useState<Record<string, { name: string; initials: string; color: string; whatsapp: string | null }>>(() => readCache<Record<string, { name: string; initials: string; color: string; whatsapp: string | null }>>('agents') ?? {})
   const [editProp, setEditProp]         = useState<Property | null>(null)
   const [editClient, setEditClient]     = useState<Client | null>(null)
   const [toast, setToast]               = useState('')
@@ -82,11 +86,11 @@ export default function DashboardPage() {
       fetch('/api/deals', { signal: ctrl.signal }).then(r => r.ok ? r.json() : null).catch(() => null),
     ]).then(([pRes, cRes, dRes]) => {
       clearTimeout(t)
-      if (pRes?.properties) setProps(pRes.properties.map(dbRowToProperty))
-      if (cRes?.clients) setClients(cRes.clients.map(dbRowToClient))
-      if (dRes?.deals) setDeals(dRes.deals as DealView[])
+      if (pRes?.properties) { const m = pRes.properties.map(dbRowToProperty); writeCache('properties', m); setProps(m) }
+      if (cRes?.clients) { const m = cRes.clients.map(dbRowToClient); writeCache('clients', m); setClients(m) }
+      if (dRes?.deals) { writeCache('deals', dRes.deals); setDeals(dRes.deals as DealView[]) }
     }).catch(() => clearTimeout(t)).finally(() => setLoaded(true))
-    fetch('/api/company/agents').then(r => r.ok ? r.json() : null).then(d => { if (d?.agents) setAgents(d.agents) }).catch(() => {})
+    fetch('/api/company/agents').then(r => r.ok ? r.json() : null).then(d => { if (d?.agents) { writeCache('agents', d.agents); setAgents(d.agents) } }).catch(() => {})
     return () => { clearTimeout(t); ctrl.abort() }
   }, [])
 

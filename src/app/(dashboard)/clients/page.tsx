@@ -12,6 +12,7 @@ import NewClientModal from '@/components/modals/NewClientModal'
 import BulkForwardModal from '@/components/modals/BulkForwardModal'
 import ImportModal from '@/components/import/ImportModal'
 import { dbRowToClient } from '@/lib/db-mappers'
+import { readCache, writeCache } from '@/lib/device-cache'
 
 type AgentMap = Record<string, { name: string; initials: string; color: string; whatsapp: string | null }>
 
@@ -22,9 +23,10 @@ let AGENTS_CACHE: AgentMap | null = null
 
 export default function ClientsPage() {
   const [scope, setScope] = useState<'me' | 'company'>('company')
-  const [list, setList] = useState<Client[]>(CLIENTS_CACHE ?? [])
-  const [loaded, setLoaded] = useState(CLIENTS_CACHE != null)
-  const [agents, setAgents] = useState<AgentMap>(AGENTS_CACHE ?? {})
+  // Lazy initialisers: localStorage is read once, on the client, never on the server.
+  const [list, setList] = useState<Client[]>(() => CLIENTS_CACHE ?? readCache<Client[]>('clients') ?? [])
+  const [loaded, setLoaded] = useState(() => CLIENTS_CACHE != null || readCache<Client[]>('clients') != null)
+  const [agents, setAgents] = useState<AgentMap>(() => AGENTS_CACHE ?? readCache<AgentMap>('agents') ?? {})
   const { session } = useSession()
 
   useEffect(() => {
@@ -34,12 +36,12 @@ export default function ClientsPage() {
       .then(r => { clearTimeout(t); return r.ok ? r.json() : Promise.reject(r.status) })
       .then(data => {
         // Always reflect the real result (even empty) — no leftover demo data.
-        if (data.clients) { const m = data.clients.map(dbRowToClient); CLIENTS_CACHE = m; setList(m) }
+        if (data.clients) { const m = data.clients.map(dbRowToClient); CLIENTS_CACHE = m; writeCache('clients', m); setList(m) }
       })
       .catch(() => clearTimeout(t))
       .finally(() => setLoaded(true))
     // Real agent names/colours for avatars (falls back to the demo helper).
-    fetch('/api/company/agents').then(r => r.ok ? r.json() : null).then(d => { if (d?.agents) { AGENTS_CACHE = d.agents; setAgents(d.agents) } }).catch(() => {})
+    fetch('/api/company/agents').then(r => r.ok ? r.json() : null).then(d => { if (d?.agents) { AGENTS_CACHE = d.agents; writeCache('agents', d.agents); setAgents(d.agents) } }).catch(() => {})
   }, [])
 
   const agentFor = (code: string): Agent => {
@@ -62,13 +64,14 @@ export default function ClientsPage() {
 
   async function reloadClients() {
     const r = await fetch('/api/clients')
-    if (r.ok) { const d = await r.json(); if (d.clients) { const m = d.clients.map(dbRowToClient); CLIENTS_CACHE = m; setList(m) } }
+    if (r.ok) { const d = await r.json(); if (d.clients) { const m = d.clients.map(dbRowToClient); CLIENTS_CACHE = m; writeCache('clients', m); setList(m) } }
   }
 
   function remove(id: number) {
     setList(prev => {
       const next = prev.filter(x => x.id !== id)
       CLIENTS_CACHE = next
+      writeCache('clients', next)
       return next
     })
   }
@@ -77,6 +80,7 @@ export default function ClientsPage() {
     setList(prev => {
       const next = prev.some(x => x.id === c.id) ? prev.map(x => x.id === c.id ? c : x) : [c, ...prev]
       CLIENTS_CACHE = next
+      writeCache('clients', next)
       return next
     })
   }
