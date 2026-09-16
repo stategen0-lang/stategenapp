@@ -15,7 +15,9 @@ import DeleteRecord from './DeleteRecord'
 
 interface Props {
   onClose: () => void
-  onSaved: (c: Client) => void
+  /** The client to show in the list. `replaces` swaps out the provisional row
+   *  shown while the save was in flight; `failed` means remove it again. */
+  onSaved: (c: Client, opts?: { replaces?: number; failed?: boolean }) => void
   /** Editing only: when set, the form offers "Delete client". */
   onDeleted?: (id: number) => void
   matchThreshold?: number
@@ -213,7 +215,14 @@ export default function NewClientModal({ onClose, onSaved, onDeleted, matchThres
       req: { ...reqWithLocations(), priceMin: budgetNum, priceMax: budgetNum, transaction: (type === 'Renter' ? 'For Rent' : 'For Sale') as ClientReq['transaction'] },
       tags,
     }
-    let savedId = initial?.id ?? ++_nextId
+    // Show it straight away and save in the background: a round trip to the
+    // database is ~230ms from Lebanon, and the agent has nothing to decide in
+    // the meantime. A failed save takes the row back out and says so.
+    const provisionalId = initial?.id ?? ++_nextId
+    const provisional: Client = { id: provisionalId, ...payload, agentId, status }
+    onSaved(provisional)
+    onClose()
+
     try {
       const res = await fetch('/api/clients', {
         method: editing ? 'PATCH' : 'POST',
@@ -221,13 +230,13 @@ export default function NewClientModal({ onClose, onSaved, onDeleted, matchThres
         body: JSON.stringify(editing ? { id: initial!.id, ...payload } : payload),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) { setSaveError(data.error || 'Could not save. Please try again.'); setSaving(false); return }
-      if (data.client?.id) savedId = data.client.id
+      if (!res.ok) throw new Error(data.error || 'save failed')
+      const savedId = data.client?.id ?? provisionalId
+      // The real row, in place of the provisional one (its id came from the server).
+      if (savedId !== provisionalId) onSaved({ ...provisional, id: savedId }, { replaces: provisionalId })
     } catch {
-      setSaveError('Network error. Please try again.'); setSaving(false); return
+      onSaved(provisional, { replaces: provisionalId, failed: true })
     }
-    const c: Client = { id: savedId, ...payload, agentId, status }
-    onSaved(c)
   }
 
   const inp = 'w-full rounded-xl px-3 py-2 text-sm outline-none'

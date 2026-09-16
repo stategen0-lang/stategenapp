@@ -23,7 +23,7 @@ interface Props {
 export default function ClientDetailModal({ client: c, agent, onClose, onStatusChange, onEdit, onReferred }: Props) {
   useLockBodyScroll()
   const [status, setStatus] = useState<ClientStatus>(c.status)
-  const [saving, setSaving] = useState(false)
+  const [statusError, setStatusError] = useState('')
   const [rating, setRating] = useState<number>(c.agentRating ?? 3)
   const [leadScore, setLeadScore] = useState<number>(c.leadScore ?? 0)
   const [ratingSaving, setRatingSaving] = useState(false)
@@ -96,17 +96,24 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
   }
 
   async function handleStatusChange(newStatus: ClientStatus) {
+    // Show it everywhere at once, then save. A failed save used to leave the new
+    // status on screen for good (the error was swallowed) — now it goes back.
+    const previous = status
     setStatus(newStatus)
-    setSaving(true)
+    setStatusError('')
+    onStatusChange?.(c.id, newStatus)
     try {
-      await fetch('/api/clients', {
+      const res = await fetch('/api/clients', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: c.id, status: newStatus }),
       })
-      onStatusChange?.(c.id, newStatus)
-    } catch {}
-    setSaving(false)
+      if (!res.ok) throw new Error()
+    } catch {
+      setStatus(previous)
+      onStatusChange?.(c.id, previous)
+      setStatusError('Could not change the status — try again')
+    }
   }
 
   return (
@@ -140,15 +147,15 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
                   ) : (
                     <select
                       value={status}
-                      disabled={saving}
                       onChange={e => handleStatusChange(e.target.value as ClientStatus)}
                       className="text-xs font-semibold px-2 py-0.5 rounded-full border-0 outline-none cursor-pointer appearance-none"
-                      style={{ background: sc.bg, color: sc.color, opacity: saving ? 0.6 : 1 }}
+                      style={{ background: sc.bg, color: sc.color }}
                     >
                       {CLIENT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                   )}
                 </div>
+                {statusError && <p className="text-xs mt-1" style={{ color: '#A23434' }}>{statusError}</p>}
               </div>
             </div>
             <div className="flex items-center gap-2">

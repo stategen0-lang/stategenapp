@@ -80,17 +80,21 @@ export default function DashboardPage() {
   useEffect(() => {
     const ctrl = new AbortController()
     const t = setTimeout(() => ctrl.abort(), 4000)
-    Promise.all([
-      fetch('/api/properties', { signal: ctrl.signal }).then(r => r.ok ? r.json() : null).catch(() => null),
-      fetch('/api/clients', { signal: ctrl.signal }).then(r => r.ok ? r.json() : null).catch(() => null),
-      fetch('/api/deals', { signal: ctrl.signal }).then(r => r.ok ? r.json() : null).catch(() => null),
-    ]).then(([pRes, cRes, dRes]) => {
-      clearTimeout(t)
-      if (pRes?.properties) { const m = pRes.properties.map(dbRowToProperty); writeCache('properties', m); setProps(m) }
-      if (cRes?.clients) { const m = cRes.clients.map(dbRowToClient); writeCache('clients', m); setClients(m) }
-      if (dRes?.deals) { writeCache('deals', dRes.deals); setDeals(dRes.deals as DealView[]) }
-    }).catch(() => clearTimeout(t)).finally(() => setLoaded(true))
-    fetch('/api/company/agents').then(r => r.ok ? r.json() : null).then(d => { if (d?.agents) { writeCache('agents', d.agents); setAgents(d.agents) } }).catch(() => {})
+    // One request for the whole first screen (listings + clients + deals +
+    // agents). Four separate calls meant four trips to Mumbai before anything
+    // could render.
+    fetch('/api/dashboard', { signal: ctrl.signal })
+      .then(r => r.ok ? r.json() : null)
+      .catch(() => null)
+      .then(d => {
+        clearTimeout(t)
+        if (!d) return
+        if (d.properties) { const m = d.properties.map(dbRowToProperty); writeCache('properties', m); setProps(m) }
+        if (d.clients) { const m = d.clients.map(dbRowToClient); writeCache('clients', m); setClients(m) }
+        if (d.deals) { writeCache('deals', d.deals); setDeals(d.deals as DealView[]) }
+        if (d.agents) { writeCache('agents', d.agents); setAgents(d.agents) }
+      })
+      .finally(() => setLoaded(true))
     return () => { clearTimeout(t); ctrl.abort() }
   }, [])
 
@@ -107,6 +111,16 @@ export default function DashboardPage() {
   }
   function upsertClient(c: Client) {
     setClients(prev => prev.some(x => x.id === c.id) ? prev.map(x => x.id === c.id ? c : x) : [c, ...prev])
+  }
+  /** A saved (or provisionally saved) client. See NewClientModal's onSaved. */
+  function savedClient(c: Client, opts?: { replaces?: number; failed?: boolean }) {
+    if (opts?.failed) {
+      setClients(prev => prev.filter(x => x.id !== (opts.replaces ?? c.id)))
+      showToast('Could not save that client — please try again')
+      return
+    }
+    if (opts?.replaces != null && opts.replaces !== c.id) setClients(prev => prev.filter(x => x.id !== opts.replaces))
+    upsertClient(c)
   }
 
   const activeListings = props.filter(p => p.status === 'Available')
@@ -558,14 +572,14 @@ export default function DashboardPage() {
       {newClientOpen && (
         <NewClientModal
           onClose={() => setNewClientOpen(false)}
-          onSaved={c => { upsertClient(c); setNewClientOpen(false); showToast('Client saved!') }}
+          onSaved={(c, o) => { savedClient(c, o); setNewClientOpen(false); if (!o) showToast('Client saved!') }}
         />
       )}
       {editClient && (
         <NewClientModal
           initial={editClient}
           onClose={() => setEditClient(null)}
-          onSaved={c => { upsertClient(c); setEditClient(null); showToast('Changes saved!') }}
+          onSaved={(c, o) => { savedClient(c, o); setEditClient(null); if (!o) showToast('Changes saved!') }}
           onDeleted={id => { setClients(prev => prev.filter(x => x.id !== id)); setEditClient(null); showToast('Client deleted') }}
         />
       )}

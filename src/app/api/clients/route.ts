@@ -3,7 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { recalculateScores } from '@/lib/score-engine'
 import { getSession, companyAccessBlocked } from '@/lib/session'
-import { canSeeClientPII, canEditClient, isManager, maskClientName } from '@/lib/permissions'
+import { loadClients } from '@/lib/api-loaders'
+import { canEditClient, isManager } from '@/lib/permissions'
 import { notifyAgentNewClient } from '@/lib/whatsapp/notify'
 import { ensureManagerAgentCode } from '@/lib/ensure-manager-code'
 
@@ -45,41 +46,8 @@ export async function GET(req: NextRequest) {
     }
 
     const supabase = await createClient()
-    const { data, error } = await supabase
-      .from('client_requests')
-      .select('*')
-      .eq('company_id', session.companyId)
-      .order('created_at', { ascending: false })
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-    // Managers may narrow to a single agent; agents are always their own scope.
-    const agentFilter = isManager(session.role)
-      ? req.nextUrl.searchParams.get('agent')
-      : null
-
-    const rows = (data ?? [])
-      .filter(r => !agentFilter || clientAgent(r) === agentFilter)
-      .map(r => {
-        if (canSeeClientPII(session, clientAgent(r))) return r
-        // Another agent's client: keep the requirements (so matching still
-        // shows demand) but strip the identifying fields.
-        let notes = r.notes
-        try {
-          const parsed = JSON.parse((r.notes as string) || '{}')
-          delete parsed.email
-          notes = JSON.stringify(parsed)
-        } catch { /* leave as-is */ }
-        return {
-          ...r,
-          'Client Name': maskClientName(Number(r.id)),
-          'client phone': null,
-          notes,
-          masked: true,
-        }
-      })
-
-    return NextResponse.json({ clients: rows })
+    const agentFilter = req.nextUrl.searchParams.get('agent')
+    return NextResponse.json({ clients: await loadClients(supabase, session, agentFilter) })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }

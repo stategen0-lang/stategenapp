@@ -76,6 +76,17 @@ export default function ClientsPage() {
     })
   }
 
+  /** A saved (or provisionally saved) client. See NewClientModal's onSaved. */
+  function saved(c: Client, opts?: { replaces?: number; failed?: boolean }) {
+    if (opts?.failed) {
+      remove(opts.replaces ?? c.id)
+      showToast('Could not save that client — please try again')
+      return
+    }
+    if (opts?.replaces != null && opts.replaces !== c.id) remove(opts.replaces)
+    upsert(c)
+  }
+
   function upsert(c: Client) {
     setList(prev => {
       const next = prev.some(x => x.id === c.id) ? prev.map(x => x.id === c.id ? c : x) : [c, ...prev]
@@ -337,7 +348,7 @@ export default function ClientsPage() {
       {addOpen && (
         <NewClientModal
           onClose={() => setAddOpen(false)}
-          onSaved={c => { upsert(c); setAddOpen(false); showToast('Client saved!') }}
+          onSaved={(c, o) => { saved(c, o); setAddOpen(false); if (!o) showToast('Client saved!') }}
         />
       )}
       {importOpen && (
@@ -358,7 +369,7 @@ export default function ClientsPage() {
         <NewClientModal
           initial={editClient}
           onClose={() => setEditClient(null)}
-          onSaved={c => { upsert(c); setEditClient(null); showToast('Changes saved!') }}
+          onSaved={(c, o) => { saved(c, o); setEditClient(null); if (!o) showToast('Changes saved!') }}
           onDeleted={id => { remove(id); setEditClient(null); showToast('Client deleted') }}
         />
       )}

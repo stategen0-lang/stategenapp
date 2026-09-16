@@ -2,28 +2,11 @@ import { NextRequest, NextResponse, after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession, companyAccessBlocked } from '@/lib/session'
-import { canEditProperty, isManager, owns, type Session } from '@/lib/permissions'
+import { canEditProperty, isManager } from '@/lib/permissions'
+import { loadProperties, propertyAgent } from '@/lib/api-loaders'
 import { createListingAlerts } from '@/lib/alerts-server'
 import { ensureManagerAgentCode } from '@/lib/ensure-manager-code'
 import { DOC_BUCKET } from '@/lib/upload'
-
-// The listing agent's code lives in the property's Amenities JSON.
-function propertyAgent(row: Record<string, unknown>): string | null {
-  try { return (JSON.parse((row.Amenities as string) || '{}').agentId as string) ?? null } catch { return null }
-}
-
-// Owner name/contact and the private document are confidential to the listing's
-// own agent and managers. Everyone else in the company shares the inventory but
-// must not receive these — so we strip them from the raw row before it leaves
-// the server, not just hide them in the UI (which the network tab would expose).
-function stripPrivateFields(row: Record<string, unknown>, session: Session): Record<string, unknown> {
-  if (isManager(session.role) || owns(session, propertyAgent(row))) return row
-  try {
-    const ex = JSON.parse((row.Amenities as string) || '{}')
-    delete ex.ownerName; delete ex.ownerContact; delete ex.documentPath; delete ex.documentName; delete ex.mapUrl
-    return { ...row, Amenities: JSON.stringify(ex) }
-  } catch { return row }
-}
 
 export async function GET() {
   try {
@@ -36,15 +19,7 @@ export async function GET() {
     }
 
     const supabase = await createClient()
-    const { data, error } = await supabase
-      .from('Properties')
-      .select('*')
-      .eq('company_id', session.companyId)
-      .order('created_at', { ascending: false })
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    const rows = (data ?? []).map(r => stripPrivateFields(r as Record<string, unknown>, session))
-    return NextResponse.json({ properties: rows })
+    return NextResponse.json({ properties: await loadProperties(supabase, session) })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
