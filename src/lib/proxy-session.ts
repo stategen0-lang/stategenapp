@@ -109,9 +109,9 @@ export function canSkipVerification(hint: SessionHint, now = Date.now(), window 
 }
 
 /**
- * The kill switch. Set PROXY_FAST_SESSION=off (in Vercel, no deploy needed) and
- * the proxy verifies every request with Supabase again, exactly as it did before
- * this optimisation. Anything else — unset, empty, 'on' — leaves it enabled.
+ * The kill switch. Set PROXY_FAST_SESSION=off in Vercel and redeploy (no code
+ * change; Vercel only reads variables at deploy time) and the proxy verifies every
+ * request with Supabase again, exactly as it did before this optimisation. Anything else — unset, empty, 'on' — leaves it enabled.
  */
 export function fastSessionEnabled(value: string | undefined): boolean {
   return String(value ?? '').trim().toLowerCase() !== 'off'
