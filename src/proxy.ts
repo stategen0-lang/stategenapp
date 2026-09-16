@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { readSessionHint, canSkipVerification, fastSessionEnabled } from '@/lib/proxy-session'
 
 // The app itself lives on the apex + www; every OTHER *.stategen.app label is an
 // agency microsite subdomain (acme.stategen.app → that agency's listings page).
@@ -40,29 +41,6 @@ export async function proxy(request: NextRequest) {
   }
 
   // ── Main app (apex / www) ──────────────────────────────────────────────────
-  let supabaseResponse = NextResponse.next({ request })
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-          supabaseResponse = NextResponse.next({ request })
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          )
-        },
-      },
-    }
-  )
-
-  const { data: { user } } = await supabase.auth.getUser()
-
   // Require authentication for app pages. Public paths are always allowed
   // through: login, signup, API routes, and shared listing pages (/l/<token>),
   // which are meant for clients who have no account.
@@ -86,6 +64,53 @@ export async function proxy(request: NextRequest) {
     pathname === '/sw.js' ||
     pathname === '/offline.html' ||
     pathname.startsWith('/icons/')
+
+
+  // Verifying the session with Supabase costs a round-trip to the database's
+  // region (~150ms from Lebanon) on EVERY request. Two cases don't need it:
+  //
+  //   • a public path — nothing here depends on who is asking;
+  //   • a signed-in request whose token the cookie says is good for a while yet.
+  //
+  // Skipping is never a security decision: a request let through this way gets
+  // the app shell, which holds no data, and every API route verifies the session
+  // itself. Near expiry (or anything unreadable) we fall through to the real
+  // check below, which is also what refreshes the token.
+  //
+  // Set PROXY_FAST_SESSION=off in the environment to restore the old behaviour
+  // (verify on every request) without a code change.
+  const fastSession = fastSessionEnabled(process.env.PROXY_FAST_SESSION)
+  if (fastSession) {
+    // /login is excluded on purpose: it redirects a signed-in user to the
+    // dashboard, and acting on a stale cookie there could bounce them in a loop.
+    if (isPublicPath && !pathname.startsWith('/login')) return NextResponse.next()
+    if (!isPublicPath && canSkipVerification(readSessionHint(request.cookies.getAll()))) {
+      return NextResponse.next()
+    }
+  }
+
+  let supabaseResponse = NextResponse.next({ request })
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+          supabaseResponse = NextResponse.next({ request })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)
+          )
+        },
+      },
+    }
+  )
+
+  const { data: { user } } = await supabase.auth.getUser()
 
   if (!user && !isPublicPath) {
     return NextResponse.redirect(new URL('/login', request.url))

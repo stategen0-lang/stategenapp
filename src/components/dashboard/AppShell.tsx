@@ -20,17 +20,21 @@ import { companyHasAccess } from '@/lib/billing'
 // session server-side (see companyAccessBlocked in lib/session).
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const { session, loading } = useSession()
+  const { session, loading, unauthenticated } = useSession()
   const router = useRouter()
 
   useEffect(() => {
+    // The proxy may let a request through on a cookie that turns out to be stale
+    // (see lib/proxy-session). When the server actually says 401, sign out for
+    // real — but never on a failed request, which is just being offline.
+    if (unauthenticated) { router.replace('/login'); return }
     if (loading || !session || session.isPlatformAdmin) return
     if (!companyHasAccess(session.companyAccessStatus, session.companyAccessUntil)) {
       router.replace('/renew')
       return
     }
     if (!session.approved) router.replace('/pending')
-  }, [loading, session, router])
+  }, [loading, session, unauthenticated, router])
 
   const profile = {
     Full_name: session?.fullName ?? session?.email ?? 'Agent',
