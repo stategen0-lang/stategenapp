@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import AppSidebar from '@/components/dashboard/AppSidebar'
-import SwipeNav from '@/components/dashboard/SwipeNav'
+import SwipeNav, { TABS } from '@/components/dashboard/SwipeNav'
 import { useSession } from '@/hooks/use-session'
 import { companyHasAccess } from '@/lib/billing'
 
@@ -35,6 +35,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }
     if (!session.approved) router.replace('/pending')
   }, [loading, session, unauthenticated, router])
+
+  // Coming back to the app after using another one: the phone's connection has
+  // gone cold and the router's cached pages may have expired, so the first tap on
+  // the nav bar used to wait on the network. Re-fetch the tab pages as soon as
+  // the app is visible again — before the agent taps — which also wakes the
+  // connection. Only after a real absence, so ordinary tab-switching costs nothing.
+  useEffect(() => {
+    let hiddenAt = 0
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return }
+      if (hiddenAt && Date.now() - hiddenAt > 30_000) {
+        for (const tab of TABS) router.prefetch(tab)
+      }
+      hiddenAt = 0
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [router])
 
   const profile = {
     Full_name: session?.fullName ?? session?.email ?? 'Agent',

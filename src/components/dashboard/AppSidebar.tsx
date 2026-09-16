@@ -101,6 +101,19 @@ export default function AppSidebar({ profile, user }: AppSidebarProps) {
   // the sections it houses (Reports/Profile/Alerts/Team/Activity).
   const moreActive = moreOpen || ['/analytics', '/settings', '/alerts', '/approvals', '/activity'].some(p => isActive(p))
   useEffect(() => { setMoreOpen(false) }, [pathname])
+
+  // The tab the agent just tapped, lit up immediately. Without it the bar only
+  // changed once the new page had loaded, so a tap on a slow connection looked
+  // ignored. Cleared as soon as the route actually changes.
+  const [tappedHref, setTappedHref] = useState<string | null>(null)
+  useEffect(() => { setTappedHref(null) }, [pathname])
+  // …or after a few seconds regardless, so a navigation that never completes
+  // (offline, cancelled) can't leave the wrong tab lit.
+  useEffect(() => {
+    if (!tappedHref) return
+    const t = setTimeout(() => setTappedHref(null), 8000)
+    return () => clearTimeout(t)
+  }, [tappedHref])
   const companyName = isMgr ? 'Manager · StateGen' : (profile?.Companies?.Name ?? 'StateGen')
   const initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
 
@@ -231,11 +244,12 @@ export default function AppSidebar({ profile, user }: AppSidebarProps) {
           Alerts, and the manager sections) so the bar never gets crowded. */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 flex" style={{ background: '#0E1F3D', borderTop: '1px solid rgba(255,255,255,0.10)' }}>
         {navItems.slice(0, 5).map(({ href, label, icon: Icon }) => {
-          const active = isActive(href)
+          const active = tappedHref ? tappedHref === href : isActive(href)
           return (
             <Link
               key={href}
               href={href}
+              onClick={() => { if (!isActive(href)) setTappedHref(href) }}
               className="flex-1 flex flex-col items-center justify-center py-2.5 gap-0.5"
               style={{ color: active ? '#5E8FD6' : '#9DB2CC' }}
             >

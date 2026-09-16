@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 
 // Left/right swipe to move between the main tabs on touch devices. Order must
 // match the bottom tab bar in AppSidebar.
-const TABS = ['/dashboard', '/properties', '/clients', '/pipeline', '/calendar', '/analytics', '/settings']
+export const TABS = ['/dashboard', '/properties', '/clients', '/pipeline', '/calendar', '/analytics', '/settings']
 
 // Don't treat a touch as a tab-swipe if it belongs to something that owns
 // horizontal gestures itself: a horizontally-scrollable area (e.g. the Pipeline
