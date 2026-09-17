@@ -1,6 +1,8 @@
 // Deal pipeline — stages, types and pure helpers.
 // Kept free of React/network so it can be unit-tested in isolation.
 
+import { CLOSING_DOC_PRESETS } from './data'
+
 export type Stage = 'lead' | 'contacted' | 'viewing' | 'negotiating' | 'closed'
 export type Outcome = 'won' | 'lost' | null
 
@@ -35,6 +37,18 @@ export interface Deal {
   leadScore: number              // 0-100 (Phase 2 lead scoring)
   agentRating: number            // 1-5 stars
   offer?: { amount: number; status: string } | null   // current offer, for the board badge
+  closing?: { downPayment?: number; docLabels: string[] } | null   // closing checklist summary
+}
+
+/** How many of the required closing documents are attached, and whether the
+ *  down payment + full paperwork set is complete (ID + down payment proof +
+ *  signed contract). Used to badge cards and to auto-advance a deal to Closed. */
+export function closingProgress(closing: Deal['closing']): { have: number; total: number; complete: boolean } {
+  const total = CLOSING_DOC_PRESETS.length
+  if (!closing) return { have: 0, total, complete: false }
+  const labels = new Set(closing.docLabels)
+  const have = CLOSING_DOC_PRESETS.filter(p => labels.has(p)).length
+  return { have, total, complete: have === total && closing.downPayment != null }
 }
 
 // ── Days in current stage ────────────────────────────────────────────────────

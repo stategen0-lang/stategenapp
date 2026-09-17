@@ -5,6 +5,7 @@ import { recalculateScores } from '@/lib/score-engine'
 import { getSession, companyAccessBlocked } from '@/lib/session'
 import { loadClients } from '@/lib/api-loaders'
 import { canEditClient, isManager } from '@/lib/permissions'
+import { CLOSING_DOC_PRESETS } from '@/lib/data'
 import { notifyAgentNewClient } from '@/lib/whatsapp/notify'
 import { ensureManagerAgentCode } from '@/lib/ensure-manager-code'
 
@@ -100,6 +101,10 @@ export async function PATCH(req: NextRequest) {
     // payload ({ id, status }) updates just the status; a full edit updates
     // the client details too.
     const update: Record<string, unknown> = {}
+    // Set when this request completes the closing checklist (down payment +
+    // ID + down payment proof + signed contract) — cascades the deal to
+    // Closed/Won and the client to Signed after the write succeeds.
+    let closingJustCompleted = false
     if (body.status !== undefined) update.status = body.status
     if (body.agent_rating !== undefined) {
       const stars = Number(body.agent_rating)
@@ -132,6 +137,12 @@ export async function PATCH(req: NextRequest) {
         ...(body.closing !== undefined ? { closing: sanitizeClosing(body.closing) } : {}),
       }
       update.notes = JSON.stringify(merged)
+
+      if (body.closing !== undefined) {
+        const closing = merged.closing as { downPayment?: number; documents: { label: string }[] } | undefined
+        const labels = new Set((closing?.documents ?? []).map(d => d.label))
+        closingJustCompleted = closing?.downPayment != null && CLOSING_DOC_PRESETS.every(p => labels.has(p))
+      }
     }
 
     if (Object.keys(update).length === 0) {
@@ -147,7 +158,27 @@ export async function PATCH(req: NextRequest) {
       .single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     refreshScoreAfter(Number(id), session.companyId)
-    return NextResponse.json({ ok: true, client: data })
+
+    // The closing checklist just became complete: move the deal to Closed/Won
+    // and the client to Signed. Deferred so the save itself returns instantly;
+    // best-effort — a failed cascade never fails the checklist save.
+    if (closingJustCompleted) {
+      after(async () => {
+        try {
+          const admin = createAdminClient()
+          const { data: deal } = await admin
+            .from('deals').select('id,stage').eq('client_id', id).eq('company_id', session.companyId).maybeSingle()
+          if (deal && deal.stage !== 'closed') {
+            await admin.from('deals').update({ stage: 'closed', outcome: 'won' }).eq('id', deal.id)
+          }
+          if (body.status === undefined) {
+            await admin.from('client_requests').update({ status: 'Signed' }).eq('id', id).eq('company_id', session.companyId)
+          }
+        } catch { /* best-effort cascade */ }
+      })
+    }
+
+    return NextResponse.json({ ok: true, client: data, closingJustCompleted })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }

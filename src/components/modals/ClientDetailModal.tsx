@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react'
 import { Star, FileText, Upload, X, Loader2, ExternalLink } from 'lucide-react'
 import { Client, Agent, Property, ClientStatus, ClosingDocument, statusStyle, CLIENT_TYPE_STYLE, CLOSING_DOC_PRESETS, formatPrice, getAgent } from '@/lib/data'
+import { closingProgress } from '@/lib/pipeline'
 import { scoreBand, BAND_STYLE } from '@/lib/scoring'
 import { useLockBodyScroll } from '@/hooks/use-lock-body-scroll'
 import MatchCards from '@/components/matching/MatchCards'
@@ -41,17 +42,27 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
   const [docUploading, setDocUploading] = useState(false)
   const [docError, setDocError] = useState('')
   const [closingSaving, setClosingSaving] = useState(false)
+  const [closingCelebrate, setClosingCelebrate] = useState(false)
   const closingInputRef = useRef<HTMLInputElement>(null)
 
   async function saveClosing(nextDocs: ClosingDocument[], nextDownPayment: string) {
     setClosingSaving(true)
     try {
       const dp = nextDownPayment.trim() ? Number(nextDownPayment) : undefined
-      await fetch('/api/clients', {
+      const res = await fetch('/api/clients', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: c.id, closing: { downPayment: dp, documents: nextDocs } }),
       })
+      const data = await res.json().catch(() => ({}))
+      // Full checklist just came together — the server already moved the deal
+      // to Closed/Won; reflect the client status locally so the modal doesn't
+      // wait for a reload to show it.
+      if (data?.closingJustCompleted) {
+        setStatus('Signed')
+        onStatusChange?.(c.id, 'Signed')
+        setClosingCelebrate(true)
+      }
     } catch { /* best-effort; the file itself is already uploaded */ }
     setClosingSaving(false)
   }
@@ -340,8 +351,23 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
                 agent's masked client, same as the rating. */}
             {!c.masked && (
               <div className="rounded-xl p-4" style={{ background: '#F7F8FB' }}>
+                {closingCelebrate && (
+                  <div className="rounded-lg px-3 py-2 mb-3 text-xs font-semibold" style={{ background: '#E3F4EA', color: '#1F7A4D' }}>
+                    🎉 Checklist complete — this deal moved to Closed · Won and the client is marked Signed.
+                  </div>
+                )}
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs font-bold" style={{ color: '#14223F' }}>CLOSING CHECKLIST</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-bold" style={{ color: '#14223F' }}>CLOSING CHECKLIST</p>
+                    {(() => {
+                      const p = closingProgress({ downPayment: downPayment.trim() ? Number(downPayment) : undefined, docLabels: closingDocs.map(d => d.label) })
+                      return (
+                        <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full" style={p.complete ? { background: '#E3F4EA', color: '#1F7A4D' } : { background: '#EAF0FA', color: '#2E5288' }}>
+                          {p.have}/{p.total} docs{p.complete ? ' · down payment set' : ''}
+                        </span>
+                      )
+                    })()}
+                  </div>
                   {closingSaving && <Loader2 className="h-3.5 w-3.5 animate-spin" style={{ color: '#9AA3B2' }} />}
                 </div>
 

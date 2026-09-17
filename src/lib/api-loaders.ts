@@ -96,7 +96,22 @@ export async function loadClients(supabase: SupabaseClient, session: Session, ag
 // Embed the client (name + lead score) and the property in play so the board
 // renders in one trip.
 export const DEAL_SELECT =
-  '*,client_requests(id,"Client Name",lead_score,agent_rating),Properties(id,Title,Location,Neighborhood,Amenities)'
+  '*,client_requests(id,"Client Name",lead_score,agent_rating,notes),Properties(id,Title,Location,Neighborhood,Amenities)'
+
+/** Closing checklist summary read off the client's notes JSON (single source
+ *  of truth — written by the client detail modal). */
+function closingOf(client: Row | null): { downPayment?: number; docLabels: string[] } | null {
+  if (!client) return null
+  try {
+    const c = JSON.parse((client.notes as string) || '{}')?.closing
+    if (!c) return null
+    const docs = Array.isArray(c.documents) ? c.documents : []
+    return {
+      downPayment: typeof c.downPayment === 'number' ? c.downPayment : undefined,
+      docLabels: docs.map((d: Row) => d.label).filter((l: unknown): l is string => typeof l === 'string'),
+    }
+  } catch { return null }
+}
 
 function propertyLabel(p: Row | null): string | null {
   if (!p) return null
@@ -124,6 +139,7 @@ export function toDeal(row: Row) {
     propertyLabel: propertyLabel(prop),
     leadScore: Number(client?.lead_score ?? 0),
     agentRating: Number(client?.agent_rating ?? 3),
+    closing: closingOf(client),
   }
 }
 
@@ -145,9 +161,10 @@ export async function loadDeals(
     .filter(r => canSeeDeal(session, (r as Row).agent_id as string, agentFilter))
     .map(r => {
       const deal = toDeal(r as Row)
-      // Client name on a card is PII — mask it on other agents' deals.
+      // Client name on a card is PII — mask it on other agents' deals. Their
+      // closing paperwork is off-limits too.
       if (!canSeeClientPII(session, (r as Row).agent_id as string)) {
-        return { ...deal, clientName: maskClientName(deal.client_id as number), masked: true }
+        return { ...deal, clientName: maskClientName(deal.client_id as number), masked: true, closing: null }
       }
       return deal
     })

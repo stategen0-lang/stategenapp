@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Search, X } from 'lucide-react'
 import { getAgent, AGENTS, statusStyle, CLIENT_TYPE_STYLE, formatPrice, tagStyle, Client, Agent } from '@/lib/data'
 import { filterClients } from '@/lib/search'
@@ -22,6 +23,17 @@ let CLIENTS_CACHE: Client[] | null = null
 let AGENTS_CACHE: AgentMap | null = null
 
 export default function ClientsPage() {
+  return (
+    <Suspense fallback={null}>
+      <ClientsPageInner />
+    </Suspense>
+  )
+}
+
+// useSearchParams() (for the ?open=<id> deep link from the Pipeline board)
+// requires a Suspense boundary above it — split into an inner component so
+// the wrapper above stays trivial.
+function ClientsPageInner() {
   const [scope, setScope] = useState<'me' | 'company'>('company')
   // Lazy initialisers: localStorage is read once, on the client, never on the server.
   const [list, setList] = useState<Client[]>(() => CLIENTS_CACHE ?? readCache<Client[]>('clients') ?? [])
@@ -50,7 +62,12 @@ export default function ClientsPage() {
     const fallback = AGENTS.find(x => x.id === code)
     return fallback ?? { id: code as Agent['id'], name: code, initials: code.slice(0, 2).toUpperCase(), color: '#9AA3B2', shortName: code }
   }
-  const [detailId, setDetailId] = useState<number | null>(null)
+  const searchParams = useSearchParams()
+  const [detailId, setDetailId] = useState<number | null>(() => {
+    const raw = searchParams.get('open')
+    const n = raw ? Number(raw) : NaN
+    return Number.isInteger(n) ? n : null
+  })
   const [addOpen, setAddOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [forwardOpen, setForwardOpen] = useState(false)

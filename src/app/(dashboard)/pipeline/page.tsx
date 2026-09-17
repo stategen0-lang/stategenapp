@@ -1,12 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { formatPrice } from '@/lib/data'
 import { findAgent, unknownAgent, type RosterAgent } from '@/lib/agent-roster'
 import {
   Deal, Stage, STAGES, dealsInStage, totalValue, sortForBoard,
-  daysInStage, staleFlag, STALE_STYLE, isStage,
+  daysInStage, staleFlag, STALE_STYLE, isStage, closingProgress,
 } from '@/lib/pipeline'
 import { scoreBand, BAND_STYLE } from '@/lib/scoring'
 import { useSession } from '@/hooks/use-session'
@@ -98,6 +99,23 @@ function DealCard({
           💬 {formatPrice(deal.offer.amount)}{deal.offer.status !== 'open' ? ` · ${deal.offer.status}` : ''}
         </span>
       )}
+
+      {/* Closing paperwork progress — hidden once the deal has an outcome; the
+          checklist already did its job at that point. */}
+      {deal.closing !== undefined && !deal.outcome && (() => {
+        const p = closingProgress(deal.closing)
+        if (p.have === 0 && deal.closing?.downPayment == null) return null
+        return (
+          <Link
+            href={`/clients?open=${deal.client_id}`}
+            className="mt-1.5 flex items-center justify-between gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full w-fit"
+            style={p.complete ? { background: '#E3F4EA', color: '#1F7A4D' } : { background: '#EAF0FA', color: '#2E5288' }}
+            title="Open closing checklist"
+          >
+            📄 {p.have}/{p.total} docs
+          </Link>
+        )
+      })()}
 
       {/* Won / Lost picker for closed deals with no outcome yet */}
       {deal.stage === 'closed' && !deal.outcome && (
