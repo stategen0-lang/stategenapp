@@ -139,10 +139,28 @@ export function Lightbox({ photos, title, start, onClose }: {
   const { index, onScroll, scrollTo } = useSnapIndex(scroller, photos.length)
   const indexRef = useRef(start)
   indexRef.current = index
-  const close = useCallback(() => onClose(indexRef.current), [onClose])
+  // A history entry is pushed on open so the device/browser back button closes
+  // just the viewer instead of navigating the page behind it away.
+  const pushedRef = useRef(false)
+  const close = useCallback(() => {
+    if (pushedRef.current) window.history.back()
+    else onClose(indexRef.current)
+  }, [onClose])
 
   // Open on the photo that was tapped, before the first paint of the strip.
   useEffect(() => { scrollTo(start, false) }, [scrollTo, start])
+
+  useEffect(() => {
+    window.history.pushState({ lightbox: true }, '')
+    pushedRef.current = true
+    const onPopState = () => { pushedRef.current = false; onClose(indexRef.current) }
+    window.addEventListener('popstate', onPopState)
+    return () => {
+      window.removeEventListener('popstate', onPopState)
+      if (pushedRef.current) { pushedRef.current = false; window.history.back() }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
