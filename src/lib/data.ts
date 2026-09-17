@@ -162,6 +162,22 @@ export interface ClientReq {
   notes: string
 }
 
+/** One closing paperwork file (ID copy, down-payment proof, signed contract, …). */
+export interface ClosingDocument {
+  label: string
+  path: string   // path in the private DOC_BUCKET — never a public URL
+  name: string   // original filename, for display
+  uploadedAt: string
+}
+
+export interface ClosingInfo {
+  downPayment?: number
+  documents: ClosingDocument[]
+}
+
+// Suggested closing document labels — agents can also type their own.
+export const CLOSING_DOC_PRESETS = ['ID Copy', 'Down Payment Proof', 'Signed Contract'] as const
+
 export interface Client {
   id: number
   name: string
@@ -180,6 +196,8 @@ export interface Client {
   // gets the referral commission. Code is the referrer's agent_code.
   referredBy?: string
   referredByName?: string
+  /** Down payment + closing paperwork. Only visible/editable by the owning agent + managers. */
+  closing?: ClosingInfo
 }
 
 // Suggested client tags. Agents can also type their own — these are just the

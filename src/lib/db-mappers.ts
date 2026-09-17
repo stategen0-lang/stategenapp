@@ -110,5 +110,21 @@ export function dbRowToClient(row: Record<string, unknown>, idx: number): Client
     tags: Array.isArray(extras.tags) ? (extras.tags as string[]).filter(t => typeof t === 'string') : [],
     referredBy: extras.referredBy as string | undefined,
     referredByName: extras.referredByName as string | undefined,
+    closing: (() => {
+      const c = extras.closing as Record<string, unknown> | undefined
+      if (!c) return undefined
+      const docs = Array.isArray(c.documents) ? (c.documents as Record<string, unknown>[]) : []
+      return {
+        downPayment: typeof c.downPayment === 'number' ? c.downPayment : undefined,
+        documents: docs
+          .filter(d => typeof d.path === 'string' && typeof d.name === 'string')
+          .map(d => ({
+            label: (d.label as string) || 'Document',
+            path: d.path as string,
+            name: d.name as string,
+            uploadedAt: (d.uploadedAt as string) || '',
+          })),
+      }
+    })(),
   }
 }

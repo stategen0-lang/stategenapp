@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
-import { Star } from 'lucide-react'
-import { Client, Agent, Property, ClientStatus, statusStyle, CLIENT_TYPE_STYLE, formatPrice, getAgent } from '@/lib/data'
+import { useState, useRef } from 'react'
+import { Star, FileText, Upload, X, Loader2, ExternalLink } from 'lucide-react'
+import { Client, Agent, Property, ClientStatus, ClosingDocument, statusStyle, CLIENT_TYPE_STYLE, CLOSING_DOC_PRESETS, formatPrice, getAgent } from '@/lib/data'
 import { scoreBand, BAND_STYLE } from '@/lib/scoring'
 import { useLockBodyScroll } from '@/hooks/use-lock-body-scroll'
 import MatchCards from '@/components/matching/MatchCards'
@@ -31,6 +31,62 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
   const tc = CLIENT_TYPE_STYLE[c.type]
   const band = BAND_STYLE[scoreBand(leadScore)]
   const [stackedProperty, setStackedProperty] = useState<Property | null>(null)
+
+  // Closing checklist — down payment + paperwork (ID, proof of down payment,
+  // signed contract, …). Lightweight for now: stored in the client's notes
+  // JSON, files in the existing private document bucket.
+  const [downPayment, setDownPayment] = useState<string>(c.closing?.downPayment != null ? String(c.closing.downPayment) : '')
+  const [closingDocs, setClosingDocs] = useState<ClosingDocument[]>(c.closing?.documents ?? [])
+  const [docLabel, setDocLabel] = useState<string>(CLOSING_DOC_PRESETS[0])
+  const [docUploading, setDocUploading] = useState(false)
+  const [docError, setDocError] = useState('')
+  const [closingSaving, setClosingSaving] = useState(false)
+  const closingInputRef = useRef<HTMLInputElement>(null)
+
+  async function saveClosing(nextDocs: ClosingDocument[], nextDownPayment: string) {
+    setClosingSaving(true)
+    try {
+      const dp = nextDownPayment.trim() ? Number(nextDownPayment) : undefined
+      await fetch('/api/clients', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: c.id, closing: { downPayment: dp, documents: nextDocs } }),
+      })
+    } catch { /* best-effort; the file itself is already uploaded */ }
+    setClosingSaving(false)
+  }
+
+  function handleDownPaymentBlur() {
+    saveClosing(closingDocs, downPayment)
+  }
+
+  async function handleClosingFile(file: File | undefined) {
+    if (!file) return
+    setDocError('')
+    setDocUploading(true)
+    try {
+      const body = new FormData()
+      body.append('file', file)
+      const res = await fetch('/api/upload/document', { method: 'POST', body })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { setDocError(data.error || 'Could not upload that file.'); return }
+      const doc: ClosingDocument = { label: docLabel, path: data.path, name: data.name || file.name, uploadedAt: new Date().toISOString() }
+      const next = [...closingDocs, doc]
+      setClosingDocs(next)
+      saveClosing(next, downPayment)
+    } catch {
+      setDocError('Network error. Try again.')
+    } finally {
+      setDocUploading(false)
+      if (closingInputRef.current) closingInputRef.current.value = ''
+    }
+  }
+
+  function removeClosingDoc(path: string) {
+    const next = closingDocs.filter(d => d.path !== path)
+    setClosingDocs(next)
+    saveClosing(next, downPayment)
+  }
 
   // Refer/transfer to another agent.
   const [referOpen, setReferOpen] = useState(false)
@@ -277,6 +333,81 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
                     </button>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Closing checklist — down payment + paperwork. Hidden for another
+                agent's masked client, same as the rating. */}
+            {!c.masked && (
+              <div className="rounded-xl p-4" style={{ background: '#F7F8FB' }}>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-bold" style={{ color: '#14223F' }}>CLOSING CHECKLIST</p>
+                  {closingSaving && <Loader2 className="h-3.5 w-3.5 animate-spin" style={{ color: '#9AA3B2' }} />}
+                </div>
+
+                <div className="mb-3">
+                  <p className="text-xs mb-1" style={{ color: '#9AA3B2' }}>Down payment</p>
+                  <input
+                    type="number"
+                    min={0}
+                    value={downPayment}
+                    onChange={e => setDownPayment(e.target.value)}
+                    onBlur={handleDownPaymentBlur}
+                    placeholder="e.g. 50000"
+                    className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                    style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: '#14223F' }}
+                  />
+                </div>
+
+                {closingDocs.length > 0 && (
+                  <div className="space-y-1.5 mb-3">
+                    {closingDocs.map(doc => (
+                      <div key={doc.path} className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: '#fff', border: '1.5px solid #EEF0F4' }}>
+                        <FileText className="h-4 w-4 shrink-0" style={{ color: '#5E8FD6' }} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold truncate" style={{ color: '#14223F' }}>{doc.label}</p>
+                          <p className="text-[11px] truncate" style={{ color: '#9AA3B2' }}>{doc.name}</p>
+                        </div>
+                        <a href={`/api/clients/document?id=${c.id}&path=${encodeURIComponent(doc.path)}`} target="_blank" rel="noopener noreferrer"
+                          className="p-1 rounded hover:bg-gray-100" title="Open">
+                          <ExternalLink className="h-3.5 w-3.5" style={{ color: '#6A7488' }} />
+                        </a>
+                        <button type="button" onClick={() => removeClosingDoc(doc.path)} className="p-1 rounded hover:bg-gray-100" title="Remove">
+                          <X className="h-3.5 w-3.5" style={{ color: '#A23434' }} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <select
+                    value={docLabel}
+                    onChange={e => setDocLabel(e.target.value)}
+                    className="rounded-lg px-2.5 py-2 text-xs outline-none"
+                    style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: '#14223F' }}
+                  >
+                    {CLOSING_DOC_PRESETS.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => closingInputRef.current?.click()}
+                    disabled={docUploading}
+                    className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold disabled:opacity-60"
+                    style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: '#0E1F3D' }}
+                  >
+                    {docUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                    {docUploading ? 'Uploading…' : 'Upload'}
+                  </button>
+                  <input
+                    ref={closingInputRef}
+                    type="file"
+                    accept=".pdf,.doc,.docx,image/*"
+                    className="hidden"
+                    onChange={e => handleClosingFile(e.target.files?.[0])}
+                  />
+                </div>
+                {docError && <p className="text-xs mt-2" style={{ color: '#A23434' }}>{docError}</p>}
               </div>
             )}
 

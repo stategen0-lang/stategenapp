@@ -27,6 +27,26 @@ function sanitizeTags(raw: unknown): string[] {
   return [...seen].slice(0, 12)
 }
 
+// Closing paperwork: a down payment amount plus a capped list of document
+// references (label/path/name/uploadedAt). Storage paths are opaque strings
+// already scoped to the company by /api/upload/document — we just cap the
+// list size and shape here so a bad payload can't bloat the row.
+function sanitizeClosing(raw: unknown): { downPayment?: number; documents: unknown[] } {
+  const r = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {}
+  const downPayment = typeof r.downPayment === 'number' && r.downPayment >= 0 ? r.downPayment : undefined
+  const docsIn = Array.isArray(r.documents) ? r.documents : []
+  const documents = docsIn.slice(0, 20).map(d => {
+    const doc = (d && typeof d === 'object') ? d as Record<string, unknown> : {}
+    return {
+      label: typeof doc.label === 'string' ? doc.label.trim().slice(0, 60) : 'Document',
+      path: typeof doc.path === 'string' ? doc.path.slice(0, 300) : '',
+      name: typeof doc.name === 'string' ? doc.name.slice(0, 200) : 'file',
+      uploadedAt: typeof doc.uploadedAt === 'string' ? doc.uploadedAt.slice(0, 40) : new Date().toISOString(),
+    }
+  }).filter(d => d.path)
+  return { ...(downPayment !== undefined ? { downPayment } : {}), documents }
+}
+
 // A client change is a scoring signal — refresh that client's lead score.
 // Deferred with after() so the write returns immediately: re-scoring loads the
 // company's clients/properties/deals and was making every save wait on it. The
@@ -97,7 +117,7 @@ export async function PATCH(req: NextRequest) {
     }
     if (body.req?.beds !== undefined) update.bedrooms = body.req.beds
     if (body.req?.transaction !== undefined) update.payment_terms = body.req.transaction
-    if (body.name !== undefined || body.email !== undefined || body.type !== undefined || body.req !== undefined || body.tags !== undefined) {
+    if (body.name !== undefined || body.email !== undefined || body.type !== undefined || body.req !== undefined || body.tags !== undefined || body.closing !== undefined) {
       // Merge onto the existing notes so a partial update (e.g. tags-only)
       // never wipes email / agentId / req that weren't resent.
       let prev: Record<string, unknown> = {}
@@ -109,6 +129,7 @@ export async function PATCH(req: NextRequest) {
         ...(body.agentId !== undefined ? { agentId: body.agentId } : {}),
         ...(body.req !== undefined ? { req: body.req } : {}),
         ...(body.tags !== undefined ? { tags: sanitizeTags(body.tags) } : {}),
+        ...(body.closing !== undefined ? { closing: sanitizeClosing(body.closing) } : {}),
       }
       update.notes = JSON.stringify(merged)
     }
