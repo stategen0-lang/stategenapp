@@ -15,6 +15,8 @@ function cleanMsg(m: unknown, fallback: string): string {
   return s
 }
 
+const LAST_EMAIL_KEY = 'stategen_last_login_email'
+
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -25,6 +27,14 @@ export default function LoginPage() {
   const [resetting, setResetting] = useState(false)
   const router = useRouter()
   const supabase = createClient()
+
+  // Pre-fill with whichever account last signed in successfully on this device.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(LAST_EMAIL_KEY)
+      if (saved) setEmail(saved)
+    } catch { /* private mode */ }
+  }, [])
 
   // A password-reset link redirects to the site origin (Supabase forces the
   // Site URL), so it can land here rather than on /reset-password. Forward the
@@ -120,6 +130,8 @@ export default function LoginPage() {
         }
       }
 
+      try { localStorage.setItem(LAST_EMAIL_KEY, email.trim()) } catch { /* private mode */ }
+
       router.push('/dashboard')
       router.refresh()
     } catch {
@@ -187,6 +199,8 @@ export default function LoginPage() {
                 <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: '#9AA3B2' }} />
                 <input
                   type="text"
+                  name="username"
+                  autoComplete="username"
                   autoCapitalize="none"
                   autoCorrect="off"
                   spellCheck={false}
@@ -215,6 +229,8 @@ export default function LoginPage() {
                 <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: '#9AA3B2' }} />
                 <input
                   type={showPw ? 'text' : 'password'}
+                  name="current-password"
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required

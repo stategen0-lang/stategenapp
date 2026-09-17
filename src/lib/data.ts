@@ -22,7 +22,7 @@ export type PropertyType =
   | 'Building' | 'Land' | 'Shop' | 'Office' | 'Showroom' | 'Restaurant'
   | 'Garage' | 'Warehouse'
 export type Transaction = 'For Sale' | 'For Rent'
-export type PropertyStatus = 'Available' | 'Pending' | 'Sold' | 'Reserved'
+export type PropertyStatus = 'Available' | 'Pending' | 'Sold' | 'Reserved' | 'Under Construction'
 export type AdvancedPayment = '3 months' | '6 months' | '1 year'
 export type Furnishing = 'Furnished' | 'Semi-furnished' | 'Unfurnished'
 export const FURNISHINGS: Furnishing[] = ['Furnished', 'Semi-furnished', 'Unfurnished']
@@ -342,6 +342,8 @@ export function statusStyle(status: PropertyStatus | ClientStatus): { bg: string
       return { bg: '#EAF0FA', color: '#2E5288' }
     case 'Reserved':
       return { bg: '#F0EAFA', color: '#6A34A2' }
+    case 'Under Construction':
+      return { bg: '#FDECD9', color: '#B5591A' }
     default:
       return { bg: '#F0F2F5', color: '#6A7488' }
   }
