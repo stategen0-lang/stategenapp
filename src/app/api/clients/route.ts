@@ -32,9 +32,11 @@ function sanitizeTags(raw: unknown): string[] {
 // references (label/path/name/uploadedAt). Storage paths are opaque strings
 // already scoped to the company by /api/upload/document — we just cap the
 // list size and shape here so a bad payload can't bloat the row.
-function sanitizeClosing(raw: unknown): { downPayment?: number; documents: unknown[] } {
+function sanitizeClosing(raw: unknown): { downPayment?: number; downPaymentWaived?: boolean; documents: unknown[] } {
   const r = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {}
-  const downPayment = typeof r.downPayment === 'number' && r.downPayment >= 0 ? r.downPayment : undefined
+  const downPaymentWaived = r.downPaymentWaived === true
+  // Waived and an amount are mutually exclusive — waived wins if somehow both are sent.
+  const downPayment = !downPaymentWaived && typeof r.downPayment === 'number' && r.downPayment >= 0 ? r.downPayment : undefined
   const docsIn = Array.isArray(r.documents) ? r.documents : []
   const documents = docsIn.slice(0, 20).map(d => {
     const doc = (d && typeof d === 'object') ? d as Record<string, unknown> : {}
@@ -46,7 +48,7 @@ function sanitizeClosing(raw: unknown): { downPayment?: number; documents: unkno
       uploadedAt: typeof doc.uploadedAt === 'string' ? doc.uploadedAt.slice(0, 40) : new Date().toISOString(),
     }
   }).filter(d => d.path)
-  return { ...(downPayment !== undefined ? { downPayment } : {}), documents }
+  return { ...(downPayment !== undefined ? { downPayment } : {}), ...(downPaymentWaived ? { downPaymentWaived } : {}), documents }
 }
 
 // A client change is a scoring signal — refresh that client's lead score.
@@ -140,9 +142,15 @@ export async function PATCH(req: NextRequest) {
       update.notes = JSON.stringify(merged)
 
       if (body.closing !== undefined) {
-        const closing = merged.closing as { downPayment?: number; documents: { label: string }[] } | undefined
+        const closing = merged.closing as { downPayment?: number; downPaymentWaived?: boolean; documents: { label: string }[] } | undefined
         const labels = new Set((closing?.documents ?? []).map(d => d.label))
-        closingJustCompleted = closing?.downPayment != null && CLOSING_DOC_PRESETS.every(p => labels.has(p))
+        // A down payment isn't universal — rentals and some sellers skip it
+        // entirely, so a waived down payment counts the same as a set amount.
+        const downPaymentDone = closing?.downPaymentWaived === true || closing?.downPayment != null
+        const requiredDocs = closing?.downPaymentWaived === true
+          ? CLOSING_DOC_PRESETS.filter(p => p !== 'Down Payment Proof')
+          : CLOSING_DOC_PRESETS
+        closingJustCompleted = downPaymentDone && requiredDocs.every(p => labels.has(p))
       }
     }
 

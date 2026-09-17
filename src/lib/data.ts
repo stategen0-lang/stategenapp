@@ -176,6 +176,10 @@ export interface ClosingDocument {
 
 export interface ClosingInfo {
   downPayment?: number
+  /** Set when the seller/owner isn't asking for a down payment at all (common
+   *  on rentals, or a seller who just wants full payment) — the checklist
+   *  should treat that as settled, not as "not filled in yet". */
+  downPaymentWaived?: boolean
   documents: ClosingDocument[]
 }
 

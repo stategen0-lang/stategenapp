@@ -37,18 +37,23 @@ export interface Deal {
   leadScore: number              // 0-100 (Phase 2 lead scoring)
   agentRating: number            // 1-5 stars
   offer?: { amount: number; status: string } | null   // current offer, for the board badge
-  closing?: { downPayment?: number; docLabels: string[] } | null   // closing checklist summary
+  closing?: { downPayment?: number; downPaymentWaived?: boolean; docLabels: string[] } | null   // closing checklist summary
 }
 
 /** How many of the required closing documents are attached, and whether the
- *  down payment + full paperwork set is complete (ID + down payment proof +
- *  signed contract). Used to badge cards and to auto-advance a deal to Closed. */
+ *  down payment + full paperwork set is complete (ID + signed contract, plus
+ *  down payment proof unless the down payment is waived — a down payment
+ *  isn't universal: rentals and some sellers skip it entirely). Used to badge
+ *  cards and to auto-advance a deal to Closed. */
 export function closingProgress(closing: Deal['closing']): { have: number; total: number; complete: boolean } {
-  const total = CLOSING_DOC_PRESETS.length
+  const waived = !!closing?.downPaymentWaived
+  const required = waived ? CLOSING_DOC_PRESETS.filter(p => p !== 'Down Payment Proof') : CLOSING_DOC_PRESETS
+  const total = required.length
   if (!closing) return { have: 0, total, complete: false }
   const labels = new Set(closing.docLabels)
-  const have = CLOSING_DOC_PRESETS.filter(p => labels.has(p)).length
-  return { have, total, complete: have === total && closing.downPayment != null }
+  const have = required.filter(p => labels.has(p)).length
+  const downPaymentDone = waived || closing.downPayment != null
+  return { have, total, complete: have === total && downPaymentDone }
 }
 
 // ── Days in current stage ────────────────────────────────────────────────────

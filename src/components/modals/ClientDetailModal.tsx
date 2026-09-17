@@ -37,6 +37,10 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
   // signed contract, …). Lightweight for now: stored in the client's notes
   // JSON, files in the existing private document bucket.
   const [downPayment, setDownPayment] = useState<string>(c.closing?.downPayment != null ? String(c.closing.downPayment) : '')
+  // Not every deal has a down payment — a seller may want full payment, or
+  // it's a rental with none required. Explicit, not just "left blank", so the
+  // checklist can tell "not filled in yet" from "not applicable".
+  const [downPaymentWaived, setDownPaymentWaived] = useState<boolean>(c.closing?.downPaymentWaived === true)
   const [closingDocs, setClosingDocs] = useState<ClosingDocument[]>(c.closing?.documents ?? [])
   const [docLabel, setDocLabel] = useState<string>(CLOSING_DOC_PRESETS[0])
   // Which page/side, only asked when the label is "ID Copy" (front/back, or a
@@ -48,14 +52,14 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
   const [closingCelebrate, setClosingCelebrate] = useState(false)
   const closingInputRef = useRef<HTMLInputElement>(null)
 
-  async function saveClosing(nextDocs: ClosingDocument[], nextDownPayment: string) {
+  async function saveClosing(nextDocs: ClosingDocument[], nextDownPayment: string, nextWaived: boolean) {
     setClosingSaving(true)
     try {
-      const dp = nextDownPayment.trim() ? Number(nextDownPayment) : undefined
+      const dp = !nextWaived && nextDownPayment.trim() ? Number(nextDownPayment) : undefined
       const res = await fetch('/api/clients', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: c.id, closing: { downPayment: dp, documents: nextDocs } }),
+        body: JSON.stringify({ id: c.id, closing: { downPayment: dp, downPaymentWaived: nextWaived, documents: nextDocs } }),
       })
       const data = await res.json().catch(() => ({}))
       // Full checklist just came together — the server already moved the deal
@@ -71,7 +75,14 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
   }
 
   function handleDownPaymentBlur() {
-    saveClosing(closingDocs, downPayment)
+    saveClosing(closingDocs, downPayment, downPaymentWaived)
+  }
+
+  function toggleDownPaymentWaived() {
+    const next = !downPaymentWaived
+    setDownPaymentWaived(next)
+    if (next) setDownPayment('')
+    saveClosing(closingDocs, next ? '' : downPayment, next)
   }
 
   async function handleClosingFile(file: File | undefined) {
@@ -91,7 +102,7 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
       }
       const next = [...closingDocs, doc]
       setClosingDocs(next)
-      saveClosing(next, downPayment)
+      saveClosing(next, downPayment, downPaymentWaived)
     } catch {
       setDocError('Network error. Try again.')
     } finally {
@@ -103,7 +114,7 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
   function removeClosingDoc(path: string) {
     const next = closingDocs.filter(d => d.path !== path)
     setClosingDocs(next)
-    saveClosing(next, downPayment)
+    saveClosing(next, downPayment, downPaymentWaived)
   }
 
   // Refer/transfer to another agent.
@@ -367,10 +378,14 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
                   <div className="flex items-center gap-2">
                     <p className="text-xs font-bold" style={{ color: '#14223F' }}>CLOSING CHECKLIST</p>
                     {(() => {
-                      const p = closingProgress({ downPayment: downPayment.trim() ? Number(downPayment) : undefined, docLabels: closingDocs.map(d => d.label) })
+                      const p = closingProgress({
+                        downPayment: downPayment.trim() ? Number(downPayment) : undefined,
+                        downPaymentWaived,
+                        docLabels: closingDocs.map(d => d.label),
+                      })
                       return (
                         <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full" style={p.complete ? { background: '#E3F4EA', color: '#1F7A4D' } : { background: '#EAF0FA', color: '#2E5288' }}>
-                          {p.have}/{p.total} docs{p.complete ? ' · down payment set' : ''}
+                          {p.have}/{p.total} docs{p.complete ? ' · down payment settled' : ''}
                         </span>
                       )
                     })()}
@@ -379,16 +394,23 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
                 </div>
 
                 <div className="mb-3">
-                  <p className="text-xs mb-1" style={{ color: '#9AA3B2' }}>Down payment</p>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs" style={{ color: '#9AA3B2' }}>Down payment</p>
+                    <label className="flex items-center gap-1.5 text-xs cursor-pointer" style={{ color: '#6A7488' }}>
+                      <input type="checkbox" checked={downPaymentWaived} onChange={toggleDownPaymentWaived} className="cursor-pointer" />
+                      No down payment required
+                    </label>
+                  </div>
                   <input
                     type="number"
                     min={0}
-                    value={downPayment}
+                    disabled={downPaymentWaived}
+                    value={downPaymentWaived ? '' : downPayment}
                     onChange={e => setDownPayment(e.target.value)}
                     onBlur={handleDownPaymentBlur}
-                    placeholder="e.g. 50000"
-                    className="w-full rounded-lg px-3 py-2 text-sm outline-none"
-                    style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: '#14223F' }}
+                    placeholder={downPaymentWaived ? 'Not required' : 'e.g. 50000'}
+                    className="w-full rounded-lg px-3 py-2 text-sm outline-none disabled:opacity-60"
+                    style={{ border: '1.5px solid #EEF0F4', background: downPaymentWaived ? '#F0F2F5' : '#fff', color: '#14223F' }}
                   />
                 </div>
 

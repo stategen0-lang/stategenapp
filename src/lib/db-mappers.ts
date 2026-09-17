@@ -116,6 +116,7 @@ export function dbRowToClient(row: Record<string, unknown>, idx: number): Client
       const docs = Array.isArray(c.documents) ? (c.documents as Record<string, unknown>[]) : []
       return {
         downPayment: typeof c.downPayment === 'number' ? c.downPayment : undefined,
+        downPaymentWaived: c.downPaymentWaived === true,
         documents: docs
           .filter(d => typeof d.path === 'string' && typeof d.name === 'string')
           .map(d => ({

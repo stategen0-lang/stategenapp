@@ -100,7 +100,7 @@ export const DEAL_SELECT =
 
 /** Closing checklist summary read off the client's notes JSON (single source
  *  of truth — written by the client detail modal). */
-function closingOf(client: Row | null): { downPayment?: number; docLabels: string[] } | null {
+function closingOf(client: Row | null): { downPayment?: number; downPaymentWaived?: boolean; docLabels: string[] } | null {
   if (!client) return null
   try {
     const c = JSON.parse((client.notes as string) || '{}')?.closing
@@ -108,6 +108,7 @@ function closingOf(client: Row | null): { downPayment?: number; docLabels: strin
     const docs = Array.isArray(c.documents) ? c.documents : []
     return {
       downPayment: typeof c.downPayment === 'number' ? c.downPayment : undefined,
+      downPaymentWaived: c.downPaymentWaived === true,
       docLabels: docs.map((d: Row) => d.label).filter((l: unknown): l is string => typeof l === 'string'),
     }
   } catch { return null }
