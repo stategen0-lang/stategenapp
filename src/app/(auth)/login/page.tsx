@@ -73,6 +73,26 @@ export default function LoginPage() {
     }
   }
 
+  // Repeated wrong-password guessing is tracked server-side, keyed on whatever
+  // was typed (Agent ID or email) — locks out after too many failures and
+  // emails the platform admins once. See /api/auth/login-guard.
+  async function guard(action: 'check' | 'success' | 'failure'): Promise<{ blocked: boolean; retryAfterSeconds?: number }> {
+    try {
+      const r = await fetch('/api/auth/login-guard', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), action }),
+      })
+      return await r.json()
+    } catch {
+      return { blocked: false }   // never let a network hiccup lock someone out
+    }
+  }
+
+  function lockoutMessage(seconds?: number): string {
+    const mins = Math.max(1, Math.ceil((seconds ?? 0) / 60))
+    return `Too many failed attempts. Try again in ${mins} minute${mins === 1 ? '' : 's'}.`
+  }
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
@@ -80,6 +100,13 @@ export default function LoginPage() {
     setResetMsg(null)
 
     try {
+      const pre = await guard('check')
+      if (pre.blocked) {
+        setError(lockoutMessage(pre.retryAfterSeconds))
+        setLoading(false)
+        return
+      }
+
       // Agents sign in with their Agent ID (they have no inbox). Anything without
       // an "@" is treated as an ID and resolved to the synthetic login email;
       // managers type their real email and skip this.
@@ -91,7 +118,8 @@ export default function LoginPage() {
         })
         const rj = await rr.json().catch(() => ({}))
         if (!rr.ok || !rj.email) {
-          setError(rj.error || 'No account found for that Agent ID.')
+          const g = await guard('failure')
+          setError(g.blocked ? lockoutMessage(g.retryAfterSeconds) : (rj.error || 'No account found for that Agent ID.'))
           setLoading(false)
           return
         }
@@ -101,10 +129,12 @@ export default function LoginPage() {
       const { data, error } = await supabase.auth.signInWithPassword({ email: loginEmail, password })
 
       if (error) {
-        setError(cleanMsg(error.message, 'Invalid email or password.'))
+        const g = await guard('failure')
+        setError(g.blocked ? lockoutMessage(g.retryAfterSeconds) : cleanMsg(error.message, 'Invalid email or password.'))
         setLoading(false)
         return
       }
+      await guard('success')
 
       // Check if the user's company is active
       if (data.user) {
