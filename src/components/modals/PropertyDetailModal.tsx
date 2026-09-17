@@ -4,6 +4,7 @@ import { useState, useRef } from 'react'
 import { MessageCircle, Link2, MapPin, FileText, Phone } from 'lucide-react'
 import { Property, Agent, Client, TYPE_GRADIENTS, statusStyle, formatPrice, buildDesc, getAgent, propertyLocation } from '@/lib/data'
 import { useLockBodyScroll } from '@/hooks/use-lock-body-scroll'
+import { usePullToClose } from '@/hooks/use-pull-to-close'
 import MatchCards from '@/components/matching/MatchCards'
 import OffersSection from '@/components/offers/OffersSection'
 import ClientDetailModal from './ClientDetailModal'
@@ -23,6 +24,9 @@ interface Props {
 
 export default function PropertyDetailModal({ property: p, agent, onClose, onEdit, agentWhatsApp, isOwnListing }: Props) {
   useLockBodyScroll()
+  // Pull down at the top of the sheet to go back to the list — the mobile
+  // gesture equivalent of tapping ✕.
+  const { scrollRef: pullScrollRef, panelRef: pullPanelRef, pulling, progress } = usePullToClose(onClose)
   const sc = statusStyle(p.status)
   const photos = p.photos ?? []
   const [activePhoto, setActivePhoto] = useState(0)
@@ -91,9 +95,19 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
         onClick={e => e.target === e.currentTarget && onClose()}
       >
         <div
-          className="w-full md:max-w-lg md:rounded-2xl rounded-t-2xl overflow-hidden flex flex-col"
+          ref={pullPanelRef}
+          className="w-full md:max-w-lg md:rounded-2xl rounded-t-2xl overflow-hidden flex flex-col relative"
           style={{ background: '#fff', boxShadow: '0 8px 40px rgba(0,0,0,0.2)', maxHeight: '92vh' }}
         >
+          {/* Pull-to-close hint — fades in as the sheet is dragged down, only relevant on mobile */}
+          <div
+            className="md:hidden absolute left-0 right-0 flex justify-center pointer-events-none z-10"
+            style={{ top: 8, opacity: pulling ? progress : 0, transition: pulling ? 'none' : 'opacity 0.2s ease' }}
+          >
+            <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full" style={{ background: 'rgba(14,31,61,0.85)', color: '#fff' }}>
+              {progress >= 1 ? 'Release to go back' : '↓ Pull to go back'}
+            </span>
+          </div>
           {/* ── Main photo / gradient hero ── */}
           <div className="relative shrink-0" style={{ height: 200 }}>
             {photos.length > 0 ? (
@@ -197,7 +211,7 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
           )}
 
           {/* ── Scrollable body ── */}
-          <div className="overflow-y-auto flex-1 p-5 space-y-4" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
+          <div ref={pullScrollRef} className="overflow-y-auto flex-1 p-5 space-y-4" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
             <div className="flex items-center justify-between">
               <p className="text-2xl font-extrabold" style={{ color: '#14223F', letterSpacing: '-0.5px' }}>
                 {p.transaction === 'For Rent' ? `${formatPrice(p.rent)}/mo` : formatPrice(p.price)}

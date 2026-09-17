@@ -6,6 +6,7 @@ import { Client, Agent, Property, ClientStatus, ClosingDocument, statusStyle, CL
 import { closingProgress } from '@/lib/pipeline'
 import { scoreBand, BAND_STYLE } from '@/lib/scoring'
 import { useLockBodyScroll } from '@/hooks/use-lock-body-scroll'
+import { usePullToClose } from '@/hooks/use-pull-to-close'
 import MatchCards from '@/components/matching/MatchCards'
 import PropertyDetailModal from './PropertyDetailModal'
 
@@ -23,6 +24,9 @@ interface Props {
 
 export default function ClientDetailModal({ client: c, agent, onClose, onStatusChange, onEdit, onReferred }: Props) {
   useLockBodyScroll()
+  // Pull down at the top of the sheet to go back to the list — the mobile
+  // gesture equivalent of tapping ✕.
+  const { scrollRef: pullScrollRef, panelRef: pullPanelRef, pulling, progress } = usePullToClose(onClose)
   const [status, setStatus] = useState<ClientStatus>(c.status)
   const [statusError, setStatusError] = useState('')
   const [rating, setRating] = useState<number>(c.agentRating ?? 3)
@@ -211,7 +215,16 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
         style={{ background: 'rgba(14,31,61,0.45)' }}
         onClick={e => e.target === e.currentTarget && onClose()}
       >
-        <div className="w-full md:max-w-md md:rounded-2xl rounded-t-2xl overflow-hidden" style={{ background: '#fff', boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
+        <div ref={pullPanelRef} className="w-full md:max-w-md md:rounded-2xl rounded-t-2xl overflow-hidden relative" style={{ background: '#fff', boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
+          {/* Pull-to-close hint — fades in as the sheet is dragged down, only relevant on mobile */}
+          <div
+            className="md:hidden absolute left-0 right-0 flex justify-center pointer-events-none z-10"
+            style={{ top: 8, opacity: pulling ? progress : 0, transition: pulling ? 'none' : 'opacity 0.2s ease' }}
+          >
+            <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full" style={{ background: 'rgba(14,31,61,0.85)', color: '#fff' }}>
+              {progress >= 1 ? 'Release to go back' : '↓ Pull to go back'}
+            </span>
+          </div>
           {/* Header */}
           <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid #EEF0F4' }}>
             <div className="flex items-center gap-3">
@@ -269,7 +282,7 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
             </div>
           </div>
 
-          <div className="p-5 space-y-4 overflow-y-auto max-h-[80vh] md:max-h-[70vh]" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
+          <div ref={pullScrollRef} className="p-5 space-y-4 overflow-y-auto max-h-[80vh] md:max-h-[70vh]" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
             {/* Refer / transfer panel */}
             {referOpen && (
               <div className="rounded-xl p-4" style={{ background: '#F1F8F3', border: '1px solid #CDE7D6' }}>
