@@ -64,6 +64,7 @@ export default function AdminPage() {
   const [pin, setPin] = useState('')
   const [unlocked, setUnlocked] = useState(false)
   const [pinError, setPinError] = useState(false)
+  const [pinErrorMsg, setPinErrorMsg] = useState('Incorrect PIN')
   const [pinLoading, setPinLoading] = useState(false)
   const [companies, setCompanies] = useState<Company[]>([])
   const [loading, setLoading] = useState(false)
@@ -231,8 +232,17 @@ export default function AdminPage() {
         body: JSON.stringify({ pin }),
       })
       if (res.ok) { setUnlocked(true) }
-      else setPinError(true)
-    } catch { setPinError(true) }
+      else {
+        const data = await res.json().catch(() => ({}))
+        if (res.status === 429) {
+          const mins = Math.max(1, Math.ceil((data.retryAfterSeconds ?? 0) / 60))
+          setPinErrorMsg(`Too many attempts. Try again in ${mins} minute${mins === 1 ? '' : 's'}.`)
+        } else {
+          setPinErrorMsg('Incorrect PIN')
+        }
+        setPinError(true)
+      }
+    } catch { setPinErrorMsg('Incorrect PIN'); setPinError(true) }
     setPinLoading(false)
   }
 
@@ -352,7 +362,7 @@ export default function AdminPage() {
               className="w-full px-4 py-3 rounded-xl text-sm outline-none text-center tracking-widest"
               style={{ background: '#1a3258', color: '#fff', border: pinError ? '1.5px solid #e05c5c' : '1.5px solid #2a4570', fontFamily: 'inherit' }}
             />
-            {pinError && <p className="text-xs text-center" style={{ color: '#e05c5c' }}>Incorrect PIN</p>}
+            {pinError && <p className="text-xs text-center" style={{ color: '#e05c5c' }}>{pinErrorMsg}</p>}
             <button
               type="submit"
               disabled={pinLoading || !pin}

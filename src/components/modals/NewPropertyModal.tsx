@@ -378,7 +378,7 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
             <div>
               <label className={label} style={labelStyle}>Status</label>
               <select className={inp} style={inpStyle} value={form.status} onChange={e => set('status', e.target.value)}>
-                {['Available','Pending','Reserved','Sold','Under Construction'].map(s => <option key={s}>{s}</option>)}
+                {['Available','Pending','Reserved','Sold','Rented','Under Construction'].map(s => <option key={s}>{s}</option>)}
               </select>
             </div>
           </div>

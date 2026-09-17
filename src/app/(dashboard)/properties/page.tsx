@@ -108,12 +108,12 @@ export default function PropertiesPage() {
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-6" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
       {/* Header */}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
           <h1 className="text-xl md:text-2xl font-extrabold" style={{ color: '#14223F', letterSpacing: '-0.5px' }}>Properties</h1>
           <p className="text-xs md:text-sm mt-0.5" style={{ color: '#6A7488' }}>Manage your listings</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="flex rounded-xl overflow-hidden" style={{ border: '1.5px solid #EEF0F4', background: '#F7F8FB' }}>
             {(['me','company'] as const).map(s => (
               <button
@@ -147,7 +147,7 @@ export default function PropertiesPage() {
 
       {/* Search + filters */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[180px]">
+        <div className="relative w-full md:flex-1 md:min-w-[180px]">
           <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#9AA3B2' }} />
           <input
             value={q}
@@ -157,18 +157,18 @@ export default function PropertiesPage() {
             style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: '#14223F' }}
           />
         </div>
-        <select value={fType} onChange={e => setFType(e.target.value)} className="rounded-xl px-2.5 py-2 text-sm outline-none" style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: fType ? '#14223F' : '#6A7488' }}>
+        <select value={fType} onChange={e => setFType(e.target.value)} className="flex-1 md:flex-none rounded-xl px-2.5 py-2 text-sm outline-none" style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: fType ? '#14223F' : '#6A7488' }}>
           <option value="">Any type</option>
           {PROPERTY_TYPES.map(t => <option key={t} value={t}>{propertyTypeLabel(t)}</option>)}
         </select>
-        <select value={fTxn} onChange={e => setFTxn(e.target.value)} className="rounded-xl px-2.5 py-2 text-sm outline-none" style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: fTxn ? '#14223F' : '#6A7488' }}>
+        <select value={fTxn} onChange={e => setFTxn(e.target.value)} className="flex-1 md:flex-none rounded-xl px-2.5 py-2 text-sm outline-none" style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: fTxn ? '#14223F' : '#6A7488' }}>
           <option value="">Sale & rent</option>
           <option value="For Sale">For Sale</option>
           <option value="For Rent">For Rent</option>
         </select>
-        <select value={fStatus} onChange={e => setFStatus(e.target.value)} className="rounded-xl px-2.5 py-2 text-sm outline-none" style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: fStatus ? '#14223F' : '#6A7488' }}>
+        <select value={fStatus} onChange={e => setFStatus(e.target.value)} className="flex-1 md:flex-none rounded-xl px-2.5 py-2 text-sm outline-none" style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: fStatus ? '#14223F' : '#6A7488' }}>
           <option value="">Any status</option>
-          {['Available', 'Pending', 'Reserved', 'Sold'].map(s => <option key={s} value={s}>{s}</option>)}
+          {['Available', 'Pending', 'Reserved', 'Sold', 'Rented', 'Under Construction'].map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         {activeFilters && (
           <button

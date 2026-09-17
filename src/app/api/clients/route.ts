@@ -176,12 +176,23 @@ export async function PATCH(req: NextRequest) {
         try {
           const admin = createAdminClient()
           const { data: deal } = await admin
-            .from('deals').select('id,stage').eq('client_id', id).eq('company_id', session.companyId).maybeSingle()
+            .from('deals').select('id,stage,property_id').eq('client_id', id).eq('company_id', session.companyId).maybeSingle()
           if (deal && deal.stage !== 'closed') {
             await admin.from('deals').update({ stage: 'closed', outcome: 'won' }).eq('id', deal.id)
           }
           if (body.status === undefined) {
             await admin.from('client_requests').update({ status: 'Signed' }).eq('id', id).eq('company_id', session.companyId)
+          }
+          // The deal closing means the property it was for is off the market —
+          // flip it to Sold/Rented so it stops showing as Available elsewhere.
+          if (deal?.property_id) {
+            const { data: prop } = await admin
+              .from('Properties').select('id,Status,Amenities').eq('id', deal.property_id).eq('company_id', session.companyId).maybeSingle()
+            if (prop && prop.Status !== 'Sold' && prop.Status !== 'Rented') {
+              let isRent = false
+              try { isRent = /rent/i.test(String(JSON.parse((prop.Amenities as string) || '{}').transaction ?? '')) } catch { /* default to Sold */ }
+              await admin.from('Properties').update({ Status: isRent ? 'Rented' : 'Sold' }).eq('id', prop.id)
+            }
           }
         } catch { /* best-effort cascade */ }
       })

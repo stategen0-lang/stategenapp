@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHmac } from 'crypto'
+import { checkGuard, recordFailure, recordSuccess, requestIp, LOCK_MS, THRESHOLD } from '@/lib/login-guard'
+
+// The admin PIN has no per-user identity to key attempts on (it's one shared
+// secret) — so failures are tracked per IP instead, sharing the same
+// login_attempts table and lockout logic as the agent login form.
+function describeLockout(identifier: string, ip: string): string {
+  return `${THRESHOLD}+ failed admin-panel PIN attempts from IP ${ip}.\n\nThat IP is temporarily locked out (${LOCK_MS / 60_000} minutes). This may be someone guessing the admin PIN — no action is needed unless it keeps happening.`
+}
 
 // The expected unlock token, or null when ADMIN_SECRET isn't configured.
 // There is deliberately NO default secret: a hardcoded fallback would let anyone
@@ -18,11 +26,23 @@ export async function POST(req: NextRequest) {
     console.error('[admin] ADMIN_SECRET is not set — refusing to issue an unlock token.')
     return NextResponse.json({ error: 'Admin unlock is not configured on the server.' }, { status: 503 })
   }
+  const ip = requestIp(req)
+  const identifier = `admin-pin:${ip}`
+  const pre = await checkGuard(identifier)
+  if (pre.blocked) {
+    return NextResponse.json({ error: 'Too many attempts. Try again later.', retryAfterSeconds: pre.retryAfterSeconds }, { status: 429 })
+  }
+
   const { pin } = await req.json().catch(() => ({ pin: '' }))
   const expected = process.env.ADMIN_PIN
   if (!expected || pin !== expected) {
+    const g = await recordFailure(identifier, ip, `Repeated failed admin PIN attempts (${ip})`, describeLockout)
+    if (g.blocked) {
+      return NextResponse.json({ error: 'Too many attempts. Try again later.', retryAfterSeconds: g.retryAfterSeconds }, { status: 429 })
+    }
     return NextResponse.json({ error: 'Invalid PIN' }, { status: 401 })
   }
+  await recordSuccess(identifier)
   const res = NextResponse.json({ ok: true })
   res.cookies.set('admin_token', token, {
     httpOnly: true,

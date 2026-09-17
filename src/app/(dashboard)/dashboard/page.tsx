@@ -229,12 +229,12 @@ export default function DashboardPage() {
       )}
 
       {/* ── Header ── */}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
           <h1 className="text-xl md:text-2xl font-bold" style={{ color: H, letterSpacing: '-0.3px' }}>Dashboard</h1>
           <p className="text-xs md:text-sm mt-0.5" style={{ color: SUB }}>Overview of your agency activity</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setNewClientOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs md:text-sm font-semibold transition-colors"
