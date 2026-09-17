@@ -40,6 +40,7 @@ function sanitizeClosing(raw: unknown): { downPayment?: number; documents: unkno
     const doc = (d && typeof d === 'object') ? d as Record<string, unknown> : {}
     return {
       label: typeof doc.label === 'string' ? doc.label.trim().slice(0, 60) : 'Document',
+      ...(typeof doc.part === 'string' && doc.part.trim() ? { part: doc.part.trim().slice(0, 60) } : {}),
       path: typeof doc.path === 'string' ? doc.path.slice(0, 300) : '',
       name: typeof doc.name === 'string' ? doc.name.slice(0, 200) : 'file',
       uploadedAt: typeof doc.uploadedAt === 'string' ? doc.uploadedAt.slice(0, 40) : new Date().toISOString(),

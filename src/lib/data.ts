@@ -165,6 +165,10 @@ export interface ClientReq {
 /** One closing paperwork file (ID copy, down-payment proof, signed contract, …). */
 export interface ClosingDocument {
   label: string
+  /** Which page/side this file is, when a document needs more than one file
+   *  (an ID's front + back, or a passport's photo/signature pages). Display
+   *  only — completeness still keys off `label` alone, so one page is enough. */
+  part?: string
   path: string   // path in the private DOC_BUCKET — never a public URL
   name: string   // original filename, for display
   uploadedAt: string
@@ -177,6 +181,11 @@ export interface ClosingInfo {
 
 // Suggested closing document labels — agents can also type their own.
 export const CLOSING_DOC_PRESETS = ['ID Copy', 'Down Payment Proof', 'Signed Contract'] as const
+
+// When the label is "ID Copy", offer these sub-options for which page/side
+// is being uploaded — a national ID has a front and back, a passport is
+// usually one photo page (older booklets sometimes need two).
+export const CLOSING_ID_PARTS = ['Front', 'Back', 'Passport photo page', 'Passport photo + signature pages'] as const
 
 export interface Client {
   id: number

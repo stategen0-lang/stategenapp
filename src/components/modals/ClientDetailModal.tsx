@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { Star, FileText, Upload, X, Loader2, ExternalLink } from 'lucide-react'
-import { Client, Agent, Property, ClientStatus, ClosingDocument, statusStyle, CLIENT_TYPE_STYLE, CLOSING_DOC_PRESETS, formatPrice, getAgent } from '@/lib/data'
+import { Client, Agent, Property, ClientStatus, ClosingDocument, statusStyle, CLIENT_TYPE_STYLE, CLOSING_DOC_PRESETS, CLOSING_ID_PARTS, formatPrice, getAgent } from '@/lib/data'
 import { closingProgress } from '@/lib/pipeline'
 import { scoreBand, BAND_STYLE } from '@/lib/scoring'
 import { useLockBodyScroll } from '@/hooks/use-lock-body-scroll'
@@ -39,6 +39,9 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
   const [downPayment, setDownPayment] = useState<string>(c.closing?.downPayment != null ? String(c.closing.downPayment) : '')
   const [closingDocs, setClosingDocs] = useState<ClosingDocument[]>(c.closing?.documents ?? [])
   const [docLabel, setDocLabel] = useState<string>(CLOSING_DOC_PRESETS[0])
+  // Which page/side, only asked when the label is "ID Copy" (front/back, or a
+  // passport's page(s)) — an ID or passport often needs more than one file.
+  const [idPart, setIdPart] = useState<string>(CLOSING_ID_PARTS[0])
   const [docUploading, setDocUploading] = useState(false)
   const [docError, setDocError] = useState('')
   const [closingSaving, setClosingSaving] = useState(false)
@@ -81,7 +84,11 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
       const res = await fetch('/api/upload/document', { method: 'POST', body })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) { setDocError(data.error || 'Could not upload that file.'); return }
-      const doc: ClosingDocument = { label: docLabel, path: data.path, name: data.name || file.name, uploadedAt: new Date().toISOString() }
+      const doc: ClosingDocument = {
+        label: docLabel,
+        ...(docLabel === CLOSING_DOC_PRESETS[0] ? { part: idPart } : {}),
+        path: data.path, name: data.name || file.name, uploadedAt: new Date().toISOString(),
+      }
       const next = [...closingDocs, doc]
       setClosingDocs(next)
       saveClosing(next, downPayment)
@@ -391,7 +398,7 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
                       <div key={doc.path} className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: '#fff', border: '1.5px solid #EEF0F4' }}>
                         <FileText className="h-4 w-4 shrink-0" style={{ color: '#5E8FD6' }} />
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold truncate" style={{ color: '#14223F' }}>{doc.label}</p>
+                          <p className="text-xs font-semibold truncate" style={{ color: '#14223F' }}>{doc.label}{doc.part ? ` — ${doc.part}` : ''}</p>
                           <p className="text-[11px] truncate" style={{ color: '#9AA3B2' }}>{doc.name}</p>
                         </div>
                         <a href={`/api/clients/document?id=${c.id}&path=${encodeURIComponent(doc.path)}`} target="_blank" rel="noopener noreferrer"
@@ -406,7 +413,7 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
                   </div>
                 )}
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <select
                     value={docLabel}
                     onChange={e => setDocLabel(e.target.value)}
@@ -415,6 +422,18 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
                   >
                     {CLOSING_DOC_PRESETS.map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
+                  {/* An ID/passport is rarely one file — front+back, or a
+                      passport's photo page(s). Ask which page this upload is. */}
+                  {docLabel === CLOSING_DOC_PRESETS[0] && (
+                    <select
+                      value={idPart}
+                      onChange={e => setIdPart(e.target.value)}
+                      className="rounded-lg px-2.5 py-2 text-xs outline-none"
+                      style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: '#14223F' }}
+                    >
+                      {CLOSING_ID_PARTS.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  )}
                   <button
                     type="button"
                     onClick={() => closingInputRef.current?.click()}
@@ -433,6 +452,11 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
                     onChange={e => handleClosingFile(e.target.files?.[0])}
                   />
                 </div>
+                {docLabel === CLOSING_DOC_PRESETS[0] && (
+                  <p className="text-[11px] mt-1.5" style={{ color: '#9AA3B2' }}>
+                    Upload front and back separately — pick the page above before each upload. One page is enough to count as complete.
+                  </p>
+                )}
                 {docError && <p className="text-xs mt-2" style={{ color: '#A23434' }}>{docError}</p>}
               </div>
             )}

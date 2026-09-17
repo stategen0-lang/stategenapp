@@ -120,6 +120,7 @@ export function dbRowToClient(row: Record<string, unknown>, idx: number): Client
           .filter(d => typeof d.path === 'string' && typeof d.name === 'string')
           .map(d => ({
             label: (d.label as string) || 'Document',
+            ...(typeof d.part === 'string' && d.part ? { part: d.part as string } : {}),
             path: d.path as string,
             name: d.name as string,
             uploadedAt: (d.uploadedAt as string) || '',
