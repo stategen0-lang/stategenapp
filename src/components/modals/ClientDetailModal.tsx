@@ -81,7 +81,10 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
   function toggleDownPaymentWaived() {
     const next = !downPaymentWaived
     setDownPaymentWaived(next)
-    if (next) setDownPayment('')
+    if (next) {
+      setDownPayment('')
+      if (docLabel === 'Down Payment Proof') setDocLabel(CLOSING_DOC_PRESETS[0])
+    }
     saveClosing(closingDocs, next ? '' : downPayment, next)
   }
 
@@ -442,7 +445,7 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
                     className="rounded-lg px-2.5 py-2 text-xs outline-none"
                     style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: '#14223F' }}
                   >
-                    {CLOSING_DOC_PRESETS.map(p => <option key={p} value={p}>{p}</option>)}
+                    {CLOSING_DOC_PRESETS.filter(p => !(downPaymentWaived && p === 'Down Payment Proof')).map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
                   {/* An ID/passport is rarely one file — front+back, or a
                       passport's photo page(s). Ask which page this upload is. */}
