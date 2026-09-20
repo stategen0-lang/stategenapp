@@ -19,7 +19,7 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const admin = createAdminClient()
-  // select('*') so a missing migration 025 degrades to "no title template" rather
+  // select('*') so a missing migration 026 degrades to "no title template" rather
   // than erroring for everyone.
   const { data } = await admin
     .from('Companies')
@@ -64,7 +64,7 @@ export async function PUT(req: NextRequest) {
 
   if (error) {
     const missing = /title_template/.test(error.message)
-    return NextResponse.json({ error: missing ? 'Run database migration 025 first.' : error.message }, { status: 500 })
+    return NextResponse.json({ error: missing ? 'Run database migration 026 first.' : error.message }, { status: 500 })
   }
   return NextResponse.json({ ok: true, template: update.description_template, titleTemplate: update.title_template })
 }

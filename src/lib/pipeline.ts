@@ -1,7 +1,7 @@
 // Deal pipeline — stages, types and pure helpers.
 // Kept free of React/network so it can be unit-tested in isolation.
 
-import { CLOSING_DOC_PRESETS } from './data'
+import { CLOSING_DOC_PRESETS } from './data.ts'
 
 export type Stage = 'lead' | 'contacted' | 'viewing' | 'negotiating' | 'closed'
 export type Outcome = 'won' | 'lost' | null
