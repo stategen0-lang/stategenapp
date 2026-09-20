@@ -50,7 +50,10 @@ export function buildFacts(d: DescriptionInput): string {
     `Property type: ${d.type}`,
     `Transaction: ${d.transaction} (${d.transaction === 'For Rent' ? 'rental' : 'sale'})`,
     `Price: ${priceStr}`,
-    `Location: ${[d.district, d.city].filter(Boolean).join(', ')}, Lebanon`,
+    // The area exactly as the agency filed it. Appending the country made every
+    // description read "in Ashrafieh, Lebanon", which is not how listings here
+    // are written.
+    `Location (use this wording, do not add a city or country): ${[d.district, d.city].filter(Boolean).join(', ')}`,
     d.size ? `Size: ${d.size} m²` : null,
     d.beds ? `Bedrooms: ${d.beds}` : null,
     d.baths ? `Bathrooms: ${d.baths}` : null,
@@ -91,6 +94,8 @@ Rules:
 - If the template separates master and regular bedrooms but only a total is known, list the total as bedrooms and drop the master line.
 - Keep the template's fixed wording as-is; only placeholders change. Choose natural adjectives where the template asks for one.
 - Use the real figures for price and size, formatted as in the template.
+- Name the location exactly as given — no country, no added city ("in Ashrafieh", never "in Ashrafieh, Lebanon").
+- Never output the "--- BEGIN TEMPLATE ---" / "--- END TEMPLATE ---" lines. They mark the template for you; they are not part of it.
 - Output only the finished description — no preamble, no explanation, no markdown code fences.`,
       maxTokens: 4000,
       temperature: 0.4,
@@ -111,9 +116,34 @@ Rules:
 - Mention the most attractive features naturally
 - End with a subtle call to action
 - Do NOT use generic filler phrases like "don't miss this opportunity"
+- Name the location exactly as given — no country, no added city ("in Ashrafieh", never "in Ashrafieh, Lebanon")
 - Write in English
 - Output the description only, no labels or preamble`,
     maxTokens: 300,
     temperature: 0.7,
   }
+}
+
+/**
+ * Remove the markers that wrap the template in the prompt, in case the model
+ * copies them into its answer — it did, so a real listing opened with
+ * "--- BEGIN TEMPLATE ---".
+ *
+ * Anything before BEGIN or after END goes with them: that is the model restating
+ * the brief, never the description itself.
+ */
+export function stripTemplateMarkers(text: string): string {
+  let out = String(text ?? '')
+
+  const begin = out.search(/-{2,}\s*BEGIN TEMPLATE\s*-{2,}/i)
+  if (begin !== -1) {
+    const nl = out.indexOf('\n', begin)
+    out = nl === -1 ? '' : out.slice(nl + 1)
+  }
+
+  const end = out.search(/-{2,}\s*END TEMPLATE\s*-{2,}/i)
+  if (end !== -1) out = out.slice(0, end)
+
+  // Any stray marker line left over (different spacing or casing).
+  return out.replace(/^[ \t]*-{2,}\s*(BEGIN|END) TEMPLATE\s*-{2,}[ \t]*$/gim, '').trim()
 }

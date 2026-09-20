@@ -3,7 +3,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildFacts, buildPrompts } from './description-prompts.ts'
+import { stripTemplateMarkers, buildFacts, buildPrompts } from './description-prompts.ts'
 
 const sale = {
   title: '3 bed apartment', type: 'Appartement', transaction: 'For Sale',
@@ -45,4 +45,48 @@ test('template mode: reproduces the template, generous token budget', () => {
 test('a blank/whitespace template falls back to free-form', () => {
   assert.equal(buildPrompts(sale, '   ').maxTokens, 300)
   assert.equal(buildPrompts(sale, null).maxTokens, 300)
+})
+
+// ── The area, not the country ───────────────────────────────────────────────
+test('the facts give the area alone, and both modes forbid adding a country', () => {
+  const d = { type: 'Appartement', transaction: 'For Sale', price: 120000, district: '', city: 'ashrafieh', size: 60 }
+  const facts = buildFacts(d)
+  assert.match(facts, /Location[^\n]*ashrafieh/)
+  assert.equal(/Lebanon/.test(facts), false)        // it used to append ", Lebanon"
+  for (const p of [buildPrompts(d), buildPrompts(d, 'A [Property Type] in [Location]')]) {
+    assert.match(p.prompt, /never "in Ashrafieh, Lebanon"/)
+  }
+})
+
+// ── The template markers must never reach the listing ───────────────────────
+test('template mode tells the model not to echo the markers', () => {
+  const p = buildPrompts({ type: 'Appartement' }, 'A [Property Type] in [Location]')
+  assert.match(p.prompt, /Never output the "--- BEGIN TEMPLATE ---"/)
+})
+
+test('stripTemplateMarkers: removes what the model echoed (the real case)', () => {
+  const echoed = [
+    '--- BEGIN TEMPLATE ---',
+    'Own This Furnished Appartement for Sale in Ashrafieh!',
+    'A beautifully designed 60 sqm appartement…',
+    '--- END TEMPLATE ---',
+  ].join('\n')
+  assert.equal(
+    stripTemplateMarkers(echoed),
+    'Own This Furnished Appartement for Sale in Ashrafieh!\nA beautifully designed 60 sqm appartement…',
+  )
+})
+
+test('stripTemplateMarkers: handles one marker, odd spacing, or none at all', () => {
+  assert.equal(stripTemplateMarkers('--- BEGIN TEMPLATE ---\nJust the copy.'), 'Just the copy.')
+  assert.equal(stripTemplateMarkers('Just the copy.\n--- END TEMPLATE ---'), 'Just the copy.')
+  assert.equal(stripTemplateMarkers('----  begin template  ----\nJust the copy.'), 'Just the copy.')
+  // A clean description is returned untouched.
+  const clean = 'Own This Furnished Appartement for Sale in Ashrafieh!\n\nFeatures:\nKitchen'
+  assert.equal(stripTemplateMarkers(clean), clean)
+  assert.equal(stripTemplateMarkers(''), '')
+})
+
+test('stripTemplateMarkers: a stray marker mid-text is dropped, the rest kept', () => {
+  assert.equal(stripTemplateMarkers('Line one\n--- END TEMPLATE ---\n'), 'Line one')
 })

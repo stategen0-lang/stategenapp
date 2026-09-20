@@ -7,13 +7,14 @@
 // this file only adds the Grok call, empty-completion retry, and deadline.
 
 import { chat } from '@/lib/xai'
-import { buildPrompts, type DescriptionInput } from '@/lib/ai/description-prompts'
+import { buildPrompts, stripTemplateMarkers, type DescriptionInput } from '@/lib/ai/description-prompts'
 
 export type { DescriptionInput }
 export { buildFacts, buildPrompts } from '@/lib/ai/description-prompts'
 
 const tidy = (s: string) =>
-  s.trim().replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/, '').trim()
+  // Code fences first, then the template markers the model sometimes echoes.
+  stripTemplateMarkers(s.trim().replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/, ''))
 
 function withDeadline<T>(promise: Promise<T>, ms?: number): Promise<T> {
   if (!ms) return promise
