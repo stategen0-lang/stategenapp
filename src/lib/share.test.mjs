@@ -97,7 +97,7 @@ test('publicListing: the exact key set is the allowlist, nothing more', () => {
     'title', 'type', 'transaction', 'price', 'rent', 'district', 'city', 'size',
     'beds', 'baths', 'parkings', 'buildingAge', 'garden', 'balcony', 'terrace',
     'furnishing', 'amenities', 'buildingFeatures', 'view',
-    'status', 'photos', 'video', 'description',
+    'status', 'photos', 'video', 'description', 'publicNotes',
   ])
   for (const key of Object.keys(pub)) {
     assert.ok(allowed.has(key), `unexpected key leaked to public view: ${key}`)
@@ -106,4 +106,18 @@ test('publicListing: the exact key set is the allowlist, nothing more', () => {
 test('publicListing: tolerates a missing photos array', () => {
   const pub = publicListing({ ...fullProperty, photos: undefined }, 'desc')
   assert.deepEqual(pub.photos, [])
+})
+
+test('publicListing: carries the agent\'s public notes, never the internal ones', () => {
+  const pub = publicListing(
+    { ...fullProperty, publicNotes: 'Brand new kitchen, quiet street', notes: 'Owner will drop to 450k' },
+    'desc',
+  )
+  assert.equal(pub.publicNotes, 'Brand new kitchen, quiet street')
+  assert.equal('notes' in pub, false)
+})
+
+test('publicListing: blank public notes are left out entirely', () => {
+  assert.equal(publicListing({ ...fullProperty, publicNotes: '   ' }, 'desc').publicNotes, undefined)
+  assert.equal(publicListing(fullProperty, 'desc').publicNotes, undefined)
 })

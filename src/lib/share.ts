@@ -85,6 +85,8 @@ export interface PublicListing {
   photos: string[]
   video?: string
   description: string
+  /** The agent's own selling points, written for clients — never the internal notes. */
+  publicNotes?: string
 }
 
 /**
@@ -120,5 +122,7 @@ export function publicListing(p: Property, description: string): PublicListing {
     photos: Array.isArray(p.photos) ? p.photos : [],
     video: p.video,
     description,
+    // Written for clients by the agent; the internal notes are still excluded.
+    publicNotes: p.publicNotes?.trim() || undefined,
   }
 }

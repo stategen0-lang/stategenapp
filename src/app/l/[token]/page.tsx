@@ -218,6 +218,18 @@ export default async function ListingPage({ params }: { params: Promise<{ token:
             <p className="text-sm leading-relaxed" style={{ color: '#2B3A54', whiteSpace: 'pre-wrap' }}>{listing.description}</p>
           </div>
 
+          {/* The agent's own selling points (Public Notes on the listing form).
+              Internal notes never reach this page — see publicListing. */}
+          {listing.publicNotes && (
+            <div>
+              <div className="flex items-center gap-2.5 mb-2.5">
+                <span className="h-4 w-1 rounded-full" style={{ background: accent }} />
+                <p className="text-[11px] font-bold uppercase" style={{ color: accent, letterSpacing: '0.12em' }}>Good to know</p>
+              </div>
+              <p className="text-sm leading-relaxed" style={{ color: '#2B3A54', whiteSpace: 'pre-wrap' }}>{listing.publicNotes}</p>
+            </div>
+          )}
+
           {/* Video walkthrough */}
           {listing.video && (
             <div>
