@@ -54,6 +54,7 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
     advancedPayment: (initial?.advancedPayment ?? '') as AdvancedPayment | '',
     aiDescription: initial?.aiDescription ?? '',
     notes: initial?.notes ?? '',
+    publicNotes: initial?.publicNotes ?? '',
     referredBy: initial?.referredBy ?? '',
     ownerName: initial?.ownerName ?? '',
     ownerContact: initial?.ownerContact ?? '',
@@ -622,6 +623,22 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
 
           {/* Internal Notes */}
           <div>
+            <label className={label} style={labelStyle}>
+              Public Notes <span style={{ color: '#B0B8C8', fontWeight: 400 }}>(clients may read this)</span>
+            </label>
+            <textarea
+              className={inp}
+              style={{ ...inpStyle, resize: 'none' }}
+              rows={2}
+              value={form.publicNotes}
+              onChange={e => set('publicNotes', e.target.value)}
+              placeholder="Selling points to mention — new kitchen, quiet street, walking distance to the school…"
+              onClick={() => setTemplateOpen(false)}
+            />
+            <p className="text-[11px] mt-1 mb-3" style={{ color: '#9AA3B2' }}>
+              Worked into the generated description. Keep anything the client shouldn&apos;t see in Internal Notes below.
+            </p>
+
             <label className={label} style={labelStyle}>
               Internal Notes <span style={{ color: '#B0B8C8', fontWeight: 400 }}>(private)</span>
             </label>

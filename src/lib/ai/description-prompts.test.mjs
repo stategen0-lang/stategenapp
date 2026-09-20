@@ -90,3 +90,28 @@ test('stripTemplateMarkers: handles one marker, odd spacing, or none at all', ()
 test('stripTemplateMarkers: a stray marker mid-text is dropped, the rest kept', () => {
   assert.equal(stripTemplateMarkers('Line one\n--- END TEMPLATE ---\n'), 'Line one')
 })
+
+// ── Public vs internal notes ────────────────────────────────────────────────
+test('public notes are material for the copy; internal notes stay context', () => {
+  const facts = buildFacts({
+    type: 'Appartement', transaction: 'For Sale', price: 120000, city: 'Ashrafieh',
+    publicNotes: 'Brand new kitchen, quiet street',
+    notes: 'Owner is in a hurry, will drop 10k',
+  })
+  assert.match(facts, /include these in the description[^\n]*Brand new kitchen/)
+  assert.match(facts, /never quote or reveal these[^\n]*Owner is in a hurry/)
+})
+
+test('both modes are told to use the selling points and hide the internal notes', () => {
+  const d = { type: 'Appartement', publicNotes: 'New kitchen', notes: 'Owner desperate' }
+  for (const p of [buildPrompts(d), buildPrompts(d, 'A [Property Type] in [Location]')]) {
+    assert.match(p.prompt, /selling points/i)
+    assert.match(p.prompt, /internal notes/i)
+  }
+})
+
+test('a listing with no notes at all mentions neither', () => {
+  const facts = buildFacts({ type: 'Villa', transaction: 'For Rent', rent: 1200, city: 'Adma' })
+  assert.equal(/selling points/i.test(facts), false)
+  assert.equal(/Agent notes/i.test(facts), false)
+})

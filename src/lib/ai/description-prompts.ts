@@ -29,6 +29,8 @@ export interface DescriptionInput {
   needsRenovation?: boolean
   advancedPayment?: unknown
   notes?: string
+  /** Selling points the agent wants said out loud (unlike `notes`). */
+  publicNotes?: string
 }
 
 export interface Prompts {
@@ -64,7 +66,10 @@ export function buildFacts(d: DescriptionInput): string {
     d.buildingAge ? `Building age: ${d.buildingAge} years` : null,
     d.needsRenovation ? 'Needs renovation' : null,
     d.advancedPayment ? `Advanced payment: ${d.advancedPayment}` : null,
-    d.notes ? `Agent notes (context only): ${d.notes}` : null,
+    // Public notes are written for clients, so the description may say them
+    // outright; internal notes stay context the copy must never repeat.
+    d.publicNotes ? `Selling points from the agent (include these in the description): ${d.publicNotes}` : null,
+    d.notes ? `Agent notes (context only — never quote or reveal these): ${d.notes}` : null,
   ].filter(Boolean).join('\n- ')
 }
 
@@ -94,6 +99,8 @@ Rules:
 - If the template separates master and regular bedrooms but only a total is known, list the total as bedrooms and drop the master line.
 - Keep the template's fixed wording as-is; only placeholders change. Choose natural adjectives where the template asks for one.
 - Use the real figures for price and size, formatted as in the template.
+- Work the agent's selling points into the description naturally, in the template's own voice.
+- Never repeat or hint at the agent's internal notes.
 - Name the location exactly as given — no country, no added city ("in Ashrafieh", never "in Ashrafieh, Lebanon").
 - Never output the "--- BEGIN TEMPLATE ---" / "--- END TEMPLATE ---" lines. They mark the template for you; they are not part of it.
 - Output only the finished description — no preamble, no explanation, no markdown code fences.`,
@@ -116,6 +123,8 @@ Rules:
 - Mention the most attractive features naturally
 - End with a subtle call to action
 - Do NOT use generic filler phrases like "don't miss this opportunity"
+- Work the agent's selling points in naturally
+- Never repeat or hint at the agent's internal notes
 - Name the location exactly as given — no country, no added city ("in Ashrafieh", never "in Ashrafieh, Lebanon")
 - Write in English
 - Output the description only, no labels or preamble`,

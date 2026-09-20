@@ -28,6 +28,7 @@ export function dbRowToProperty(row: Record<string, unknown>, idx: number): Prop
     agentId: (extras.agentId as Property['agentId']) ?? 'a1',
     advancedPayment: extras.advancedPayment as import('@/lib/data').AdvancedPayment | undefined,
     notes: extras.notes as string | undefined,
+    publicNotes: extras.publicNotes as string | undefined,
     aiDescription: extras.aiDescription as string | undefined,
     parkings: extras.parkings as number | undefined,
     buildingAge: extras.buildingAge as number | undefined,

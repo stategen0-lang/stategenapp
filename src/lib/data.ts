@@ -89,7 +89,11 @@ export interface Property {
   /** A single walkthrough video, stored as a URL (upload or a pasted link). */
   video?: string
   aiDescription?: string
+  /** Internal notes: team context, never repeated to a client. */
   notes?: string
+  /** Public notes: selling points the agent wants said out loud — the AI
+   *  description works them in, so they are written for clients to read. */
+  publicNotes?: string
   /** Partner company/agent who referred this listing (for co-brokering). Internal
    *  — visible to the team, never published to the public page. */
   referredBy?: string

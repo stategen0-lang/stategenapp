@@ -250,6 +250,8 @@ export async function stageDescribeProperty(
     title: p.title, type: p.type, transaction: p.transaction, price: p.price, rent: p.rent,
     district: p.district, city: p.city, size: p.size, beds: p.beds, baths: p.baths,
     garden: p.garden, balcony: p.balcony, view: p.view, parkings: p.parkings, buildingAge: p.buildingAge,
+    // The agent's public selling points; internal notes are deliberately not sent.
+    publicNotes: p.publicNotes,
   }
 
   let text: string
