@@ -9,6 +9,7 @@ import { isManager } from '@/lib/permissions'
 import { DescriptionTemplate, DEFAULT_TEMPLATES, STORAGE_KEY, loadTemplates } from '@/lib/templates'
 import { EXPORTS, EXPORT_LABELS, type ExportKind } from '@/lib/export-columns'
 import { refreshMarketingConfig } from '@/components/marketing/SendToMarketing'
+import { renderTitle, unknownTokens, DEFAULT_TITLE_TEMPLATE, TITLE_FIELDS } from '@/lib/title-template'
 
 const COMMISSION_RATE = 2.5
 const H   = '#1A2B4A'
@@ -94,6 +95,39 @@ export default function ProfilePage() {
       body: JSON.stringify({ template: active }),
     }).catch(() => { /* offline / not signed in — non-fatal */ })
   }
+
+  // ── Listing title pattern (one per agency) ──────────────────────────────
+  const [titleTemplate, setTitleTemplate] = useState('')
+  const [titleSaved, setTitleSaved] = useState('')
+  const [titleBusy, setTitleBusy] = useState(false)
+  const [titleMsg, setTitleMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  useEffect(() => {
+    if (!manager) return
+    fetch('/api/company/template').then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) { setTitleTemplate(d.titleTemplate ?? ''); setTitleSaved(d.titleTemplate ?? '') } })
+      .catch(() => {})
+  }, [manager])
+
+  async function saveTitleTemplate(value: string) {
+    setTitleBusy(true); setTitleMsg(null)
+    const r = await fetch('/api/company/template', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ titleTemplate: value }),
+    }).catch(() => null)
+    const d = r ? await r.json().catch(() => ({})) : {}
+    setTitleBusy(false)
+    if (!r || !r.ok) { setTitleMsg({ ok: false, text: d.error ?? 'Could not save. Please try again.' }); return }
+    setTitleTemplate(d.titleTemplate ?? ''); setTitleSaved(d.titleTemplate ?? '')
+    setTitleMsg({ ok: true, text: d.titleTemplate ? 'Saved. New listings will be titled this way.' : 'Cleared — the default pattern is used.' })
+  }
+
+  // A real-looking listing, so the manager sees the effect of their pattern.
+  const titlePreview = renderTitle(titleTemplate, {
+    type: 'Apartment', transaction: 'For Sale', location: 'Kaslik', size: 180,
+    beds: 3, baths: 2, parkings: 2, furnishing: 'Furnished', view: 'Sea',
+    floor: 'Mid floor', price: 450000, buildingAge: 5,
+  })
+  const titleUnknown = unknownTokens(titleTemplate)
 
   function toggleActive(id: string) {
     saveTemplates(templates.map(t => ({ ...t, active: t.id === id ? !t.active : false })))
@@ -585,6 +619,73 @@ export default function ProfilePage() {
           )}
         </div>
       </div>
+
+      {/* Listing title pattern — managers only (shared across the agency) */}
+      {manager && (
+        <div className="rounded-2xl bg-white overflow-hidden" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #EEF0F4' }}>
+          <div className="px-5 py-4" style={{ borderBottom: '1px solid #EEF0F4' }}>
+            <p className="text-sm font-bold" style={{ color: H }}>Listing title pattern</p>
+            <p className="text-xs mt-0.5" style={{ color: SUB }}>How every new listing is named, so the whole agency reads the same way</p>
+          </div>
+          <div className="p-5 space-y-3">
+            {titleMsg && (
+              <p className="text-xs px-3 py-2 rounded-lg" style={titleMsg.ok ? { background: '#E3F4EA', color: '#1F7A4D' } : { background: '#FBE7E7', color: '#A23434' }}>{titleMsg.text}</p>
+            )}
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                value={titleTemplate}
+                onChange={e => setTitleTemplate(e.target.value)}
+                placeholder={DEFAULT_TITLE_TEMPLATE}
+                spellCheck={false}
+                className="flex-1 min-w-0 rounded-xl px-3 py-2.5 text-base sm:text-sm outline-none"
+                style={{ border: '1.5px solid #EEF0F4', color: H, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}
+              />
+              <button
+                onClick={() => saveTitleTemplate(titleTemplate)}
+                disabled={titleBusy || titleTemplate.trim() === titleSaved.trim()}
+                className="rounded-xl px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50 whitespace-nowrap"
+                style={{ background: H }}
+              >
+                {titleBusy ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+
+            <div className="rounded-xl px-3 py-2.5" style={{ background: '#F7F8FB', border: '1px solid #EEF0F4' }}>
+              <p className="text-[11px] font-bold" style={{ color: '#9AA3B2' }}>PREVIEW</p>
+              <p className="text-sm font-semibold mt-0.5" style={{ color: H }}>{titlePreview || 'Nothing would be written — add at least one field.'}</p>
+            </div>
+
+            {titleUnknown.length > 0 && (
+              <p className="text-xs px-3 py-2 rounded-lg" style={{ background: '#FBF6EE', color: '#8A5A24' }}>
+                Not a field, so it is skipped: {titleUnknown.join(', ')}
+              </p>
+            )}
+
+            <div>
+              <p className="text-xs mb-1.5" style={{ color: SUB }}>Tap to add a field. Anything outside [brackets] is written as-is; a field with no value disappears, along with the wording around it.</p>
+              <div className="flex flex-wrap gap-1.5">
+                {TITLE_FIELDS.map(f => (
+                  <button
+                    key={f.token}
+                    onClick={() => setTitleTemplate(t => (t || DEFAULT_TITLE_TEMPLATE).concat(f.token))}
+                    title={f.hint}
+                    className="px-2 py-1 rounded-lg text-xs font-semibold"
+                    style={{ border: '1.5px solid #EEF0F4', background: '#F7F8FB', color: '#2E5288', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}
+                  >
+                    {f.token}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {titleSaved && (
+              <button onClick={() => saveTitleTemplate('')} disabled={titleBusy} className="text-xs font-semibold" style={{ color: '#A23434' }}>
+                Reset to the default pattern
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Description Templates — managers only (shared across the agency) */}
       {manager && (

@@ -9,6 +9,7 @@ import { DescriptionTemplate, loadTemplates } from '@/lib/templates'
 import { createClient as createSupabaseBrowser } from '@/lib/supabase/client'
 import { VIDEO_BUCKET, MAX_VIDEO_BYTES } from '@/lib/upload'
 import DeleteRecord from './DeleteRecord'
+import { renderTitle } from '@/lib/title-template'
 
 
 interface Props {
@@ -56,6 +57,21 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
     ownerName: initial?.ownerName ?? '',
     ownerContact: initial?.ownerContact ?? '',
   })
+  // ── The title, written from the agency's pattern ───────────────────────────
+  // It follows the form as the agent fills it in, and stops the moment they type
+  // their own title (or when editing a listing that already has one).
+  const [titleTemplate, setTitleTemplate] = useState<string | null>(null)
+  const [titleEdited, setTitleEdited] = useState<boolean>(!!initial?.title)
+
+  useEffect(() => {
+    let live = true
+    fetch('/api/company/template')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (live) setTitleTemplate((d?.titleTemplate as string | null) ?? '') })
+      .catch(() => { if (live) setTitleTemplate('') })
+    return () => { live = false }
+  }, [])
+
   const [photos, setPhotos] = useState<string[]>(initial?.photos ?? [])
   const [amenities, setAmenities] = useState<string[]>(initial?.amenities ?? [])
   const [buildingFeatures, setBuildingFeatures] = useState<string[]>(initial?.buildingFeatures ?? [])
@@ -241,6 +257,18 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
     }
   }
 
+  // Rewrite the title whenever the fields behind it change.
+  const autoTitle = renderTitle(titleTemplate, {
+    type: propertyTypeLabel(form.type), transaction: form.transaction, location: form.area.trim(),
+    size: form.size, beds: form.beds, baths: form.baths, parkings: form.parkings,
+    floor: form.floor, view: form.view, furnishing: form.furnishing,
+    price: form.price, rent: form.rent, buildingAge: form.buildingAge,
+  })
+  useEffect(() => {
+    if (titleEdited || titleTemplate === null) return   // agent's own title, or not loaded yet
+    setForm(f => (f.title === autoTitle ? f : { ...f, title: autoTitle }))
+  }, [autoTitle, titleEdited, titleTemplate])
+
   async function handleSave(skipDupeCheck = false) {
     if (!form.title || !form.area.trim()) { setSaveError('Title and area are required.'); return }
     setSaveError('')
@@ -342,7 +370,23 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
           {/* Title */}
           <div>
             <label className={label} style={labelStyle}>Title *</label>
-            <input className={inp} style={inpStyle} value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g. Raouché Appartement" />
+            <input
+              className={inp} style={inpStyle} value={form.title}
+              onChange={e => { setTitleEdited(true); set('title', e.target.value) }}
+              placeholder="e.g. Raouché Appartement"
+            />
+            <p className="text-[11px] mt-1" style={{ color: '#9AA3B2' }}>
+              {titleEdited ? (
+                <>
+                  Your own title.{' '}
+                  <button type="button" onClick={() => { setTitleEdited(false); set('title', autoTitle) }} style={{ color: '#5E8FD6', fontWeight: 600 }}>
+                    Use the agency pattern
+                  </button>
+                </>
+              ) : (
+                "Written from your agency's title pattern — type here to use your own."
+              )}
+            </p>
           </div>
 
           {/* Type + Transaction */}

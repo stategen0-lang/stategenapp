@@ -19,6 +19,8 @@ import { stage, type Profile } from '@/lib/whatsapp/write-handlers'
 import type { IntentResult } from '@/lib/whatsapp/intent'
 import type { BotReply } from '@/lib/whatsapp/cloud'
 import { isManager } from '@/lib/permissions'
+import { renderTitle } from '@/lib/title-template'
+import { propertyTypeLabel } from '@/lib/data'
 
 type FlowName = 'create_property' | 'create_client'
 
@@ -81,10 +83,35 @@ async function finishProperty(admin: SupabaseClient, profile: Profile, context: 
 
   const built = buildUpdate({ ...answersOf(context), ...extrasOf(context) }, PROPERTY_FIELDS)
   const columns: Record<string, unknown> = { ...built.columns, company_id: profile.company_id }
-  if (!columns.Title) columns.Title = derivedTitle(context)
 
   const extras = { ...built.extras }
   if (profile.agent_code) extras.agentId = profile.agent_code
+
+  // Title: the agency's pattern (Settings → Listing title pattern), so a listing
+  // added here is named exactly like one added on the web. Falls back to the old
+  // "3 bed Appartement in Zouk" shape if the pattern yields nothing.
+  if (!columns.Title) {
+    const { data: company } = await admin.from('Companies').select('*').eq('id', profile.company_id).maybeSingle()
+    const tpl = (company as Record<string, unknown> | null)?.title_template as string | null | undefined
+    const answers = answersOf(context)
+    const extra = extrasOf(context)
+    const fromPattern = renderTitle(tpl ?? null, {
+      type: answers.type ? propertyTypeLabel(String(answers.type) as Parameters<typeof propertyTypeLabel>[0]) : '',
+      transaction: String(answers.transaction ?? extra.transaction ?? ''),
+      location: String(answers.location ?? ''),
+      size: (answers.size as number) ?? 0,
+      beds: (answers.beds as number) ?? 0,
+      baths: (answers.baths as number) ?? 0,
+      parkings: (answers.parkings as number) ?? 0,
+      floor: String(extra.floor ?? ''),
+      view: String(extra.view ?? ''),
+      furnishing: String(extra.furnishing ?? ''),
+      price: (answers.price as number) ?? 0,
+      rent: (extra.rent as number) ?? 0,
+      buildingAge: (extra.buildingAge as number) ?? 0,
+    })
+    columns.Title = fromPattern || derivedTitle(context)
+  }
 
   const changes = [`Title: ${columns.Title}`, ...built.changes]
   return stage(admin, profile, 'create_property', confirmationText('a new listing', changes), {
