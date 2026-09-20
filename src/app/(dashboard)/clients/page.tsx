@@ -372,7 +372,7 @@ function ClientsPageInner() {
         <ImportModal
           kind="clients"
           onClose={() => setImportOpen(false)}
-          onDone={n => { setImportOpen(false); showToast(`Imported ${n} client${n === 1 ? '' : 's'}!`); reloadClients() }}
+          onDone={(n, dup) => { setImportOpen(false); showToast(`Imported ${n} client${n === 1 ? '' : 's'}${dup ? ` — ${dup} already existed, skipped` : '!'}`); reloadClients() }}
         />
       )}
       {forwardOpen && (

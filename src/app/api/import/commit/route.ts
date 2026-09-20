@@ -1,13 +1,52 @@
 import { NextRequest, NextResponse, after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/session'
 import { isManager } from '@/lib/permissions'
 import { recalculateScores } from '@/lib/score-engine'
-import { applyMapping, isValidRow, type ImportKind, type Mapping, type NormProperty, type NormClient } from '@/lib/import/mapping'
+import { ensureManagerAgentCode } from '@/lib/ensure-manager-code'
+import {
+  applyMapping, isValidRow, dedupeKey, normTransaction,
+  type ImportKind, type Mapping, type NormProperty, type NormClient,
+} from '@/lib/import/mapping'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 // Step 2 of import: take the reviewed headers/rows/mapping and bulk-insert the
 // valid rows as properties or clients, scoped to the manager's company.
-// Manager-only. Imported clients are left unassigned (agentId null).
+// Manager-only. Rows already in the file twice, or already in the company's
+// data (re-importing the same sheet), are skipped rather than duplicated.
+// Imported rows are owned by the importing manager, like anything they add by
+// hand; they can hand clients to an agent with Refer.
+
+type Row = Record<string, unknown>
+
+// Everything the company already has, as dedupe keys. Paged because a single
+// select stops at 1000 rows.
+async function existingKeys(supabase: SupabaseClient, kind: ImportKind, companyId: number): Promise<Set<string>> {
+  const keys = new Set<string>()
+  const PAGE = 1000
+  for (let from = 0; from < 50_000; from += PAGE) {
+    const { data } = kind === 'properties'
+      ? await supabase.from('Properties').select('Title,Location,Neighborhood,Price,Amenities').eq('company_id', companyId).range(from, from + PAGE - 1)
+      : await supabase.from('client_requests').select('"Client Name","client phone"').eq('company_id', companyId).range(from, from + PAGE - 1)
+    const page = (data ?? []) as unknown as Row[]
+    for (const r of page) {
+      if (kind === 'properties') {
+        let tx = ''
+        try { tx = String(JSON.parse((r.Amenities as string) || '{}').transaction ?? '') } catch { /* no extras */ }
+        keys.add(dedupeKey('properties', {
+          title: String(r.Title ?? ''), city: String(r.Location ?? ''), district: String(r.Neighborhood ?? ''),
+          price: r.Price == null ? null : Number(r.Price), transaction: normTransaction(tx),
+        } as NormProperty))
+      } else {
+        keys.add(dedupeKey('clients', { name: String(r['Client Name'] ?? ''), phone: String(r['client phone'] ?? '') } as NormClient))
+      }
+    }
+    if (page.length < PAGE) break
+  }
+  return keys
+}
+
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -20,11 +59,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing import data.' }, { status: 400 })
   }
 
-  const normalized = applyMapping(kind, headers, rows, mapping).filter(o => isValidRow(kind, o))
-  if (!normalized.length) return NextResponse.json({ error: 'No valid rows to import (each row needs at least a title/price or a client name).' }, { status: 400 })
+  const valid = applyMapping(kind, headers, rows, mapping).filter(o => isValidRow(kind, o))
+  if (!valid.length) return NextResponse.json({ error: 'No valid rows to import (each row needs at least a title/price or a client name).' }, { status: 400 })
 
   const supabase = await createClient()
   const companyId = session.companyId
+
+  // Drop repeats inside the file and anything the company already has.
+  const seen = await existingKeys(supabase, kind, companyId)
+  let duplicates = 0
+  const normalized = valid.filter(o => {
+    const k = dedupeKey(kind, o)
+    if (seen.has(k)) { duplicates++; return false }
+    seen.add(k)
+    return true
+  })
+  if (!normalized.length) {
+    return NextResponse.json({ inserted: 0, skipped: rows.length, duplicates, kind })
+  }
+
+  // The importing manager owns the rows (their agent code is minted if missing).
+  let ownerAgent: string | null = session.agentCode ?? null
+  if (!ownerAgent) {
+    try { ownerAgent = await ensureManagerAgentCode(createAdminClient(), companyId, session.userId, session.fullName) } catch { ownerAgent = null }
+  }
 
   let inserts: Record<string, unknown>[]
   if (kind === 'properties') {
@@ -43,17 +101,21 @@ export async function POST(req: NextRequest) {
         Payment_terms: isRent ? 'For Rent' : 'For Sale',
         // Store the app's enum ('For Sale'/'For Rent') and, for rentals, the
         // amount in `rent` (the field the UI reads for /mo pricing).
-        Amenities: JSON.stringify({ type: 'Appartement', transaction: isRent ? 'For Rent' : 'For Sale', rent: isRent ? (p.price ?? 0) : 0, agentId: null, imported: true }),
+        Amenities: JSON.stringify({
+          type: p.type,
+          transaction: isRent ? 'For Rent' : 'For Sale',
+          rent: isRent ? (p.price ?? 0) : 0,
+          agentId: ownerAgent,
+          ownerContact: p.ownerContact || undefined,
+          notes: p.notes || undefined,
+          imported: true,
+        }),
         Status: p.status || 'Available',
       }
     })
   } else {
-    // Match the app's enums exactly: ClientType is 'Buyer' | 'Renter' (capitalised),
-    // ClientStatus is a fixed set — unknown sheet statuses fall back to 'Searching'.
-    const VALID_STATUS = new Set(['Searching', 'Negotiation', 'Signed', 'Viewing'])
     inserts = (normalized as NormClient[]).map(c => {
       const isRenter = c.type === 'renter'
-      const status = VALID_STATUS.has((c.status || '').trim()) ? c.status.trim() : 'Searching'
       return {
         company_id: companyId,
         Agent_id: null,
@@ -67,11 +129,11 @@ export async function POST(req: NextRequest) {
         notes: JSON.stringify({
           email: c.email || undefined,
           type: isRenter ? 'Renter' : 'Buyer',
-          agentId: null,   // unassigned; the manager can reassign later
-          req: { location: c.location || undefined, beds: c.bedrooms ?? undefined, priceMax: c.budget ?? undefined },
+          agentId: ownerAgent,
+          req: { location: c.location || undefined, beds: c.bedrooms ?? undefined, priceMax: c.budget ?? undefined, notes: c.notes || undefined },
           imported: true,
         }),
-        status,
+        status: c.status,   // already one of the app's client statuses
       }
     })
   }
@@ -91,5 +153,5 @@ export async function POST(req: NextRequest) {
   // (used by matching + reminder relevance). Deferred so the import returns fast.
   after(async () => { try { await recalculateScores({ companyId }) } catch { /* non-fatal */ } })
 
-  return NextResponse.json({ inserted, skipped: rows.length - inserted, kind })
+  return NextResponse.json({ inserted, skipped: rows.length - inserted, duplicates, kind })
 }

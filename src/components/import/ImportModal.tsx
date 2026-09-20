@@ -11,7 +11,7 @@ type Analyzed = { headers: string[]; rows: string[][]; mapping: Mapping; total: 
 export default function ImportModal({ kind, onClose, onDone }: {
   kind: ImportKind
   onClose: () => void
-  onDone: (inserted: number) => void
+  onDone: (inserted: number, duplicates: number) => void
 }) {
   const noun = kind === 'properties' ? 'properties' : 'clients'
   const [phase, setPhase] = useState<'pick' | 'analyzing' | 'review' | 'importing'>('pick')
@@ -57,7 +57,7 @@ export default function ImportModal({ kind, onClose, onDone }: {
       })
       const j = await r.json()
       if (!r.ok) { setError(j.error || 'Import failed.'); setPhase('review'); return }
-      onDone(j.inserted ?? 0)
+      onDone(j.inserted ?? 0, j.duplicates ?? 0)
     } catch {
       setError('Import failed. Please try again.'); setPhase('review')
     }

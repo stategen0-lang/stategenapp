@@ -258,7 +258,7 @@ export default function PropertiesPage() {
         <ImportModal
           kind="properties"
           onClose={() => setImportOpen(false)}
-          onDone={n => { setImportOpen(false); showToast(`Imported ${n} listing${n === 1 ? '' : 's'}!`); reloadProperties() }}
+          onDone={(n, dup) => { setImportOpen(false); showToast(`Imported ${n} listing${n === 1 ? '' : 's'}${dup ? ` — ${dup} already existed, skipped` : '!'}`); reloadProperties() }}
         />
       )}
     </div>
