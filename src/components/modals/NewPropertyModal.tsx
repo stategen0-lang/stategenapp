@@ -10,6 +10,7 @@ import { createClient as createSupabaseBrowser } from '@/lib/supabase/client'
 import { VIDEO_BUCKET, MAX_VIDEO_BYTES } from '@/lib/upload'
 import DeleteRecord from './DeleteRecord'
 import { renderTitle } from '@/lib/title-template'
+import { toPlace } from '@/lib/whatsapp/writes'
 
 
 interface Props {
@@ -443,7 +444,12 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
           {/* Area (single field — the neighborhood implies the city) */}
           <div>
             <label className={label} style={labelStyle}>Area *</label>
-            <input className={inp} style={inpStyle} value={form.area} onChange={e => set('area', e.target.value)} placeholder="e.g. Achrafieh" />
+            <input
+              className={inp} style={inpStyle} value={form.area}
+              onChange={e => set('area', e.target.value)}
+              onBlur={e => set('area', toPlace(e.target.value) ?? e.target.value)}
+              placeholder="e.g. Achrafieh"
+            />
           </div>
 
           {/* Size + Beds + Baths + Parking */}

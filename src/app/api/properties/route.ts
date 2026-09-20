@@ -7,6 +7,7 @@ import { loadProperties, propertyAgent } from '@/lib/api-loaders'
 import { createListingAlerts } from '@/lib/alerts-server'
 import { ensureManagerAgentCode } from '@/lib/ensure-manager-code'
 import { DOC_BUCKET, PHOTO_BUCKET, VIDEO_BUCKET, companyObjectPath, unreferencedPaths } from '@/lib/upload'
+import { toPlace } from '@/lib/whatsapp/writes'
 
 export async function GET() {
   try {
@@ -82,8 +83,8 @@ export async function POST(req: NextRequest) {
       .insert({
         company_id: session.companyId,
         Title: body.title,
-        Location: body.city,
-        Neighborhood: body.district,
+        Location: toPlace(body.city) ?? body.city,
+        Neighborhood: toPlace(body.district) ?? body.district,
         Price: body.price || body.rent || 0,
         Currency: 'USD',
         Bedrooms: body.beds,
@@ -178,8 +179,8 @@ export async function PATCH(req: NextRequest) {
       .from('Properties')
       .update({
         Title: body.title,
-        Location: body.city,
-        Neighborhood: body.district,
+        Location: toPlace(body.city) ?? body.city,
+        Neighborhood: toPlace(body.district) ?? body.district,
         Price: body.price || body.rent || 0,
         Currency: 'USD',
         Bedrooms: body.beds,
