@@ -33,8 +33,19 @@ export const FLOORS: Floor[] = ['Ground level', 'Mid floor', 'Last floor']
 // migration). Garden/Balcony/Terrace keep their own booleans for backward
 // compatibility and matching; these are the extras.
 export const PROPERTY_AMENITIES = [
-  'Pool', "Helper's Room", 'Air Conditioning', 'Credit Facilities',
+  'Pool', "Helper's Room", 'Air Conditioning', 'Credit Facilities', 'Prime Location',
 ]
+
+// Only meaningful on a plot, so the listing form offers these for Land alone —
+// "Flat Land" on an apartment is noise the agent has to read past every time.
+export const LAND_AMENITIES = [
+  'Flat Land (0% slope)', 'Road Access', 'Building Permit',
+]
+
+/** The tick-boxes to offer for a listing of this type. */
+export function amenitiesFor(type: PropertyType): string[] {
+  return type === 'Land' ? [...PROPERTY_AMENITIES, ...LAND_AMENITIES] : PROPERTY_AMENITIES
+}
 export const BUILDING_FEATURES = [
   'Concierge', '24/7 Security', 'Elevator', 'Gym', 'Shared Pool',
   'Shared Spaces', 'Storage Room', 'Generator', 'Water Well', 'Solar Panels',

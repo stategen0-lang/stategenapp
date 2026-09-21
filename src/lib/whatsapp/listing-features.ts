@@ -11,7 +11,10 @@
 
 // Canonical names must match the web form exactly — its checkboxes compare by
 // string. (Kept in sync with PROPERTY_AMENITIES / BUILDING_FEATURES in data.ts.)
-export const LISTING_AMENITIES = ['Pool', "Helper's Room", 'Air Conditioning', 'Credit Facilities'] as const
+export const LISTING_AMENITIES = ['Pool', "Helper's Room", 'Air Conditioning', 'Credit Facilities', 'Prime Location'] as const
+// Land-only boxes (the web form offers these for a plot). Kept as their own
+// list so the sync test can check each against its counterpart in data.ts.
+export const LISTING_LAND_AMENITIES = ['Flat Land (0% slope)', 'Road Access', 'Building Permit'] as const
 export const LISTING_BUILDING_FEATURES = [
   'Concierge', '24/7 Security', 'Elevator', 'Gym', 'Shared Pool',
   'Shared Spaces', 'Storage Room', 'Generator', 'Water Well', 'Solar Panels',
@@ -89,7 +92,12 @@ const RULES: Rule[] = [
   { test: /^(?:private\s+)?(?:swimming\s+)?pool$/i, apply: addTo('amenities', 'Pool') },
   { test: /^(?:maid'?s?|helper'?s?|service|nanny)\s*(?:room|quarters?)$/i, apply: addTo('amenities', "Helper's Room") },
   { test: /^(?:a\s*\/?\s*c|air\s*con(?:ditioning|ditioner|ditioners)?|aircon|(?:split|central)\s+(?:a\s*\/?\s*c|air\s*conditioning))$/i, apply: addTo('amenities', 'Air Conditioning') },
-  { test: /^(?:credit\s+facilit(?:y|ies)|bank\s+loan|housing\s+loan|mortgage|loan|credit)$/i, apply: addTo('amenities', 'Credit Facilities') },
+  { test: /^(?:credit\s+facilit(?:y|ies)|payment\s+facilit(?:y|ies)|bank\s+loan|housing\s+loan|mortgage|loan|credit|installments?|taksit)$/i, apply: addTo('amenities', 'Credit Facilities') },
+  { test: /^(?:prime|premium|top|excellent|great|best)\s+(?:location|spot|area)$/i, apply: addTo('amenities', 'Prime Location') },
+  // Land only, but harmless anywhere: the stamp and the form read the name.
+  { test: /^(?:flat|level|even)(?:\s+land)?$|^(?:0\s*%?\s*|no\s+)slope$/i, apply: addTo('amenities', 'Flat Land (0% slope)') },
+  { test: /^(?:road\s+access|on\s+(?:the\s+)?road|accessible\s+by\s+road)$/i, apply: addTo('amenities', 'Road Access') },
+  { test: /^(?:building\s+permit|permit|rukhsa|rokhsa)$/i, apply: addTo('amenities', 'Building Permit') },
 ]
 
 // Words around a feature that don't change what it is: "with a generator",

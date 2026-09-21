@@ -2,11 +2,12 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { sortListingFeatures, extractFeaturesFromNotes, mergeFeatureFields, LISTING_AMENITIES, LISTING_BUILDING_FEATURES } from './listing-features.ts'
-import { PROPERTY_AMENITIES, BUILDING_FEATURES } from '../data.ts'
+import { sortListingFeatures, extractFeaturesFromNotes, mergeFeatureFields, LISTING_AMENITIES, LISTING_LAND_AMENITIES, LISTING_BUILDING_FEATURES } from './listing-features.ts'
+import { PROPERTY_AMENITIES, LAND_AMENITIES, BUILDING_FEATURES } from '../data.ts'
 
 test('checkbox names stay in sync with the web form', () => {
   assert.deepEqual([...LISTING_AMENITIES], PROPERTY_AMENITIES)
+  assert.deepEqual([...LISTING_LAND_AMENITIES], LAND_AMENITIES)
   assert.deepEqual([...LISTING_BUILDING_FEATURES], BUILDING_FEATURES)
 })
 

@@ -13,6 +13,7 @@
 // Pure: relative, type-only imports so the test runner can load it.
 
 import type { PublicListing } from './share.ts'
+import { propertyStamp } from './listing-stamp.ts'
 
 export const MAX_MARKETING_RECIPIENTS = 5
 
@@ -138,6 +139,7 @@ export function renderMarketingEmail(input: MarketingEmailInput): MarketingEmail
   const contact = [agentName, agentPhone].filter(Boolean).join(' · ')
   const description = l.description.trim() || fallbackDescription(l)
   const arabic = l.descriptionAr?.trim() ?? ''
+  const stamp = propertyStamp(l)
   const attachedCount = l.photos.filter((_, i) => files[i]).length
   const linkedPhotos = l.photos.filter((_, i) => !files[i])
   const downloadOf = (src: string, i: number) => photoDownloadUrl(src, files[i] ?? photoFilename(listingId, i, src))
@@ -150,6 +152,8 @@ export function renderMarketingEmail(input: MarketingEmailInput): MarketingEmail
         : 'Tap a photo to download it.'
 
   const text = [
+    `★ ${stamp.text.toUpperCase()} · ${stamp.ar}`,
+    '',
     description,
     // Both versions ready to paste, the Arabic clearly separated so nobody
     // posts the two languages as one block.
@@ -177,6 +181,13 @@ export function renderMarketingEmail(input: MarketingEmailInput): MarketingEmail
   const html = `<!doctype html>
 <html><body style="margin:0;padding:24px;background:#F7F8FB;font-family:Arial,Helvetica,sans-serif;color:#14223F">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;margin:0 auto">
+
+    <!-- 0. The stamp: the listing's single strongest selling point -->
+    <tr><td style="padding:0 0 12px">
+      <span style="display:inline-block;background:${accent};color:#ffffff;font-size:12px;font-weight:bold;letter-spacing:0.12em;text-transform:uppercase;padding:9px 16px;border-radius:8px">
+        ${esc(stamp.text)}&nbsp; · &nbsp;<span dir="rtl" lang="ar" style="letter-spacing:0">${esc(stamp.ar)}</span>
+      </span>
+    </td></tr>
 
     <!-- 1. Description -->
     <tr><td style="background:#ffffff;border:1px solid #EEF0F4;border-radius:14px;padding:22px">

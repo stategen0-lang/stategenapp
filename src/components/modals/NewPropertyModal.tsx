@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { Sparkles, Loader2, ImagePlus, ChevronDown, ChevronLeft, ChevronRight, FileText, X, MapPin, Video, Languages } from 'lucide-react'
-import { Property, PropertyType, Transaction, PropertyStatus, AdvancedPayment, Furnishing, Floor, AgentId, CURRENT_AGENT_ID, PROPERTY_TYPES, propertyTypeLabel, PROPERTY_AMENITIES, BUILDING_FEATURES, FURNISHINGS, FLOORS } from '@/lib/data'
+import { Property, PropertyType, Transaction, PropertyStatus, AdvancedPayment, Furnishing, Floor, AgentId, CURRENT_AGENT_ID, PROPERTY_TYPES, propertyTypeLabel, PROPERTY_AMENITIES, amenitiesFor, BUILDING_FEATURES, FURNISHINGS, FLOORS } from '@/lib/data'
 import { useSession } from '@/hooks/use-session'
 import { useLockBodyScroll } from '@/hooks/use-lock-body-scroll'
 import { DescriptionTemplate, loadTemplates, fetchTemplates, templateHint } from '@/lib/templates'
@@ -536,7 +536,9 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
               {featureChip('Balcony', form.balcony, () => set('balcony', !form.balcony))}
               {featureChip('Terrace', form.terrace, () => set('terrace', !form.terrace))}
               {featureChip('Needs Renovation', form.needsRenovation, () => set('needsRenovation', !form.needsRenovation))}
-              {PROPERTY_AMENITIES.map(a => featureChip(a, amenities.includes(a), () => toggleIn(setAmenities, a)))}
+              {/* Land gets its own tick-boxes (slope, permit, road access) — the
+                  marketing stamp reads them, and they are noise on a flat. */}
+              {amenitiesFor(form.type).map(a => featureChip(a, amenities.includes(a), () => toggleIn(setAmenities, a)))}
             </div>
           </div>
 

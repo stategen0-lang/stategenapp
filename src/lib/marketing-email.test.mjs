@@ -93,7 +93,9 @@ test('marketing email: description first, then photos, then the listing card', (
   assert.ok(d < ph && ph < card, `html order wrong: description ${d}, photos ${ph}, card ${card}`)
   assert.ok(text.indexOf('Bright 3-bedroom') < text.indexOf('Photos:'))
   assert.ok(text.indexOf('Photos:') < text.indexOf('Listing #45'))
-  assert.ok(text.startsWith('Bright 3-bedroom'))
+  // The stamp is the first line now; the description follows it.
+  assert.ok(text.startsWith('★ '))
+  assert.ok(text.indexOf('★ ') < text.indexOf('Bright 3-bedroom'))
 })
 
 test('marketing email: attached photos are real attachments, and clicking one downloads it', () => {
@@ -112,7 +114,7 @@ test('marketing email: no written description still opens with one', () => {
   const { text } = renderMarketingEmail({
     listing: publicListing(property, ''), listingId: 45, shareUrl: 'https://s/l/t', agentName: 'A',
   })
-  assert.match(text, /^180 m² appartement in Kaslik, Jounieh with 3 bedrooms and 2 bathrooms, for sale at \$450,000\./)
+  assert.match(text, /^★ [^\n]+\n\n180 m² appartement in Kaslik, Jounieh with 3 bedrooms and 2 bathrooms, for sale at \$450,000\./)
 })
 
 test('photoDownloadUrl: storage photos download, other links untouched', () => {
@@ -141,6 +143,25 @@ test('marketing email: the Arabic version sits under the English, right-to-left'
 
 test('marketing email: no Arabic version leaves the email exactly as it was', () => {
   const { html, text } = email()
-  assert.equal(html.includes('dir="rtl"'), false)
+  // The stamp carries its own Arabic, so only the DESCRIPTION block is checked.
+  const desc = html.slice(html.indexOf('<!-- 1. Description -->'), html.indexOf('<!-- 2. Photos -->'))
+  assert.equal(desc.includes('dir="rtl"'), false)
   assert.equal(text.includes('العربية'), false)
+})
+
+test('marketing email: the stamp leads, in both languages', () => {
+  // The demo property is furnished-less with a sea view and credit facilities…
+  const { html, text } = email({
+    listing: publicListing({ ...property, amenities: ['Credit Facilities'] }, 'Bright flat.'),
+  })
+  assert.match(text, /^★ PAYMENT FACILITIES · تسهيلات بالدفع/)
+  assert.ok(html.includes('PAYMENT FACILITIES') || html.includes('Payment Facilities'))
+  assert.ok(html.includes('تسهيلات بالدفع'))
+  // It sits above the description, which is the point of a stamp.
+  assert.ok(html.indexOf('Payment Facilities') < html.indexOf('Bright flat.'))
+})
+
+test('marketing email: a plain listing still carries a stamp', () => {
+  const { text } = email({ listing: publicListing({ ...property, view: '', amenities: [], furnishing: '' }, 'A flat.') })
+  assert.match(text, /^★ NEW LISTING · عرض جديد/)
 })
