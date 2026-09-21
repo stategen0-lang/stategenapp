@@ -5,7 +5,7 @@ import { Sparkles, Loader2, ImagePlus, ChevronDown, ChevronLeft, ChevronRight, F
 import { Property, PropertyType, Transaction, PropertyStatus, AdvancedPayment, Furnishing, Floor, AgentId, CURRENT_AGENT_ID, PROPERTY_TYPES, propertyTypeLabel, PROPERTY_AMENITIES, BUILDING_FEATURES, FURNISHINGS, FLOORS } from '@/lib/data'
 import { useSession } from '@/hooks/use-session'
 import { useLockBodyScroll } from '@/hooks/use-lock-body-scroll'
-import { DescriptionTemplate, loadTemplates } from '@/lib/templates'
+import { DescriptionTemplate, loadTemplates, fetchTemplates } from '@/lib/templates'
 import { createClient as createSupabaseBrowser } from '@/lib/supabase/client'
 import { VIDEO_BUCKET, MAX_VIDEO_BYTES } from '@/lib/upload'
 import DeleteRecord from './DeleteRecord'
@@ -99,11 +99,17 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
   const [templateOpen, setTemplateOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // The agency's templates, from the server — an agent must see what their
+  // manager wrote, not just what was created in this browser.
   useEffect(() => {
-    const loaded = loadTemplates()
-    setTemplates(loaded)
-    const active = loaded.find(t => t.active)
-    if (active) setSelectedTemplateId(active.id)
+    let live = true
+    fetchTemplates().then(loaded => {
+      if (!live) return
+      setTemplates(loaded)
+      const active = loaded.find(t => t.active)
+      if (active) setSelectedTemplateId(active.id)
+    })
+    return () => { live = false }
   }, [])
 
   function set(k: string, v: string | boolean) {

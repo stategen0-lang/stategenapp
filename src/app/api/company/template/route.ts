@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { isManager } from '@/lib/permissions'
+import { sanitizeTemplates, activeBody } from '@/lib/templates'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 // The company's shared templates: the AI description style, and the pattern that
@@ -28,9 +29,15 @@ export async function GET() {
     .maybeSingle()
   const row = (data ?? {}) as Record<string, unknown>
 
+  // The whole list, so every agent sees what their manager wrote (it used to
+  // live only in the manager's own browser).
+  let templates: unknown = []
+  try { templates = JSON.parse((row.description_templates as string) || '[]') } catch { templates = [] }
+
   return NextResponse.json({
     template: (row.description_template as string | null) ?? null,
     titleTemplate: (row.title_template as string | null) ?? null,
+    templates: sanitizeTemplates(templates),
   })
 }
 
@@ -46,6 +53,13 @@ export async function PUT(req: NextRequest) {
     const body = await req.json()
     if ('template' in (body ?? {})) {
       update.description_template = typeof body.template === 'string' && body.template.trim() ? body.template : null
+    }
+    if ('templates' in (body ?? {})) {
+      // The list is the source of truth; description_template follows its active
+      // entry so the WhatsApp bot keeps working unchanged.
+      const clean = sanitizeTemplates(body.templates)
+      update.description_templates = clean.length ? JSON.stringify(clean) : null
+      update.description_template = activeBody(clean)
     }
     if ('titleTemplate' in (body ?? {})) {
       const t = body.titleTemplate
@@ -63,8 +77,9 @@ export async function PUT(req: NextRequest) {
     .eq('id', session.companyId)
 
   if (error) {
-    const missing = /title_template/.test(error.message)
-    return NextResponse.json({ error: missing ? 'Run database migration 026 first.' : error.message }, { status: 500 })
+    if (/title_template/.test(error.message)) return NextResponse.json({ error: 'Run database migration 026 first.' }, { status: 500 })
+    if (/description_templates/.test(error.message)) return NextResponse.json({ error: 'Run database migration 027 first.' }, { status: 500 })
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
   return NextResponse.json({ ok: true, template: update.description_template, titleTemplate: update.title_template })
 }

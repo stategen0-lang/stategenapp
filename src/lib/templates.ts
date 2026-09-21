@@ -55,3 +55,74 @@ export function loadTemplates(): DescriptionTemplate[] {
     return DEFAULT_TEMPLATES
   }
 }
+
+// ── Sharing templates across the agency ─────────────────────────────────────
+//
+// Templates used to live only in the browser that created them, so a manager's
+// house style never reached their agents — the whole point of the feature. They
+// are now stored on the company and fetched by every device; localStorage stays
+// as an offline cache for instant paint.
+
+/** Hard caps, so one paste can't fill the column or the editor. */
+export const MAX_TEMPLATES = 30
+export const MAX_TEMPLATE_BODY = 8000
+const MAX_NAME = 80
+
+/**
+ * Clean a list of templates coming from anywhere (the browser, the database, an
+ * older format). Keeps only usable entries, gives every one a unique id, and
+ * leaves at most one active — the active template is what the AI uses, so two
+ * would make the result depend on array order.
+ */
+export function sanitizeTemplates(input: unknown): DescriptionTemplate[] {
+  if (!Array.isArray(input)) return []
+  const seen = new Set<string>()
+  const out: DescriptionTemplate[] = []
+
+  for (const raw of input) {
+    if (!raw || typeof raw !== 'object') continue
+    const t = raw as Partial<DescriptionTemplate>
+    const body = typeof t.body === 'string' ? t.body.slice(0, MAX_TEMPLATE_BODY) : ''
+    const name = typeof t.name === 'string' ? t.name.trim().slice(0, MAX_NAME) : ''
+    if (!body.trim() && !name) continue
+
+    let id = typeof t.id === 'string' && t.id.trim() ? t.id.trim().slice(0, 40) : `t${out.length}`
+    while (seen.has(id)) id = `${id}_`
+    seen.add(id)
+
+    out.push({ id, name: name || 'Untitled', body, active: t.active === true })
+    if (out.length >= MAX_TEMPLATES) break
+  }
+
+  const firstActive = out.findIndex(t => t.active)
+  return out.map((t, i) => ({ ...t, active: i === firstActive }))
+}
+
+/** The body the AI should use, i.e. the active template's. */
+export function activeBody(templates: DescriptionTemplate[]): string | null {
+  return templates.find(t => t.active)?.body?.trim() || null
+}
+
+/** Remember the agency's templates for the next page load (cache only). */
+export function cacheTemplates(templates: DescriptionTemplate[]): void {
+  try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(templates)) } catch { /* ignore */ }
+}
+
+/**
+ * The agency's templates from the server, for every agent — not just whoever
+ * created them. Falls back to the cached copy, then to the built-in defaults, so
+ * the New Listing form always has something to offer.
+ */
+export async function fetchTemplates(): Promise<DescriptionTemplate[]> {
+  try {
+    const res = await fetch('/api/company/template')
+    if (res.ok) {
+      const data = await res.json()
+      const shared = sanitizeTemplates(data?.templates)
+      if (shared.length) { cacheTemplates(shared); return shared }
+      // The agency hasn't saved any yet: the defaults, not a stale local copy.
+      if (Array.isArray(data?.templates)) return DEFAULT_TEMPLATES
+    }
+  } catch { /* offline — fall through to the cache */ }
+  return loadTemplates()
+}

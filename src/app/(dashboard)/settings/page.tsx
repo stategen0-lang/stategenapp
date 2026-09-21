@@ -6,7 +6,7 @@ import { AGENTS } from '@/lib/data'
 import { createClient } from '@/lib/supabase/client'
 import { useSession } from '@/hooks/use-session'
 import { isManager } from '@/lib/permissions'
-import { DescriptionTemplate, DEFAULT_TEMPLATES, STORAGE_KEY, loadTemplates } from '@/lib/templates'
+import { DescriptionTemplate, DEFAULT_TEMPLATES, loadTemplates, cacheTemplates, sanitizeTemplates } from '@/lib/templates'
 import { EXPORTS, EXPORT_LABELS, type ExportKind } from '@/lib/export-columns'
 import { refreshMarketingConfig } from '@/components/marketing/SendToMarketing'
 import { renderTitle, unknownTokens, DEFAULT_TITLE_TEMPLATE, TITLE_FIELDS } from '@/lib/title-template'
@@ -80,20 +80,41 @@ export default function ProfilePage() {
     setPwMsg({ ok: true, text: 'Password updated.' })
   }
 
-  useEffect(() => { setTemplates(loadTemplates()) }, [])
+  // The agency's list, from the server — this is what every agent sees.
+  const [templatesMsg, setTemplatesMsg] = useState('')
+  useEffect(() => {
+    let live = true
+    fetch('/api/company/template')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (!live) return
+        const shared = sanitizeTemplates(d?.templates)
+        if (shared.length) { setTemplates(shared); cacheTemplates(shared); return }
+        // Nothing saved for the agency yet. Templates used to live in this
+        // browser alone, so whatever this manager already has is published once
+        // — otherwise their work would appear to vanish.
+        const mine = loadTemplates()
+        setTemplates(mine)
+        if (manager && mine.length) saveTemplates(mine)
+      })
+      .catch(() => { if (live) setTemplates(loadTemplates()) })
+    return () => { live = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manager])
 
   function saveTemplates(next: DescriptionTemplate[]) {
     setTemplates(next)
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)) } catch { /* ignore */ }
-    // Mirror the active template to the server so description generation off the
-    // browser (the WhatsApp bot) can use it. Fire-and-forget; localStorage stays
-    // the source of truth for the editor itself.
-    const active = next.find(t => t.active)?.body ?? null
+    cacheTemplates(next)   // instant paint next time; the server is the real store
+    setTemplatesMsg('')
+    // Save the whole list to the company, so every agent gets it. (It used to be
+    // kept in this browser only, which is why agents never saw the manager's.)
     fetch('/api/company/template', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ template: active }),
-    }).catch(() => { /* offline / not signed in — non-fatal */ })
+      body: JSON.stringify({ templates: next }),
+    })
+      .then(async r => { if (!r.ok) setTemplatesMsg((await r.json().catch(() => ({})))?.error ?? 'Could not save for the team — please try again.') })
+      .catch(() => setTemplatesMsg('Could not reach the server — saved on this device only.'))
   }
 
   // ── Listing title pattern (one per agency) ──────────────────────────────
@@ -693,7 +714,7 @@ export default function ProfilePage() {
         <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid #EEF0F4' }}>
           <div>
             <p className="text-sm font-bold" style={{ color: H }}>AI Description Templates</p>
-            <p className="text-xs mt-0.5" style={{ color: SUB }}>Set the active template to guide AI descriptions in new listings</p>
+            <p className="text-xs mt-0.5" style={{ color: SUB }}>Shared with every agent in the agency — the active one guides AI descriptions in new listings</p>
           </div>
           <button
             onClick={addTemplate}
@@ -703,6 +724,9 @@ export default function ProfilePage() {
             <Plus className="h-3.5 w-3.5" /> Add
           </button>
         </div>
+        {templatesMsg && (
+          <p className="mx-5 mt-4 text-xs px-3 py-2 rounded-lg" style={{ background: '#FBE7E7', color: '#A23434' }}>{templatesMsg}</p>
+        )}
         <div className="divide-y" style={{ borderColor: '#EEF0F4' }}>
           {templates.length === 0 && (
             <p className="px-5 py-6 text-xs text-center" style={{ color: '#9AA3B2' }}>No templates yet. Add one to guide AI descriptions.</p>
