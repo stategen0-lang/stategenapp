@@ -1,0 +1,297 @@
+// ── Lebanese areas: folding, indexing and lookup ─────────────────────────────
+//
+// Lebanon has no agreed Latin spelling for its own place names. The same street
+// is written Achrafieh, Ashrafiyeh, Achrafiye, El Achrafiye or Ashrafiyah
+// depending on whether the agent learnt French, English or typed it in Arabizi.
+// Stored as free text, those are five different places: a client asking for
+// Hazmieh is never shown a listing filed as Hazmiyeh, because scoreLocation
+// finds neither spelling and excludes the match outright.
+//
+// So every comparison goes through foldArea(), which collapses the French and
+// English transliteration conventions onto one key. It is deliberately lossy —
+// it is a lookup key, never something shown to anyone.
+//
+// Pure: no imports, no DOM, no network, so `node --test` covers it directly and
+// the data module (3,700 areas) can be loaded separately, only when needed.
+
+export interface Area {
+  slug: string
+  /** The spelling shown and stored — curated for the areas agents actually use. */
+  name: string
+  governorate: string
+  caza: string
+  lat: number
+  lng: number
+  /** A real-estate area rather than a hamlet: ranked first in suggestions. */
+  hot: boolean
+  /** Other spellings that resolve here. Not shown, only matched. */
+  aliases: string[]
+}
+
+// The Arabic article, in every transliteration, including the sun-letter forms
+// GeoNames uses ("Ej Jimmaize", "Es Sioufi", "Er Rmeil"). Dropped wherever it
+// appears, so "Jal el Dib" and "Jal Dib" are one key.
+const ARTICLES = new Set([
+  'el', 'al', 'le', 'la', 'il',
+  'ej', 'es', 'ech', 'esh', 'en', 'er', 'et', 'ez', 'ed',
+  'as', 'ash', 'ad', 'az', 'ar', 'an', 'at',
+])
+
+/**
+ * A lookup key for a Lebanese place name.
+ *
+ * Folds the conventions that differ between French and English transliteration
+ * (ch/sh, ou/u, y/i, q/k, gh/g, kh/k), the optional trailing -h, and the
+ * -ieh/-iye/-iyeh/-iyah ending family, then drops the article.
+ *
+ *   foldArea('El Achrafiye')  === foldArea('Ashrafiyeh')  // 'ashrafi'
+ *   foldArea('Jal el Dib')    === foldArea('Jal ed Dib')  // 'jal dib'
+ */
+export function foldArea(input: string | null | undefined, keepArticles = false): string {
+  let s = String(input ?? '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')   // drop diacritics
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')                        // ` ' - . all become gaps
+    .trim()
+  if (!s) return ''
+
+  const words = s.split(' ')
+    .filter(w => w && (keepArticles || !ARTICLES.has(w)))
+    .map(foldWord)
+    .filter(Boolean)
+
+  // A name made only of article-like words (rare, but "El Aal" exists) keeps
+  // its words rather than folding away to nothing.
+  if (!words.length) return s.split(' ').map(foldWord).filter(Boolean).join(' ')
+  return words.join(' ')
+}
+
+function foldWord(w: string): string {
+  let x = w
+    .replace(/ch/g, 'sh')      // Chouf / Shouf
+    .replace(/ph/g, 'f')
+    .replace(/th/g, 't')       // Beyrouth / Beirut
+    .replace(/dh/g, 'd')
+    .replace(/gh/g, 'g')       // Zgharta
+    .replace(/kh/g, 'k')       // Khalde / Kalde
+    .replace(/[qc]/g, 'k')     // Qamar / Kamar, Cornet / Kornet
+    .replace(/x/g, 'ks')
+    .replace(/ou/g, 'u')       // Jounieh / Junieh
+    .replace(/oo/g, 'u')
+    .replace(/ee/g, 'i')
+    .replace(/w/g, 'u')        // Rawche / Raouche
+    .replace(/y/g, 'i')        // Beyrouth / Beirut, Ayn / Ain
+    .replace(/h$/, '')         // Zahleh / Zahle
+    .replace(/(.)\1+/g, '$1')  // Jimmaize / Jimaize
+
+  // The -ieh / -iye / -iyeh / -iyah / -iyya ending family, all one sound.
+  x = x.replace(/i+(e|a)$/, 'i')
+
+  // The final vowel is the least stable letter of all: Zahle / Zahleh / Zahlé,
+  // Bcharre / Bsharri, Enfe / Anfeh. Short words keep theirs — dropping it from
+  // "Ain" or "Jal" would fold half the country together.
+  if (x.length > 3) x = x.replace(/[aeiou]$/, '')
+
+  return x
+}
+
+/**
+ * The fold with word gaps removed, for the names written both ways —
+ * "Kfar Hbab" / "Kfarhbab", "Beit ed Dine" / "Beiteddine".
+ *
+ * Two forms, because running the words together hides the article from the
+ * word-level rules: "Sin el Fil" drops it and gives "sinfil", while someone
+ * typing "sinelfil" keeps it. Indexing both makes either spelling findable.
+ */
+export function tightArea(input: string | null | undefined): string {
+  return tighten(foldArea(input))
+}
+
+export function tightAreaWithArticles(input: string | null | undefined): string {
+  return tighten(foldArea(input, true))
+}
+
+// The doubled letter is collapsed again after closing the gaps, because a pair
+// that straddled two words survives the word-level pass: "Beit ed Dine" joins
+// to "beiteddin" while "Beiteddine" was already "beitedin".
+function tighten(folded: string): string {
+  return folded.replace(/ /g, '').replace(/(.)\1+/g, '$1')
+}
+
+/**
+ * The consonant skeleton — a much coarser key for Arabizi, where vowels are
+ * anyone's guess ("Bhamdoun" / "Bhamdun" / "Bahamdoun").
+ *
+ * Only ever used to OFFER a suggestion, never to rewrite what an agent typed:
+ * it collides too easily to be trusted on its own.
+ */
+export function skeletonArea(input: string | null | undefined): string {
+  return foldArea(input)
+    .split(' ')
+    .filter(Boolean)
+    // A leading vowel is as unreliable as any other (Enfe / Anfeh), so it is
+    // kept only as a marker that the word begins with one.
+    .map(w => (/[aeiou]/.test(w[0]) ? 'a' : w[0]) + w.slice(1).replace(/[aeiou]/g, ''))
+    .join(' ')
+    .trim()
+}
+
+// ── The index ────────────────────────────────────────────────────────────────
+
+interface Key { k: string; area: Area; isName: boolean }
+
+export interface AreaIndex {
+  areas: Area[]
+  /** fold key → areas. More than one means the name is ambiguous. */
+  byFold: Map<string, Area[]>
+  /** The same keys without word gaps: "Kfarhbab" finds "Kfar Hbab". */
+  byTight: Map<string, Area[]>
+  bySkeleton: Map<string, Area[]>
+  keys: Key[]
+}
+
+/** Parse the packed data file into a searchable index. */
+export function buildIndex(packed: string, governorates: string[], cazas: string[]): AreaIndex {
+  const areas: Area[] = []
+  const byFold = new Map<string, Area[]>()
+  const byTight = new Map<string, Area[]>()
+  const bySkeleton = new Map<string, Area[]>()
+  const keys: Key[] = []
+
+  // Slugs are derived rather than stored: they are just the folded name, and
+  // 3,600 of them would be a fifth of this file's weight for nothing.
+  const slugs = new Map<string, number>()
+
+  for (const line of packed.split('\n')) {
+    if (!line) continue
+    const [name, gi, ci, lat, lng, hot, alts] = line.split('\t')
+    const base = foldArea(name).replace(/ /g, '-') || 'area'
+    const n = (slugs.get(base) ?? 0) + 1
+    slugs.set(base, n)
+
+    const area: Area = {
+      slug: n === 1 ? base : `${base}-${n}`,
+      name,
+      governorate: governorates[Number(gi)] ?? '',
+      caza: cazas[Number(ci)] ?? '',
+      lat: Number(lat),
+      lng: Number(lng),
+      hot: hot === '1',
+      aliases: alts ? alts.split(';') : [],
+    }
+    areas.push(area)
+
+    for (const [spelling, isName] of [[name, true] as const, ...area.aliases.map(a => [a, false] as const)]) {
+      const f = foldArea(spelling)
+      if (!f) continue
+      keys.push({ k: f, area, isName })
+      push(byFold, f, area)
+      push(byTight, tightArea(spelling), area)
+      push(byTight, tightAreaWithArticles(spelling), area)
+      push(bySkeleton, skeletonArea(spelling), area)
+    }
+  }
+
+  return { areas, byFold, byTight, bySkeleton, keys }
+}
+
+function push(m: Map<string, Area[]>, k: string, a: Area) {
+  const at = m.get(k)
+  if (at) { if (!at.includes(a)) at.push(a) } else m.set(k, [a])
+}
+
+// ── Lookup ───────────────────────────────────────────────────────────────────
+
+export interface Resolution {
+  area: Area
+  /**
+   * True when the input maps to exactly one area and may be rewritten to its
+   * canonical spelling. False when the fold is shared by several places (three
+   * villages are called Hadath) or only the skeleton matched — then it is a
+   * suggestion the agent confirms, and whatever they typed still stands.
+   */
+  confident: boolean
+  /** Every candidate, when the name is ambiguous. */
+  candidates: Area[]
+}
+
+/** Resolve a typed area to a canonical one. Null when nothing plausible matches. */
+export function resolveArea(ix: AreaIndex, input: string | null | undefined): Resolution | null {
+  const f = foldArea(input)
+  if (!f) return null
+
+  const exact = ix.byFold.get(f)
+  if (exact?.length) return decide(exact)
+
+  const tight = ix.byTight.get(tightArea(input)) ?? ix.byTight.get(tightAreaWithArticles(input))
+  if (tight?.length) return decide(tight)
+
+  const skel = ix.bySkeleton.get(skeletonArea(input))
+  if (skel?.length) {
+    const ranked = [...skel].sort(rankArea)
+    return { area: ranked[0], confident: false, candidates: ranked }
+  }
+
+  return null
+}
+
+/**
+ * Several places share a name — Lebanon has a Hadath in Baabda and another in
+ * Jbeil, a Bhamdoun town and a Bhamdoun station. Rewriting what an agent typed
+ * is still safe when one of them is a known area and the rest are hamlets, or
+ * when they are all spelled the same anyway and only the map pin differs.
+ */
+function decide(found: Area[]): Resolution {
+  const ranked = [...found].sort(rankArea)
+  const sameName = ranked.every(a => a.name === ranked[0].name)
+  const confident = ranked.length === 1 || sameName || ranked.filter(a => a.hot).length === 1
+  return { area: ranked[0], confident, candidates: ranked }
+}
+
+/** Known real-estate areas first, then shorter names (the town before the hamlet). */
+function rankArea(a: Area, b: Area): number {
+  if (a.hot !== b.hot) return a.hot ? -1 : 1
+  return a.name.length - b.name.length
+}
+
+/**
+ * Type-ahead suggestions, best first: exact spelling, then names starting with
+ * what was typed, then aliases, then anything containing it.
+ */
+export function searchAreas(ix: AreaIndex, query: string | null | undefined, limit = 8): Area[] {
+  const f = foldArea(query)
+  if (!f) return ix.areas.filter(a => a.hot).sort(rankArea).slice(0, limit)
+
+  const scored = new Map<Area, number>()
+  for (const { k, area, isName } of ix.keys) {
+    let score: number
+    if (k === f) score = isName ? 0 : 1
+    else if (k.startsWith(f)) score = isName ? 2 : 3
+    else if (k.includes(f)) score = isName ? 4 : 5
+    else continue
+    // Being a place people actually list property in outweighs one tier of
+    // text match: typing "zouk" should offer Zouk Mikael before a hamlet in
+    // Akkar that happens to be spelled exactly "Zouq".
+    if (!area.hot) score += 3
+    const prev = scored.get(area)
+    if (prev === undefined || score < prev) scored.set(area, score)
+  }
+
+  return [...scored.entries()]
+    .sort((x, y) => x[1] - y[1] || rankArea(x[0], y[0]))
+    .slice(0, limit)
+    .map(e => e[0])
+}
+
+/** "Achrafieh · Beirut" — the caza disambiguates the many repeated village names. */
+export function areaLabel(a: Area): string {
+  const where = a.caza && a.caza !== a.name ? a.caza : a.governorate
+  return where ? `${a.name} · ${where}` : a.name
+}
+
+/** Straight-line kilometres between two areas. */
+export function distanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const dLat = (a.lat - b.lat) * 111
+  const dLng = (a.lng - b.lng) * 111 * Math.cos(((a.lat + b.lat) / 2) * Math.PI / 180)
+  return Math.sqrt(dLat * dLat + dLng * dLng)
+}
