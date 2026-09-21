@@ -8,7 +8,7 @@ import { usePullToClose } from '@/hooks/use-pull-to-close'
 import MatchCards from '@/components/matching/MatchCards'
 import OffersSection from '@/components/offers/OffersSection'
 import ClientDetailModal from './ClientDetailModal'
-import { Lightbox } from '@/components/listing/PhotoGallery'
+import PhotoGallery from '@/components/listing/PhotoGallery'
 import { SendToMarketingButton } from '@/components/marketing/SendToMarketing'
 
 interface Props {
@@ -29,9 +29,6 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
   const { scrollRef: pullScrollRef, panelRef: pullPanelRef, pulling, progress } = usePullToClose(onClose)
   const sc = statusStyle(p.status)
   const photos = p.photos ?? []
-  const [activePhoto, setActivePhoto] = useState(0)
-  // Tapping the main photo opens every photo full screen, starting on this one.
-  const [fullscreen, setFullscreen] = useState(false)
   const [stackedClient, setStackedClient] = useState<Client | null>(null)
   const [shareOpen, setShareOpen] = useState(false)
   const [shareBusy, setShareBusy] = useState(false)
@@ -108,101 +105,81 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
               {progress >= 1 ? 'Release to go back' : '↓ Pull to go back'}
             </span>
           </div>
-          {/* ── Main photo / gradient hero ── */}
-          <div className="relative shrink-0" style={{ height: 200 }}>
-            {photos.length > 0 ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={photos[activePhoto]} alt={p.title}
-                className="w-full h-full object-cover cursor-zoom-in"
-                onClick={() => setFullscreen(true)}
-              />
-            ) : (
-              <div className="w-full h-full" style={{ background: TYPE_GRADIENTS[p.type] ?? 'linear-gradient(135deg,#16294A,#2E5288)' }} />
-            )}
-
-            <div className="absolute top-3 left-3 right-3 flex items-start justify-between">
+          {/* ── Photos ──
+              The same gallery as the public listing page: swipe or scroll
+              sideways through the photos, thumbnails scroll with them, and the
+              listing's title sits on the first photo only so the rest are
+              shown clean. lockVerticalScroll keeps a swipe here from scrolling
+              the list behind the sheet. */}
+          <div className="shrink-0">
+            <PhotoGallery
+              photos={photos}
+              title={p.title}
+              frameStyle={{ height: 200 }}
+              thumb={{ w: 56, h: 40 }}
+              stripClassName="px-4 py-2"
+              stripStyle={{ borderBottom: '1px solid #EEF0F4', background: '#F7F8FB' }}
+              counterClassName="bottom-3 right-3"
+              lockVerticalScroll
+              empty={<div className="w-full h-full" style={{ background: TYPE_GRADIENTS[p.type] ?? 'linear-gradient(135deg,#16294A,#2E5288)' }} />}
+              overlay={
+                <div className="absolute top-3 right-3 z-30 flex items-center gap-2">
+                  <div className="relative">
+                    <button
+                      onClick={onShareClick}
+                      className="h-7 px-3 rounded-full flex items-center justify-center text-white text-xs font-semibold leading-none"
+                      style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)' }}
+                    >
+                      {shareBusy ? '…' : copied ? 'Copied ✓' : 'Share'}
+                    </button>
+                    {shareOpen && (
+                      <>
+                        {/* click-away to close */}
+                        <div className="fixed inset-0 z-10" onClick={() => setShareOpen(false)} />
+                        <div className="absolute right-0 mt-1 z-20 rounded-xl overflow-hidden" style={{ background: '#fff', boxShadow: '0 6px 24px rgba(0,0,0,0.22)', minWidth: 180 }}>
+                          <button onClick={shareWhatsApp} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-medium hover:bg-gray-50" style={{ color: '#14223F' }}>
+                            <MessageCircle className="h-4 w-4" style={{ color: '#25D366' }} /> Share on WhatsApp
+                          </button>
+                          <button onClick={copyLink} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-medium hover:bg-gray-50" style={{ color: '#14223F', borderTop: '1px solid #EEF0F4' }}>
+                            <Link2 className="h-4 w-4" style={{ color: '#5E8FD6' }} /> Copy link
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  {onEdit && (
+                    <button
+                      onClick={() => onEdit(p)}
+                      className="h-7 px-3 rounded-full flex items-center justify-center text-white text-xs font-semibold leading-none"
+                      style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)' }}
+                    >
+                      Edit
+                    </button>
+                  )}
+                  <button
+                    onClick={onClose}
+                    className="w-7 h-7 rounded-full flex items-center justify-center text-white text-sm leading-none"
+                    style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)' }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              }
+            >
               <span
-                className="text-xs font-semibold px-2.5 py-1 rounded-full"
+                className="absolute top-3 left-3 text-xs font-semibold px-2.5 py-1 rounded-full"
                 style={{ background: 'rgba(0,0,0,0.35)', color: '#fff', backdropFilter: 'blur(4px)' }}
               >
                 {p.type} · {p.transaction}
               </span>
-              <div className="flex items-center gap-2">
-                <div className="relative">
-                  <button
-                    onClick={onShareClick}
-                    className="h-7 px-3 rounded-full flex items-center justify-center text-white text-xs font-semibold leading-none"
-                    style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)' }}
-                  >
-                    {shareBusy ? '…' : copied ? 'Copied ✓' : 'Share'}
-                  </button>
-                  {shareOpen && (
-                    <>
-                      {/* click-away to close */}
-                      <div className="fixed inset-0 z-10" onClick={() => setShareOpen(false)} />
-                      <div className="absolute right-0 mt-1 z-20 rounded-xl overflow-hidden" style={{ background: '#fff', boxShadow: '0 6px 24px rgba(0,0,0,0.22)', minWidth: 180 }}>
-                        <button onClick={shareWhatsApp} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-medium hover:bg-gray-50" style={{ color: '#14223F' }}>
-                          <MessageCircle className="h-4 w-4" style={{ color: '#25D366' }} /> Share on WhatsApp
-                        </button>
-                        <button onClick={copyLink} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-medium hover:bg-gray-50" style={{ color: '#14223F', borderTop: '1px solid #EEF0F4' }}>
-                          <Link2 className="h-4 w-4" style={{ color: '#5E8FD6' }} /> Copy link
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-                {onEdit && (
-                  <button
-                    onClick={() => onEdit(p)}
-                    className="h-7 px-3 rounded-full flex items-center justify-center text-white text-xs font-semibold leading-none"
-                    style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)' }}
-                  >
-                    Edit
-                  </button>
-                )}
-                <button
-                  onClick={onClose}
-                  className="w-7 h-7 rounded-full flex items-center justify-center text-white text-sm leading-none"
-                  style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)' }}
-                >
-                  ✕
-                </button>
+              <div className="absolute bottom-0 left-0 right-0 px-4 py-3">
+                <p className="text-base font-bold text-white leading-tight">{p.title}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                  {propertyLocation(p)}
+                </p>
               </div>
-            </div>
-
-            <div
-              className="absolute bottom-0 left-0 right-0 px-4 py-3"
-              style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.55), transparent)' }}
-            >
-              <p className="text-base font-bold text-white leading-tight">{p.title}</p>
-              <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                {propertyLocation(p)}
-              </p>
-            </div>
+            </PhotoGallery>
           </div>
-
-          {/* ── Photo gallery strip ── */}
-          {photos.length > 1 && (
-            <div className="flex gap-2 px-4 py-2 shrink-0" style={{ borderBottom: '1px solid #EEF0F4', background: '#F7F8FB' }}>
-              {photos.map((src, i) => (
-                <button
-                  key={i}
-                  onClick={() => setActivePhoto(i)}
-                  className="shrink-0 rounded-lg overflow-hidden"
-                  style={{
-                    width: 56, height: 40,
-                    border: i === activePhoto ? '2px solid #5E8FD6' : '2px solid transparent',
-                    opacity: i === activePhoto ? 1 : 0.65,
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={src} alt="" className="w-full h-full object-cover" />
-                </button>
-              ))}
-            </div>
-          )}
 
           {photos.length === 0 && (
             <div className="flex gap-2 px-4 py-2 shrink-0" style={{ borderBottom: '1px solid #EEF0F4', background: '#F7F8FB' }}>
@@ -360,15 +337,6 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
       </div>
 
       {/* Stacked client modal — comes later in DOM so renders above at same z-index */}
-      {fullscreen && photos.length > 0 && (
-        <Lightbox
-          photos={photos}
-          title={p.title}
-          start={activePhoto}
-          // Closing lands the details view on the photo you ended on.
-          onClose={last => { setActivePhoto(last); setFullscreen(false) }}
-        />
-      )}
       {stackedClient && (
         <ClientDetailModal
           client={stackedClient}

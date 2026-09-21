@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-// The public shared-listing page's gallery.
+// The listing photo gallery, shared by the public shared-listing page and the
+// in-app property sheet.
 //
 //   • The main photo is a native horizontal scroller (scroll-snap), so on a phone
 //     it swipes with the finger like any photo app; arrows do the same on desktop.
 //   • `children` (badges, title, price) belong to the FIRST photo only — they
 //     scroll away with it, so the other photos are shown clean.
-//   • The thumbnail strip underneath still jumps to any photo.
+//   • `overlay` is the opposite: controls that stay put on every photo.
+//   • The thumbnail strip scrolls sideways, however many photos there are.
 //   • Tapping the main photo opens it full screen, where you can keep swiping.
 //
 // A client component so it can hold the active index; dropped into the
@@ -35,35 +37,78 @@ const GLASS = { background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' } as
 
 export default function PhotoGallery({
   photos, title, accent = '#5E8FD6', children,
+  frameStyle = { aspectRatio: '16 / 10' },
+  thumb = { w: 92, h: 66 },
+  stripClassName = 'px-4 py-3',
+  stripStyle,
+  counterClassName = 'top-3 right-3',
+  overlay,
+  empty,
+  lockVerticalScroll = false,
 }: {
   photos: string[]
   title: string
   accent?: string
+  /** Shown over the FIRST photo only, and scrolls away with it. */
   children?: React.ReactNode
+  /** Sizes the photo frame — an aspect ratio on a page, a fixed height in a sheet. */
+  frameStyle?: React.CSSProperties
+  thumb?: { w: number; h: number }
+  stripClassName?: string
+  stripStyle?: React.CSSProperties
+  counterClassName?: string
+  /** Controls that stay on top of every photo (close, share, edit). */
+  overlay?: React.ReactNode
+  /** Background for a listing with no photos at all. */
+  empty?: React.ReactNode
+  /**
+   * Refuse vertical panning on the photos, so swiping between them cannot
+   * scroll whatever is behind. Right inside a sheet, wrong on a page where
+   * dragging the hero is how people scroll down.
+   */
+  lockVerticalScroll?: boolean
 }) {
   const scroller = useRef<HTMLDivElement>(null)
+  const strip = useRef<HTMLDivElement>(null)
   const { index, onScroll, scrollTo } = useSnapIndex(scroller, photos.length)
   const [fullscreen, setFullscreen] = useState<number | null>(null)
   const many = photos.length > 1
 
+  // Keep the highlighted thumbnail in view. With twenty photos the strip is
+  // several screens wide, so swiping to the tenth would otherwise highlight a
+  // thumbnail nobody can see.
+  useEffect(() => {
+    const row = strip.current
+    const thumb = row?.children[index] as HTMLElement | undefined
+    if (!row || !thumb) return
+    row.scrollTo({ left: Math.max(0, thumb.offsetLeft - (row.clientWidth - thumb.clientWidth) / 2), behavior: 'smooth' })
+  }, [index])
+
   if (!photos.length) {
     return (
-      <div className="relative w-full select-none" style={{ aspectRatio: '16 / 10', background: '#E3E7EE' }}>
-        <div className="w-full h-full flex items-center justify-center text-sm" style={{ color: '#9AA3B2' }}>No photo</div>
+      <div className="relative w-full select-none" style={{ ...frameStyle, background: '#E3E7EE' }}>
+        {empty ?? (
+          <div className="w-full h-full flex items-center justify-center text-sm" style={{ color: '#9AA3B2' }}>No photo</div>
+        )}
         <Scrim />
         <div className="absolute inset-0 z-10 pointer-events-none">{children}</div>
+        {overlay}
       </div>
     )
   }
 
   return (
     <div>
-      <div className="relative w-full select-none" style={{ aspectRatio: '16 / 10', background: '#E3E7EE' }}>
+      <div className="relative w-full select-none" style={{ ...frameStyle, background: '#E3E7EE' }}>
         <div
           ref={scroller}
           onScroll={onScroll}
           className="no-scrollbar absolute inset-0 flex overflow-x-auto snap-x snap-mandatory"
-          style={{ overscrollBehaviorX: 'contain', WebkitOverflowScrolling: 'touch' }}
+          style={{
+            overscrollBehavior: 'contain',
+            WebkitOverflowScrolling: 'touch',
+            touchAction: lockVerticalScroll ? 'pan-x' : undefined,
+          }}
         >
           {photos.map((src, k) => (
             // A div, not a <button>: the first slide carries the page's <h1>
@@ -95,20 +140,23 @@ export default function PhotoGallery({
               className={`${ARROW} left-2 hidden md:flex disabled:opacity-0`} style={GLASS}>‹</button>
             <button type="button" aria-label="Next photo" onClick={() => scrollTo(index + 1)} disabled={index === photos.length - 1}
               className={`${ARROW} right-2 hidden md:flex disabled:opacity-0`} style={GLASS}>›</button>
-            <span className="absolute top-3 right-3 z-20 text-xs font-semibold px-2 py-0.5 rounded-full text-white pointer-events-none" style={GLASS}>
+            <span className={`absolute ${counterClassName} z-20 text-xs font-semibold px-2 py-0.5 rounded-full text-white pointer-events-none`} style={GLASS}>
               {index + 1} / {photos.length}
             </span>
           </>
         )}
+        {overlay}
       </div>
 
       {many && (
-        <div className="no-scrollbar flex gap-2 px-4 py-3 overflow-x-auto">
+        // overflow-x-auto, not wrap: twenty photos have to stay one row that
+        // scrolls, or the strip pushes the listing's details off the screen.
+        <div ref={strip} className={`no-scrollbar flex gap-2 overflow-x-auto ${stripClassName}`} style={stripStyle}>
           {photos.map((src, k) => (
             <button
               key={k} type="button" onClick={() => scrollTo(k)}
               className="shrink-0 rounded-xl overflow-hidden transition-opacity"
-              style={{ width: 92, height: 66, border: k === index ? `2px solid ${accent}` : '2px solid transparent', opacity: k === index ? 1 : 0.6 }}
+              style={{ width: thumb.w, height: thumb.h, border: k === index ? `2px solid ${accent}` : '2px solid transparent', opacity: k === index ? 1 : 0.6 }}
               aria-label={`Photo ${k + 1}`}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
