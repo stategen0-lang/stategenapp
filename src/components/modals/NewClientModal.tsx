@@ -10,6 +10,7 @@ import { matchProperties, MATCH_THRESHOLD, PropertyMatch } from '@/lib/matching'
 import { dbRowToProperty } from '@/lib/db-mappers'
 import { useSession } from '@/hooks/use-session'
 import { useLockBodyScroll } from '@/hooks/use-lock-body-scroll'
+import AreaInput from '@/components/form/AreaInput'
 import { isManager } from '@/lib/permissions'
 import DeleteRecord from './DeleteRecord'
 
@@ -127,8 +128,11 @@ export default function NewClientModal({ onClose, onSaved, onDeleted, matchThres
     )
   }
 
-  function addLocation() {
-    const v = locationInput.trim()
+  // The area box hands over the text it settled on (a canonical spelling, or
+  // the agent's own words for a place the gazetteer does not know) — reading
+  // state here instead would use the value from before that correction.
+  function addLocation(settled?: string) {
+    const v = (settled ?? locationInput).trim()
     if (!v) return
     setLocations(prev => prev.some(l => l.toLowerCase() === v.toLowerCase()) ? prev : [...prev, v].slice(0, 10))
     setLocationInput('')
@@ -314,13 +318,15 @@ export default function NewClientModal({ onClose, onSaved, onDeleted, matchThres
                       ))}
                     </div>
                   )}
-                  <input
+                  {/* One chip per area the client will consider — the matcher
+                      scores every listing against all of them and keeps the
+                      best, so adding more areas only widens what they see. */}
+                  <AreaInput
                     className={inp}
                     style={inpStyle}
                     value={locationInput}
-                    onChange={e => setLocationInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addLocation() } }}
-                    onBlur={addLocation}
+                    onChange={setLocationInput}
+                    onEnter={addLocation}
                     placeholder="e.g. Achrafieh + Enter"
                   />
                 </div>
