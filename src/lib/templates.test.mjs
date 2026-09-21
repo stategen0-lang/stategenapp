@@ -2,7 +2,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { sanitizeTemplates, activeBody, MAX_TEMPLATES, MAX_TEMPLATE_BODY } from './templates.ts'
+import { sanitizeTemplates, activeBody, templateHint, MAX_TEMPLATES, MAX_TEMPLATE_BODY } from './templates.ts'
 
 test('keeps usable templates and drops the rest', () => {
   const out = sanitizeTemplates([
@@ -44,4 +44,14 @@ test('activeBody: none active, or an empty body, means none', () => {
   assert.equal(activeBody([{ id: 'a', name: 'A', body: 'x', active: false }]), null)
   assert.equal(activeBody([{ id: 'a', name: 'A', body: '   ', active: true }]), null)
   assert.equal(activeBody([]), null)
+})
+
+test('templateHint: the first real line, shortened', () => {
+  assert.equal(templateHint('Luxury tone. Elegant language.'), 'Luxury tone. Elegant language.')
+  // Leading blank lines are skipped, and the rest of the layout is ignored.
+  assert.equal(templateHint('\n\n[Own / Rent] This [Adjective] [Type]!\nA beautifully designed…'), '[Own / Rent] This [Adjective] [Type]!')
+  assert.equal(templateHint('x'.repeat(200)).length, 70)
+  assert.ok(templateHint('x'.repeat(200)).endsWith('…'))
+  assert.equal(templateHint(''), '')
+  assert.equal(templateHint(null), '')
 })

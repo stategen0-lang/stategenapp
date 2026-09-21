@@ -5,7 +5,7 @@ import { Sparkles, Loader2, ImagePlus, ChevronDown, ChevronLeft, ChevronRight, F
 import { Property, PropertyType, Transaction, PropertyStatus, AdvancedPayment, Furnishing, Floor, AgentId, CURRENT_AGENT_ID, PROPERTY_TYPES, propertyTypeLabel, PROPERTY_AMENITIES, BUILDING_FEATURES, FURNISHINGS, FLOORS } from '@/lib/data'
 import { useSession } from '@/hooks/use-session'
 import { useLockBodyScroll } from '@/hooks/use-lock-body-scroll'
-import { DescriptionTemplate, loadTemplates, fetchTemplates } from '@/lib/templates'
+import { DescriptionTemplate, loadTemplates, fetchTemplates, templateHint } from '@/lib/templates'
 import { createClient as createSupabaseBrowser } from '@/lib/supabase/client'
 import { VIDEO_BUCKET, MAX_VIDEO_BYTES } from '@/lib/upload'
 import DeleteRecord from './DeleteRecord'
@@ -570,8 +570,8 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
                 </button>
                 {templateOpen && (
                   <div
-                    className="absolute left-0 right-0 top-full mt-1 rounded-xl overflow-hidden z-10"
-                    style={{ background: '#fff', border: '1.5px solid #EEF0F4', boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}
+                    className="absolute left-0 right-0 top-full mt-1 rounded-xl overflow-y-auto z-10"
+                    style={{ background: '#fff', border: '1.5px solid #EEF0F4', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', maxHeight: 220 }}
                   >
                     <button
                       type="button"
@@ -592,8 +592,15 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
                         className="w-full text-left px-3 py-2 hover:bg-gray-50 transition-colors"
                         style={{ borderTop: '1px solid #F4F5F8' }}
                       >
-                        <p className="text-xs font-semibold" style={{ color: selectedTemplateId === t.id ? '#2E5288' : '#14223F' }}>{t.name}</p>
-                        <p className="text-xs mt-0.5 line-clamp-1" style={{ color: '#9AA3B2' }}>{t.body}</p>
+                        <p className="text-xs font-semibold truncate" style={{ color: selectedTemplateId === t.id ? '#2E5288' : '#14223F' }}>{t.name}</p>
+                        {/* One line only — a structured template is a page of layout,
+                            which rendered as a tall blank block in this list. */}
+                        <p
+                          className="text-xs mt-0.5"
+                          style={{ color: '#9AA3B2', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                        >
+                          {templateHint(t.body)}
+                        </p>
                       </button>
                     ))}
                   </div>

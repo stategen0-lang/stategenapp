@@ -126,3 +126,13 @@ export async function fetchTemplates(): Promise<DescriptionTemplate[]> {
   } catch { /* offline — fall through to the cache */ }
   return loadTemplates()
 }
+
+/**
+ * A one-line hint for a template in the picker: its first real line, shortened.
+ * The structured template is a whole page of layout, which rendered as a tall
+ * blank block in the dropdown and pushed everything else off screen.
+ */
+export function templateHint(body: string | null | undefined, max = 70): string {
+  const line = String(body ?? '').split('\n').map(l => l.trim()).find(Boolean) ?? ''
+  return line.length > max ? `${line.slice(0, max - 1).trimEnd()}…` : line
+}
