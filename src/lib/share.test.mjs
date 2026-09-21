@@ -97,7 +97,7 @@ test('publicListing: the exact key set is the allowlist, nothing more', () => {
     'title', 'type', 'transaction', 'price', 'rent', 'district', 'city', 'size',
     'beds', 'baths', 'parkings', 'buildingAge', 'garden', 'balcony', 'terrace',
     'furnishing', 'amenities', 'buildingFeatures', 'view',
-    'status', 'photos', 'video', 'description', 'publicNotes',
+    'status', 'photos', 'video', 'description', 'descriptionAr', 'publicNotes',
   ])
   for (const key of Object.keys(pub)) {
     assert.ok(allowed.has(key), `unexpected key leaked to public view: ${key}`)
@@ -120,4 +120,22 @@ test('publicListing: carries the agent\'s public notes, never the internal ones'
 test('publicListing: blank public notes are left out entirely', () => {
   assert.equal(publicListing({ ...fullProperty, publicNotes: '   ' }, 'desc').publicNotes, undefined)
   assert.equal(publicListing(fullProperty, 'desc').publicNotes, undefined)
+})
+
+test('publicListing: publishes the Arabic description, still nothing private', () => {
+  const p = {
+    title: 'T', type: 'Appartement', transaction: 'For Sale', price: 1, rent: 0,
+    district: 'Achrafieh', city: '', size: 10, beds: 1, baths: 1,
+    garden: false, balcony: false, terrace: false, amenities: [], buildingFeatures: [],
+    view: '', status: 'Available', photos: [],
+    aiDescriptionAr: 'شقة مشرقة',
+    notes: 'internal only', ownerName: 'Georges', ownerContact: '03 000 000',
+  }
+  const pub = publicListing(p, 'Bright flat.')
+  assert.equal(pub.descriptionAr, 'شقة مشرقة')
+  assert.equal(JSON.stringify(pub).includes('internal only'), false)
+  assert.equal(JSON.stringify(pub).includes('Georges'), false)
+  // Blank or missing stays undefined rather than an empty heading downstream.
+  assert.equal(publicListing({ ...p, aiDescriptionAr: '   ' }, 'x').descriptionAr, undefined)
+  assert.equal(publicListing({ ...p, aiDescriptionAr: undefined }, 'x').descriptionAr, undefined)
 })

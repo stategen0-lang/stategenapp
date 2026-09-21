@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Sparkles, Loader2, ImagePlus, ChevronDown, ChevronLeft, ChevronRight, FileText, X, MapPin, Video } from 'lucide-react'
+import { Sparkles, Loader2, ImagePlus, ChevronDown, ChevronLeft, ChevronRight, FileText, X, MapPin, Video, Languages } from 'lucide-react'
 import { Property, PropertyType, Transaction, PropertyStatus, AdvancedPayment, Furnishing, Floor, AgentId, CURRENT_AGENT_ID, PROPERTY_TYPES, propertyTypeLabel, PROPERTY_AMENITIES, BUILDING_FEATURES, FURNISHINGS, FLOORS } from '@/lib/data'
 import { useSession } from '@/hooks/use-session'
 import { useLockBodyScroll } from '@/hooks/use-lock-body-scroll'
@@ -53,6 +53,7 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
     status: (initial?.status ?? 'Available') as PropertyStatus,
     advancedPayment: (initial?.advancedPayment ?? '') as AdvancedPayment | '',
     aiDescription: initial?.aiDescription ?? '',
+    aiDescriptionAr: initial?.aiDescriptionAr ?? '',
     notes: initial?.notes ?? '',
     publicNotes: initial?.publicNotes ?? '',
     referredBy: initial?.referredBy ?? '',
@@ -90,6 +91,8 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
   const [videoError, setVideoError] = useState('')
   const videoInputRef = useRef<HTMLInputElement>(null)
   const [aiLoading, setAiLoading] = useState(false)
+  const [arabicLoading, setArabicLoading] = useState(false)
+  const [arabicError, setArabicError] = useState('')
   const [aiError, setAiError] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
@@ -143,6 +146,31 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
   }
 
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId)
+
+  /**
+   * The Arabic version of whatever is in the description box — including a
+   * description the agent wrote by hand, not only a generated one.
+   */
+  async function handleArabic() {
+    setArabicLoading(true)
+    setArabicError('')
+    try {
+      const res = await fetch('/api/ai/property-description/arabic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // The facts go along with the English so the copy is written, not
+        // translated word for word.
+        body: JSON.stringify({ ...form, description: form.aiDescription, district: '', city: form.area.trim() }),
+      })
+      const data = await res.json()
+      if (data.arabic) set('aiDescriptionAr', data.arabic)
+      else setArabicError(data.error || 'Could not write the Arabic version. Try again.')
+    } catch {
+      setArabicError('Network error. Try again.')
+    } finally {
+      setArabicLoading(false)
+    }
+  }
 
   async function handleAiDescription() {
     setAiLoading(true)
@@ -331,6 +359,7 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
       status: form.status,
       agentId,
       aiDescription: form.aiDescription || undefined,
+      aiDescriptionAr: form.aiDescriptionAr || undefined,
       notes: form.notes || undefined,
       referredBy: form.referredBy.trim() || undefined,
       ownerName: form.ownerName.trim() || undefined,
@@ -631,6 +660,44 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
               placeholder="Generate with AI or write a marketing description…"
               onClick={() => setTemplateOpen(false)}
             />
+
+            {/* ── Arabic version ──
+                Written on request rather than with every description: most
+                listings never need it, and each one is a paid call. */}
+            {form.aiDescription.trim() && (
+              <div className="mt-2">
+                <div className="flex items-center justify-between mb-1">
+                  <label className={label} style={{ ...labelStyle, marginBottom: 0 }}>
+                    Arabic version <span style={{ color: '#B0B8C8', fontWeight: 400 }}>النسخة العربية</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleArabic}
+                    disabled={arabicLoading}
+                    className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors disabled:opacity-60 shrink-0"
+                    style={{ background: '#EAF0FA', color: '#2E5288' }}
+                  >
+                    {arabicLoading
+                      ? <><Loader2 className="h-3 w-3 animate-spin" /> Translating…</>
+                      : <><Languages className="h-3 w-3" /> {form.aiDescriptionAr ? 'Rewrite in Arabic' : 'Add Arabic'}</>
+                    }
+                  </button>
+                </div>
+                {arabicError && <p className="text-xs mb-1" style={{ color: '#A23434' }}>{arabicError}</p>}
+                {form.aiDescriptionAr && (
+                  <textarea
+                    dir="rtl"
+                    lang="ar"
+                    className={inp}
+                    style={{ ...inpStyle, resize: 'none', textAlign: 'right' }}
+                    rows={3}
+                    value={form.aiDescriptionAr}
+                    onChange={e => set('aiDescriptionAr', e.target.value)}
+                    onClick={() => setTemplateOpen(false)}
+                  />
+                )}
+              </div>
+            )}
           </div>
 
           {/* Internal Notes */}

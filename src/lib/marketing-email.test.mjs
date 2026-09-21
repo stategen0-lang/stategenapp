@@ -128,3 +128,19 @@ test('marketing email: a missing agent name leaves the subject reading normally'
   assert.equal(subject.includes('from'), false)
   assert.match(subject, /^New listing #45 to post: /)
 })
+
+test('marketing email: the Arabic version sits under the English, right-to-left', () => {
+  const arabic = 'شقة مشرقة بإطلالة على البحر، مساحتها 180 م² بسعر 450,000$.'
+  const { html, text } = email({ listing: { ...publicListing(property, 'Bright 3-bedroom with open sea views.'), descriptionAr: arabic } })
+  assert.ok(html.includes(arabic))
+  assert.ok(html.indexOf('Bright 3-bedroom') < html.indexOf(arabic), 'Arabic must come after the English')
+  assert.match(html, /dir="rtl" lang="ar"/)
+  assert.ok(text.includes(arabic))
+  assert.ok(text.indexOf('Bright 3-bedroom') < text.indexOf(arabic))
+})
+
+test('marketing email: no Arabic version leaves the email exactly as it was', () => {
+  const { html, text } = email()
+  assert.equal(html.includes('dir="rtl"'), false)
+  assert.equal(text.includes('العربية'), false)
+})

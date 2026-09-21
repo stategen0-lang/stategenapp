@@ -107,6 +107,14 @@ export function quickIntent(raw: string | null | undefined): IntentResult | null
   // A describe verb plus a listing id → generate a listing description. The
   // confirm-save step lets the agent reject a wrong id, so a loose number match
   // is safe here.
+  // Arabic is checked first: "write the description in arabic for 23" says
+  // both words, and it is the Arabic one that decides what the agent wants.
+  if (/\barabic\b|عربي/i.test(text)) {
+    const m = text.match(/(?:#|\bpropert\w*|\blisting|\bunit)\s*#?\s*(\d+)/i)
+      || text.match(/\barabic\b\s*(?:for\s+|of\s+)?(?:the\s+)?#?(\d+)\b/i)
+    if (m) return { intent: 'describe_property_ar', propertyId: Number(m[1]) }
+  }
+
   if (/\bdescri(?:be|ption)\b/i.test(text)) {
     const m = text.match(/(?:#|\bpropert\w*|\blisting|\bunit)\s*#?\s*(\d+)/i)
       || text.match(/\bdescri(?:be|ption)\b\s*(?:for\s+|of\s+)?(?:the\s+)?#?(\d+)\b/i)

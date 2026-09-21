@@ -29,6 +29,7 @@ export type Intent =
   | 'create_client'
   | 'share_listing'
   | 'describe_property'
+  | 'describe_property_ar'
   | 'log_offer'
   | 'query_offers'
   | 'accept_offer'
@@ -60,7 +61,7 @@ export interface IntentResult {
 const VALID: Intent[] = [
   'reminder_response', 'feedback', 'update_client', 'update_property', 'update_deal', 'query_pipeline',
   'create_property', 'query_client', 'query_property', 'find_listing', 'query_agents', 'query_activity', 'query_schedule', 'create_event',
-  'create_client', 'share_listing', 'describe_property', 'log_offer', 'query_offers', 'accept_offer', 'reject_offer',
+  'create_client', 'share_listing', 'describe_property', 'describe_property_ar', 'log_offer', 'query_offers', 'accept_offer', 'reject_offer',
   'query_overdue', 'confirm', 'cancel', 'help', 'unknown',
 ]
 
@@ -130,6 +131,7 @@ Intents:
 - create_client: wants to add a new client/lead/buyer/renter ("add a client", "new buyer Ahmed"), OR is forwarding a prospective client's own enquiry — a message that gives a person's name and/or phone number together with what property they're after. A property need with a name or phone attached is a new client to register, NOT a search (query_property).
 - share_listing: wants a shareable public link to a listing to forward to a client ("send me the link for #23", "share property 23")
 - describe_property: wants an AI-written listing description for a property ("write a description for #23", "describe listing 23")
+- describe_property_ar: wants the ARABIC version of a listing description ("arabic for #23", "write the description in arabic for 23", "translate #23 to arabic"). Any mention of Arabic with a listing number is this, never describe_property.
 - log_offer: log an offer or counter-offer on a deal ("offer 450k from Joe on #23", "counter Joe 470k", "buyer offered 500k on #12"). ANY message about an offer being made, added, or put in ("offered X", "add the offer", "put in an offer", "a client offered X", "counter") is log_offer — NOT a property search — even when it has NO listing number and NO client name; just extract fields.amount. When two amounts appear (an offer and the asking price), the OFFER is the amount next to "offer/offered"; put that in fields.amount. A CLIENT's offer is side "buyer" (default); the OWNER/agency countering is side "owner" ("counter" = owner).
 - query_offers: asking where a negotiation stands ("offers on #23", "what's the offer on #12", "where does the negotiation stand for Joe")
 - accept_offer: accept the current offer, closing the deal won ("accept Joe's offer", "accept the offer on #23")
@@ -186,6 +188,8 @@ Examples (note the typos and varied phrasing):
 "send me the link for #23" -> {"intent":"share_listing","propertyId":23}
 "share property 23 with the client" -> {"intent":"share_listing","propertyId":23}
 "write a description for #23" -> {"intent":"describe_property","propertyId":23}
+"arabic for #23" -> {"intent":"describe_property_ar","propertyId":23}
+"write the description in arabic for listing 23" -> {"intent":"describe_property_ar","propertyId":23}
 "can you write me a blurb for listing 23" -> {"intent":"describe_property","propertyId":23}
 "offer 450k from Joe on #23" -> {"intent":"log_offer","clientName":"Joe","propertyId":23,"fields":{"amount":450000}}
 "counter joe 470k" -> {"intent":"log_offer","clientName":"Joe","fields":{"amount":470000,"side":"owner"}}

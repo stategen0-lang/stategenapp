@@ -6,7 +6,7 @@ import { parseConfirmation, parseReminderReply } from '@/lib/whatsapp/replies'
 import { classifyIntent, Intent } from '@/lib/whatsapp/intent'
 import { handleQueryClient, handleQueryProperty, handleShareListing, HELP_TEXT } from '@/lib/whatsapp/handlers'
 import {
-  stageClientUpdate, stagePropertyUpdate, stageFeedback, stageDescribeProperty,
+  stageClientUpdate, stagePropertyUpdate, stageFeedback, stageDescribeProperty, stageArabicDescription,
   applyPendingAction, handleReminderReply,
 } from '@/lib/whatsapp/write-handlers'
 import { startCreatePropertyFlow, startCreateClientFlow, startClientFormFlow, continueFlow, handleFlowSubmission } from '@/lib/whatsapp/flow-handlers'
@@ -214,6 +214,7 @@ async function route(
     case 'find_listing':   return { intent, answer: (await findListings(admin, profile, queryFromIntent(result))).reply }
     case 'share_listing':  return { intent, answer: await withListing(admin, profile, result, r => handleShareListing(admin, profile, r, origin)) }
     case 'describe_property': return { intent, answer: await withListing(admin, profile, result, r => stageDescribeProperty(admin, profile, r)) }
+    case 'describe_property_ar': return { intent, answer: await withListing(admin, profile, result, r => stageArabicDescription(admin, profile, r)) }
     case 'log_offer':      return { intent, answer: await stageLogOffer(admin, profile, result) }
     case 'query_offers':   return { intent, answer: await handleQueryOffers(admin, profile, result) }
     case 'accept_offer':   return { intent, answer: await stageResolveOffer(admin, profile, result, 'accept') }

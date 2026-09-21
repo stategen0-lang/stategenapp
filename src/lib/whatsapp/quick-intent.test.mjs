@@ -301,3 +301,11 @@ test('quickIntent: a budget search and a client lookup are not listing finds', (
   assert.equal(quickIntent('search listings under 500k in Beirut')?.intent, 'query_property')
   assert.equal(quickIntent('info on Khoury')?.intent, 'query_client')
 })
+
+test('quick intent: asking for Arabic is not the same as asking for a description', () => {
+  assert.deepEqual(quickIntent('arabic for #23'), { intent: 'describe_property_ar', propertyId: 23 })
+  assert.deepEqual(quickIntent('write the description in arabic for listing 23'), { intent: 'describe_property_ar', propertyId: 23 })
+  assert.deepEqual(quickIntent('translate property 12 to arabic'), { intent: 'describe_property_ar', propertyId: 12 })
+  // Without Arabic it is still the English generator.
+  assert.deepEqual(quickIntent('write a description for #23'), { intent: 'describe_property', propertyId: 23 })
+})

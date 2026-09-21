@@ -137,6 +137,7 @@ export function renderMarketingEmail(input: MarketingEmailInput): MarketingEmail
   const rows = detailRows(l)
   const contact = [agentName, agentPhone].filter(Boolean).join(' · ')
   const description = l.description.trim() || fallbackDescription(l)
+  const arabic = l.descriptionAr?.trim() ?? ''
   const attachedCount = l.photos.filter((_, i) => files[i]).length
   const linkedPhotos = l.photos.filter((_, i) => !files[i])
   const downloadOf = (src: string, i: number) => photoDownloadUrl(src, files[i] ?? photoFilename(listingId, i, src))
@@ -150,6 +151,9 @@ export function renderMarketingEmail(input: MarketingEmailInput): MarketingEmail
 
   const text = [
     description,
+    // Both versions ready to paste, the Arabic clearly separated so nobody
+    // posts the two languages as one block.
+    ...(arabic ? ['', '--- العربية ---', arabic] : []),
     '',
     l.photos.length ? `Photos: ${l.photos.length}${attachedCount ? ` (${attachedCount} attached)` : ''}` : 'No photos yet.',
     ...linkedPhotos.map(src => photoDownloadUrl(src, photoFilename(listingId, l.photos.indexOf(src), src))),
@@ -177,6 +181,7 @@ export function renderMarketingEmail(input: MarketingEmailInput): MarketingEmail
     <!-- 1. Description -->
     <tr><td style="background:#ffffff;border:1px solid #EEF0F4;border-radius:14px;padding:22px">
       <p style="margin:0;font-size:15px;line-height:1.65;white-space:pre-line">${esc(description)}</p>
+      ${arabic ? `<p dir="rtl" lang="ar" style="margin:16px 0 0;padding-top:16px;border-top:1px solid #EEF0F4;font-size:15px;line-height:1.8;white-space:pre-line;text-align:right">${esc(arabic)}</p>` : ''}
     </td></tr>
 
     <!-- 2. Photos -->

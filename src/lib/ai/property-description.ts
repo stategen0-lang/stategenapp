@@ -7,7 +7,7 @@
 // this file only adds the Grok call, empty-completion retry, and deadline.
 
 import { chat } from '@/lib/xai'
-import { buildPrompts, stripTemplateMarkers, type DescriptionInput } from '@/lib/ai/description-prompts'
+import { buildPrompts, buildArabicPrompts, hasArabic, stripTemplateMarkers, type DescriptionInput } from '@/lib/ai/description-prompts'
 
 export type { DescriptionInput }
 export { buildFacts, buildPrompts } from '@/lib/ai/description-prompts'
@@ -48,4 +48,31 @@ export async function generateDescription(
   let clean = tidy(await withDeadline(call(), opts.deadlineMs))
   if (!clean && (opts.retry ?? true)) clean = tidy(await withDeadline(call(), opts.deadlineMs))
   return clean
+}
+
+/**
+ * The Arabic version of a description that already exists.
+ *
+ * Returns '' when the model produced nothing, or answered in English anyway —
+ * better to tell the agent it failed than to save a second English copy under
+ * an Arabic heading.
+ */
+export async function generateArabicDescription(
+  english: string,
+  d: DescriptionInput,
+  opts: { retry?: boolean; deadlineMs?: number } = {},
+): Promise<string> {
+  const source = String(english ?? '').trim()
+  if (!source) return ''
+
+  const { systemPrompt, prompt, maxTokens, temperature } = buildArabicPrompts(d, source)
+  const messages = [
+    { role: 'system' as const, content: systemPrompt },
+    { role: 'user' as const, content: prompt },
+  ]
+  const call = () => chat(messages, { temperature, max_tokens: maxTokens })
+
+  let clean = tidy(await withDeadline(call(), opts.deadlineMs))
+  if (!clean && (opts.retry ?? true)) clean = tidy(await withDeadline(call(), opts.deadlineMs))
+  return hasArabic(clean) ? clean : ''
 }

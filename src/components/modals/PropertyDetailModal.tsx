@@ -201,6 +201,20 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
             {/* pre-wrap: template descriptions are multi-line with headings and
                 bullet lists, which would otherwise collapse into one paragraph */}
             <p className="text-sm leading-relaxed" style={{ color: '#6A7488', whiteSpace: 'pre-wrap' }}>{buildDesc(p)}</p>
+            {/* The Arabic version, when one has been written. dir="rtl" is not
+                cosmetic: without it the prices and "م²" land at the wrong end
+                of the line. */}
+            {p.aiDescriptionAr?.trim() && (
+              <div className="mt-3 pt-3" style={{ borderTop: '1px solid #EEF0F4' }}>
+                <p
+                  dir="rtl" lang="ar"
+                  className="text-sm leading-relaxed"
+                  style={{ color: '#6A7488', whiteSpace: 'pre-wrap', textAlign: 'right' }}
+                >
+                  {p.aiDescriptionAr.trim()}
+                </p>
+              </div>
+            )}
 
             <div className="grid grid-cols-3 gap-3">
               {[

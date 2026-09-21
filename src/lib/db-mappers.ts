@@ -30,6 +30,7 @@ export function dbRowToProperty(row: Record<string, unknown>, idx: number): Prop
     notes: extras.notes as string | undefined,
     publicNotes: extras.publicNotes as string | undefined,
     aiDescription: extras.aiDescription as string | undefined,
+    aiDescriptionAr: extras.aiDescriptionAr as string | undefined,
     parkings: extras.parkings as number | undefined,
     buildingAge: extras.buildingAge as number | undefined,
     floor: extras.floor as Property['floor'] | undefined,

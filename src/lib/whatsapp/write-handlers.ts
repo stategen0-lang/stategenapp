@@ -16,7 +16,7 @@ import type { IntentResult } from '@/lib/whatsapp/intent'
 import { stageLabel } from '@/lib/whatsapp/deals'
 import type { Stage } from '@/lib/pipeline'
 import { dbRowToProperty } from '@/lib/db-mappers'
-import { generateDescription, type DescriptionInput } from '@/lib/ai/property-description'
+import { generateDescription, generateArabicDescription, type DescriptionInput } from '@/lib/ai/property-description'
 import {
   buildUpdate, buildNewProperty, confirmationText, hasChanges,
   mergeExtras, appendLog, CLIENT_FIELDS, PROPERTY_FIELDS, expandListingFeatures,
@@ -270,6 +270,7 @@ export async function stageDescribeProperty(
     text,
     '',
     'Reply YES to save it to the listing, or NO to discard.',
+    `Once it's saved, "arabic for #${p.id}" writes the Arabic version.`,
   ].join('\n')
 
   return stage(admin, profile, 'describe_property', summary, {
@@ -277,6 +278,67 @@ export async function stageDescribeProperty(
     id: p.id,
     columns: {},
     extras: { aiDescription: text },
+    blobColumn: 'Amenities',
+    label,
+  })
+}
+
+// ── "arabic for #23" ─────────────────────────────────────────────────────────
+// The Arabic version of a description that is already on the listing. Asked for
+// rather than written every time: each one is a paid call, and most listings
+// never need it.
+export async function stageArabicDescription(
+  admin: SupabaseClient,
+  profile: Profile,
+  intent: IntentResult,
+): Promise<string> {
+  if (!intent.propertyId) return 'Which listing? Try "arabic for #23".'
+
+  const { data: row } = await admin
+    .from('Properties')
+    .select('*')
+    .eq('company_id', profile.company_id)
+    .eq('id', intent.propertyId)
+    .maybeSingle()
+
+  if (!row) return `No listing with id #${intent.propertyId}.`
+  if (!canEditProperty(toSession(profile), agentOf(row, 'Amenities'))) {
+    return `#${intent.propertyId} was listed by another agent, so I can't change it.`
+  }
+
+  const p = dbRowToProperty(row, 0)
+  const english = p.aiDescription?.trim()
+  if (!english) {
+    return `#${p.id} has no description yet. Send "write a description for #${p.id}" first, then ask for the Arabic.`
+  }
+
+  let text: string
+  try {
+    text = await generateArabicDescription(english, {
+      title: p.title, type: p.type, transaction: p.transaction, price: p.price, rent: p.rent,
+      district: p.district, city: p.city, size: p.size, beds: p.beds, baths: p.baths,
+      garden: p.garden, balcony: p.balcony, view: p.view, parkings: p.parkings, buildingAge: p.buildingAge,
+      publicNotes: p.publicNotes,
+    }, { retry: false, deadlineMs: 12_000 })
+  } catch {
+    return 'That took too long to generate — please try again in a moment.'
+  }
+  if (!text) return "I couldn't write the Arabic version just now. Please try again."
+
+  const label = p.title || `#${p.id}`
+  const summary = [
+    `Arabic version for ${label}:`,
+    '',
+    text,
+    '',
+    'Reply YES to save it to the listing, or NO to discard.',
+  ].join('\n')
+
+  return stage(admin, profile, 'describe_property_ar', summary, {
+    table: 'Properties',
+    id: p.id,
+    columns: {},
+    extras: { aiDescriptionAr: text },
     blobColumn: 'Amenities',
     label,
   })
@@ -545,6 +607,7 @@ export async function applyPendingAction(
     if (error) throw error
 
     if (actionType === 'describe_property') return `Saved — description added to ${p.label}.`
+    if (actionType === 'describe_property_ar') return `Saved — Arabic version added to ${p.label}.`
     return `Saved — ${p.label} updated.`
   } catch (err) {
     console.error('[whatsapp] apply failed', actionType, err)

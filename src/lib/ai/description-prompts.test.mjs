@@ -3,7 +3,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { stripTemplateMarkers, buildFacts, buildPrompts } from './description-prompts.ts'
+import { stripTemplateMarkers, buildFacts, buildPrompts, buildArabicPrompts, hasArabic } from './description-prompts.ts'
 
 const sale = {
   title: '3 bed apartment', type: 'Appartement', transaction: 'For Sale',
@@ -114,4 +114,40 @@ test('a listing with no notes at all mentions neither', () => {
   const facts = buildFacts({ type: 'Villa', transaction: 'For Rent', rent: 1200, city: 'Adma' })
   assert.equal(/selling points/i.test(facts), false)
   assert.equal(/Agent notes/i.test(facts), false)
+})
+
+// ── The Arabic version ───────────────────────────────────────────────────────
+
+test('buildArabicPrompts: carries the English, the facts, and the structure rule', () => {
+  const { systemPrompt, prompt } = buildArabicPrompts(
+    { type: 'Appartement', transaction: 'For Sale', price: 250000, district: 'Achrafieh', size: 180, beds: 3 },
+    'Bright three-bedroom with sea views.',
+  )
+  assert.match(systemPrompt, /Modern Standard Arabic/)
+  assert.ok(prompt.includes('Bright three-bedroom with sea views.'))
+  assert.ok(prompt.includes('Achrafieh'))
+  assert.match(prompt, /Keep the structure exactly/)
+  // The rules that stop the two classic failures: a literal translation, and
+  // the model answering in English.
+  assert.match(prompt, /not a literal translation/)
+  assert.match(prompt, /Output only the Arabic description/)
+})
+
+test('buildArabicPrompts: never leaks the internal notes', () => {
+  const { prompt } = buildArabicPrompts(
+    { type: 'Appartement', transaction: 'For Sale', price: 1, district: 'Hamra', notes: 'owner wants cash only' },
+    'A flat.',
+  )
+  // The notes go in as context (same as the English prompt) but are fenced off.
+  assert.match(prompt, /never quote or reveal/)
+  assert.match(prompt, /Never repeat or hint at the agent's internal notes/)
+})
+
+test('hasArabic: tells an Arabic answer from an English one', () => {
+  assert.equal(hasArabic('شقة مشرقة بإطلالة على البحر'), true)
+  assert.equal(hasArabic('Bright apartment with sea views'), false)
+  assert.equal(hasArabic(''), false)
+  assert.equal(hasArabic(null), false)
+  // A mixed line still counts — prices and m² stay in Latin script on purpose.
+  assert.equal(hasArabic('شقة 180 م² بسعر 250,000$'), true)
 })

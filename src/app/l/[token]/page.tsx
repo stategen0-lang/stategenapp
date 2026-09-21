@@ -216,6 +216,18 @@ export default async function ListingPage({ params }: { params: Promise<{ token:
               <p className="text-[11px] font-bold uppercase" style={{ color: accent, letterSpacing: '0.12em' }}>About this property</p>
             </div>
             <p className="text-sm leading-relaxed" style={{ color: '#2B3A54', whiteSpace: 'pre-wrap' }}>{listing.description}</p>
+            {/* The Arabic version underneath, for a client who would rather read
+                it. dir/lang are what make the punctuation, the prices and "م²"
+                sit at the right end of each line. */}
+            {listing.descriptionAr && (
+              <p
+                dir="rtl" lang="ar"
+                className="text-sm leading-relaxed mt-3 pt-3"
+                style={{ color: '#2B3A54', whiteSpace: 'pre-wrap', textAlign: 'right', borderTop: '1px solid #EEF0F4' }}
+              >
+                {listing.descriptionAr}
+              </p>
+            )}
           </div>
 
           {/* The agent's own selling points (Public Notes on the listing form).

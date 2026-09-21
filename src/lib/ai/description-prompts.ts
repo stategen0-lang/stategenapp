@@ -134,6 +134,49 @@ Rules:
 }
 
 /**
+ * The Arabic version of a finished description.
+ *
+ * Written from the English AND the property facts, not translated line by line:
+ * a literal translation of "Featuring a private garden and sea views" reads
+ * like an instruction manual, while a model given the facts writes the sentence
+ * an Arabic listing would actually use.
+ *
+ * Structure is preserved, because a description written from the agency's
+ * template is a layout — headings, bullets, line breaks — and the Arabic has to
+ * be usable in the same places.
+ */
+export function buildArabicPrompts(d: DescriptionInput, english: string): Prompts {
+  return {
+    systemPrompt:
+      'You write Arabic real estate listing copy for the Lebanese market. You write in Modern Standard Arabic, ' +
+      'the register used in property listings and newspaper advertisements — never a spoken dialect, never a ' +
+      'word-for-word translation. You output the Arabic text only.',
+    prompt: `Write the Arabic version of this listing description.
+
+ENGLISH DESCRIPTION:
+${english}
+
+PROPERTY DATA (for accuracy — do not add anything that is not here):
+- ${buildFacts(d)}
+
+Rules:
+- Keep the structure exactly: the same sections, headings, bullet points, line breaks and their order.
+- Write natural Arabic marketing copy, not a literal translation. Same meaning, same selling points, same length.
+- Leave numbers, prices and units in Western digits as they are written here: 250,000$ and 180 م².
+- Keep the area's name as it is commonly written in Arabic in Lebanon; if you are not certain of it, leave the Latin spelling.
+- Never repeat or hint at the agent's internal notes.
+- Output only the Arabic description — no preamble, no English, no explanation, no markdown code fences.`,
+    maxTokens: 4000,
+    temperature: 0.4,
+  }
+}
+
+/** Does this text contain Arabic script at all? Guards against a model that answers in English. */
+export function hasArabic(text: string | null | undefined): boolean {
+  return /[؀-ۿ]/.test(String(text ?? ''))
+}
+
+/**
  * Remove the markers that wrap the template in the prompt, in case the model
  * copies them into its answer — it did, so a real listing opened with
  * "--- BEGIN TEMPLATE ---".

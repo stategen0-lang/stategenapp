@@ -85,6 +85,8 @@ export interface PublicListing {
   photos: string[]
   video?: string
   description: string
+  /** The Arabic version of the description, when the agent asked for one. */
+  descriptionAr?: string
   /** The agent's own selling points, written for clients — never the internal notes. */
   publicNotes?: string
 }
@@ -122,6 +124,8 @@ export function publicListing(p: Property, description: string): PublicListing {
     photos: Array.isArray(p.photos) ? p.photos : [],
     video: p.video,
     description,
+    // Written for clients in the first place, so it is safe to publish.
+    descriptionAr: p.aiDescriptionAr?.trim() || undefined,
     // Written for clients by the agent; the internal notes are still excluded.
     publicNotes: p.publicNotes?.trim() || undefined,
   }

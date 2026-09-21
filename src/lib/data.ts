@@ -89,6 +89,9 @@ export interface Property {
   /** A single walkthrough video, stored as a URL (upload or a pasted link). */
   video?: string
   aiDescription?: string
+  /** The Arabic version of aiDescription, written on request. Right-to-left:
+   *  anywhere it is shown needs dir="rtl" or the prices land on the wrong side. */
+  aiDescriptionAr?: string
   /** Internal notes: team context, never repeated to a client. */
   notes?: string
   /** Public notes: selling points the agent wants said out loud — the AI
