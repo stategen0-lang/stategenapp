@@ -129,7 +129,11 @@ export function renderMarketingEmail(input: MarketingEmailInput): MarketingEmail
   const accent = /^#[0-9a-f]{6}$/i.test(input.brandColor ?? '') ? input.brandColor! : '#14223F'
   const files = input.attachedFiles ?? {}
   const where = place(l)
-  const subject = `New listing #${listingId} to post: ${l.title}${where ? ` — ${where}` : ''}`
+  // The agent's name goes early, not at the end: the marketing team works from
+  // the inbox list, where a long subject is cut off, and who sent it is the
+  // first thing they need in order to reply.
+  const from = agentName?.trim() ? ` from ${agentName.trim()}` : ''
+  const subject = `New listing #${listingId}${from} to post: ${l.title}${where ? ` — ${where}` : ''}`
   const rows = detailRows(l)
   const contact = [agentName, agentPhone].filter(Boolean).join(' · ')
   const description = l.description.trim() || fallbackDescription(l)

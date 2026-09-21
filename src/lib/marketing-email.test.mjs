@@ -36,6 +36,8 @@ test('marketing email: carries what a post needs', () => {
   const { subject, html, text } = email()
   assert.match(subject, /#45/)
   assert.match(subject, /Sea view apartment/)
+  // Whoever the marketing team has to reply to is named in the subject.
+  assert.match(subject, /from Nour Haddad/)
   for (const s of ['$450,000', 'Kaslik, Jounieh', '180 m²', 'Nour Haddad', '+96170111222', 'https://stategen.app/l/tok', property.photos[0], 'Bright 3-bedroom']) {
     assert.ok(text.includes(s), `text missing ${s}`)
   }
@@ -119,4 +121,10 @@ test('photoDownloadUrl: storage photos download, other links untouched', () => {
     'https://x.supabase.co/storage/v1/object/public/property-photos/c/a.jpg?download=listing-1-photo-1.jpg',
   )
   assert.equal(photoDownloadUrl('https://example.com/a.jpg', 'x.jpg'), 'https://example.com/a.jpg')
+})
+
+test('marketing email: a missing agent name leaves the subject reading normally', () => {
+  const { subject } = email({ agentName: '' })
+  assert.equal(subject.includes('from'), false)
+  assert.match(subject, /^New listing #45 to post: /)
 })
