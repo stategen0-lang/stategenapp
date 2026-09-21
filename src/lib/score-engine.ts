@@ -8,7 +8,8 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { dbRowToClient, dbRowToProperty } from '@/lib/db-mappers'
-import { matchProperties } from '@/lib/matching'
+import { matchProperties, MATCH_THRESHOLD } from '@/lib/matching'
+import { loadAreas } from '@/lib/lebanon/areas'
 import { behaviorScore, profileFitScore, ratingScore, leadScore } from '@/lib/scoring'
 
 const DAY_MS = 86_400_000
@@ -53,6 +54,9 @@ export async function recalculateScores(opts: { clientId?: number; companyId?: n
 
   const now = Date.now()
   const scores: { clientId: number; score: number }[] = []
+  // Loaded once for the whole batch, so every client's best match is scored
+  // against real areas rather than raw spelling.
+  const areas = await loadAreas().catch(() => null)
 
   for (const row of clients) {
     const clientId = Number(row.id)
@@ -69,7 +73,7 @@ export async function recalculateScores(opts: { clientId?: number; companyId?: n
     const behavior = behaviorScore(days, events)
 
     // Profile fit: budget clarity + status timeline + best live match strength.
-    const best = matchProperties(client, properties)[0]?.score.total ?? 0
+    const best = matchProperties(client, properties, MATCH_THRESHOLD, areas)[0]?.score.total ?? 0
     const fit = profileFitScore(client.budget, (row.status as string) ?? '', best)
 
     // Agent rating (stored 1-5; defaults to 3).

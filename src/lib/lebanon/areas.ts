@@ -8,7 +8,7 @@
 //
 // On the server the same call just loads the module once per process.
 
-import { buildIndex, type AreaIndex } from './areas-core'
+import { buildIndex, type AreaIndex } from './areas-core.ts'
 
 let index: AreaIndex | null = null
 let pending: Promise<AreaIndex> | null = null
@@ -16,7 +16,7 @@ let pending: Promise<AreaIndex> | null = null
 export async function loadAreas(): Promise<AreaIndex> {
   if (index) return index
   if (!pending) {
-    pending = import('./areas.data')
+    pending = import('./areas.data.ts')
       .then(m => (index = buildIndex(m.PACKED_AREAS, m.GOVERNORATES, m.CAZAS)))
       .catch(err => { pending = null; throw err })
   }
@@ -28,5 +28,5 @@ export function loadedAreas(): AreaIndex | null {
   return index
 }
 
-export { foldArea, resolveArea, searchAreas, areaLabel, distanceKm } from './areas-core'
-export type { Area, AreaIndex, Resolution } from './areas-core'
+export { foldArea, resolveArea, searchAreas, areaLabel, distanceKm } from './areas-core.ts'
+export type { Area, AreaIndex, Resolution } from './areas-core.ts'

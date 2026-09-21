@@ -7,7 +7,8 @@ import {
   Property, Client,
   formatPrice, TYPE_GRADIENTS, propertyLocation,
 } from '@/lib/data'
-import { propFeatures, matchClients, matchProperties, ScoreResult } from '@/lib/matching'
+import { propFeatures, matchClients, matchProperties, MATCH_THRESHOLD, ScoreResult } from '@/lib/matching'
+import { loadAreas } from '@/lib/lebanon/areas'
 import { dbRowToProperty, dbRowToClient } from '@/lib/db-mappers'
 
 function norm(s: string) { return (s ?? '').toLowerCase().trim() }
@@ -184,7 +185,7 @@ export default function MatchCards({ entityType, entity, onOpenProperty, onOpenC
             if (Array.isArray(data.clients)) pool = data.clients.map(dbRowToClient)
           }
         } catch { /* keep demo fallback */ }
-        setMatchedClients(matchClients(prop, pool).slice(0, 10))
+        setMatchedClients(matchClients(prop, pool, MATCH_THRESHOLD, await loadAreas().catch(() => null)).slice(0, 10))
       } else {
         const client = entity as Client
         // Match against the agency's real listings (fall back to demo data offline).
@@ -196,7 +197,7 @@ export default function MatchCards({ entityType, entity, onOpenProperty, onOpenC
             if (Array.isArray(data.properties)) pool = data.properties.map(dbRowToProperty)
           }
         } catch { /* keep demo fallback */ }
-        setMatchedProperties(matchProperties(client, pool).slice(0, 10))
+        setMatchedProperties(matchProperties(client, pool, MATCH_THRESHOLD, await loadAreas().catch(() => null)).slice(0, 10))
       }
       setDismissed(new Set())
     } finally {

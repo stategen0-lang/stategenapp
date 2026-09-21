@@ -8,6 +8,7 @@ import {
   scoreBudget, scoreLocation, scoreLocationMulti, scoreBedrooms, scoreAmenities,
   propFeatures, computeScore, matchProperties, matchClients, MATCH_THRESHOLD, BUDGET_EXCLUDE, LOCATION_EXCLUDE,
 } from './matching.ts'
+import { loadAreas } from './lebanon/areas.ts'
 
 // ── scoreLocationMulti: a client open to several areas ───────────────────────
 test('scoreLocationMulti: best of the requested areas wins', () => {
@@ -249,4 +250,67 @@ test('propFeatures + wishlist: client must-haves match a listing\'s features', (
   const shared = prop({ price: 500000, buildingFeatures: ['Shared Pool'] })
   const wantPool = client({ budget: 500000, req: { type: 'Appartement', location: 'Beirut', beds: 3, amenities: ['Pool'] } })
   assert.equal(computeScore(shared, wantPool).amenityScore, 0)
+})
+
+// ── Location scoring with the gazetteer ──────────────────────────────────────
+// The tests above deliberately run WITHOUT it, covering the fallback for text
+// no gazetteer can place. These load it, which is what production does.
+
+const areas = await loadAreas()
+
+test('scoreLocation: the same place, spelled two ways, is the same place', () => {
+  // Each of these pairs used to score LOCATION_EXCLUDE — the match simply
+  // never appeared, and nobody could tell it was missing.
+  const pairs = [
+    ['Hazmiyeh', 'Hazmieh'], ['Ashrafiyeh', 'Achrafieh'], ['El Achrafiye', 'achrafieh'],
+    ['Jounié', 'Jounieh'], ['Dbaye', 'Dbayeh'], ['Jal ed Dib', 'Jal el Dib'],
+    ['Fern el Shebbak', 'Furn el Chebbak'], ['Sidon', 'Saida'], ['Sour', 'Tyre'],
+    ['Zahlé', 'Zahle'], ['Shweifat', 'Choueifat'], ['Mansouriyeh', 'Mansourieh'],
+  ]
+  for (const [filed, wanted] of pairs) {
+    assert.equal(scoreLocation(filed, wanted, areas), 100, `${filed} ≠ ${wanted}`)
+  }
+})
+
+test('scoreLocation: the stored "area, city" pair still resolves', () => {
+  assert.equal(scoreLocation('Achrafieh, Beirut', 'ashrafiyeh', areas), 100)
+  assert.equal(scoreLocation('Hazmieh, Mount Lebanon', 'Hazmiyeh', areas), 100)
+})
+
+test('scoreLocation: graded by real distance', () => {
+  assert.equal(scoreLocation('Hamra', 'Achrafieh', areas), 85)        // ~3 km
+  assert.equal(scoreLocation('Dbayeh', 'Achrafieh', areas), 75)       // ~11 km
+  assert.equal(scoreLocation('Tripoli', 'Achrafieh', areas), LOCATION_EXCLUDE)
+  assert.equal(scoreLocation('Saida', 'Jounieh', areas), LOCATION_EXCLUDE)
+})
+
+test('scoreLocation: a place up the mountain is no longer "surrounding"', () => {
+  // The old zone table paired Beirut with the whole Chouf, so a village 35 km
+  // away scored the same 75 as Dbayeh.
+  assert.equal(scoreLocation('Barouk', 'Achrafieh', areas), LOCATION_EXCLUDE)
+})
+
+test('scoreLocation: text the gazetteer cannot place falls back, never crashes', () => {
+  assert.equal(scoreLocation('Behind the Old Mill Road', 'Achrafieh', areas), LOCATION_EXCLUDE)
+  assert.equal(scoreLocation('Hamra Beirut', 'Verdun', areas), 75)   // zone fallback
+  assert.equal(scoreLocation('Achrafieh', '', areas), 100)
+  assert.equal(scoreLocation('', 'Achrafieh', areas), LOCATION_EXCLUDE)
+})
+
+test('scoreLocationMulti: every area the client named counts, in any spelling', () => {
+  const req = { location: '', locations: ['Ashrafiyeh', 'Jounié', 'Hazmiyeh'] }
+  assert.equal(scoreLocationMulti('Achrafieh', req, areas), 100)
+  assert.equal(scoreLocationMulti('Hazmieh', req, areas), 100)
+  assert.equal(scoreLocationMulti('Jounieh', req, areas), 100)
+  assert.equal(scoreLocationMulti('Tripoli', req, areas), LOCATION_EXCLUDE)
+})
+
+test('matchProperties: the listing filed under another spelling now shows up', () => {
+  const props = [
+    prop({ id: 1, title: 'spelled differently', district: '', city: 'Hazmiyeh', price: 300000 }),
+    prop({ id: 2, title: 'far away', district: '', city: 'Tripoli', price: 300000 }),
+  ]
+  const c = client({ budget: 300000, req: { type: 'Appartement', location: 'Hazmieh', beds: 3 } })
+  const titles = matchProperties(c, props, MATCH_THRESHOLD, areas).map(r => r.property.title)
+  assert.deepEqual(titles, ['spelled differently'])
 })

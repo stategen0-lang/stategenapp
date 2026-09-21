@@ -8,7 +8,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { canSeeClientPII, isManager, maskClientName } from '@/lib/permissions'
 import { dbRowToClient, dbRowToProperty } from '@/lib/db-mappers'
-import { matchProperties } from '@/lib/matching'
+import { matchProperties, MATCH_THRESHOLD } from '@/lib/matching'
+import { loadAreas } from '@/lib/lebanon/areas'
 import { formatPrice, propertyLocation, type Property } from '@/lib/data'
 import type { IntentResult } from '@/lib/whatsapp/intent'
 import { splitClientRef } from '@/lib/whatsapp/client-ref'
@@ -210,7 +211,7 @@ export async function handleQueryProperty(
     },
   }
 
-  const matches = matchProperties(criteria, pool).slice(0, 5)
+  const matches = matchProperties(criteria, pool, MATCH_THRESHOLD, await loadAreas().catch(() => null)).slice(0, 5)
   if (!matches.length) {
     const what = [intent.budget ? formatPrice(intent.budget) : null, intent.location].filter(Boolean).join(' in ')
     return `Nothing matches ${what}.\n\nThe matcher only suggests listings within ±50% of budget${intent.location ? ` in ${intent.location}` : ''}.`

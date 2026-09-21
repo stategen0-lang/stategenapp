@@ -3,6 +3,10 @@
 // No React / DOM / network here so it can be tested in isolation.
 
 import type { Property, Client } from '@/lib/data'
+// Relative, not aliased: this module is unit-tested by `node --test`, which
+// does not know the "@/" alias. Only the tiny loader is imported — the 53 KB
+// of place data stays behind its dynamic import.
+import { loadedAreas, resolveArea, distanceKm, type Area, type AreaIndex } from './lebanon/areas.ts'
 
 // Lebanese geography. same zone = 60, adjacent zones = 35, both-known-but-far = 15.
 export const ZONES: Record<string, string[]> = {
@@ -61,13 +65,65 @@ export function scoreBudget(propPrice: number, budget: number): number {
 // Sentinel: location too far from the client's preferred area to recommend.
 export const LOCATION_EXCLUDE = -1
 
-// Location: the exact area requested → 100. A different district in the same
-// region, OR a neighbouring region → 75 (surrounding). Anywhere further →
-// LOCATION_EXCLUDE. e.g. client wants Hamra: Hamra → 100, Achrafieh → 75.
-export function scoreLocation(propLoc: string, clientLoc: string): number {
+/** Next door: Achrafieh to Hamra, Jounieh to Kaslik. */
+export const NEXT_DOOR_KM = 8
+/** Still worth showing: Beirut to Dbayeh, Jounieh to Jbeil. Beyond it, excluded. */
+export const SURROUNDING_KM = 20
+
+/**
+ * Find the area a stored location string refers to.
+ *
+ * Listings store the area in one field and older rows in two, joined for
+ * scoring, so "Achrafieh, Beirut" has to resolve to Achrafieh — the whole
+ * string is not the name of anywhere. Each comma-separated part is tried in
+ * turn, most specific first.
+ */
+function locate(ix: AreaIndex, text: string): Area | null {
+  const whole = resolveArea(ix, text)
+  if (whole) return whole.area
+  for (const part of String(text ?? '').split(',')) {
+    const hit = resolveArea(ix, part.trim())
+    if (hit) return hit.area
+  }
+  return null
+}
+
+/**
+ * Location: the exact area requested → 100, next door → 85, within the
+ * surrounding area → 75, anything further → LOCATION_EXCLUDE.
+ *
+ * Measured between the two areas' real coordinates. The hand-kept ZONES table
+ * below is the fallback for text the gazetteer cannot place ("behind the old
+ * mill road"), and for callers that have not loaded it; distance is both more
+ * accurate and self-maintaining — the table had Beirut neighbouring the Chouf,
+ * which let a listing 35 km up the mountain count as surrounding.
+ */
+export function scoreLocation(
+  propLoc: string,
+  clientLoc: string,
+  ix: AreaIndex | null = loadedAreas(),
+): number {
   if (!clientLoc) return 100                       // no preference → no constraint
   const p = norm(propLoc); const c = norm(clientLoc)
+  // A listing with no area at all cannot be claimed to be in the client's:
+  // "".includes() is true of everything, which used to score it a perfect 100
+  // against every client alive.
+  if (!p) return LOCATION_EXCLUDE
   if (p.includes(c) || c.includes(p)) return 100   // exact area requested
+
+  if (ix) {
+    const pa = locate(ix, propLoc)
+    const ca = locate(ix, clientLoc)
+    // Both placed: the spelling each was written in no longer matters, which
+    // is the whole point — Hazmieh and Hazmiyeh are one place now.
+    if (pa && ca) {
+      if (pa.slug === ca.slug) return 100
+      const km = distanceKm(pa, ca)
+      if (km <= NEXT_DOOR_KM) return 85
+      if (km <= SURROUNDING_KM) return 75
+      return LOCATION_EXCLUDE
+    }
+  }
 
   const pZone = Object.entries(ZONES).find(([zone, areas]) => p.includes(zone) || areas.some(a => p.includes(a)))?.[0]
   const cZone = Object.entries(ZONES).find(([zone, areas]) => c.includes(zone) || areas.some(a => c.includes(a)))?.[0]
@@ -81,11 +137,15 @@ export function scoreLocation(propLoc: string, clientLoc: string): number {
 // A client's areas: the explicit list when present, else the single location.
 // Scores the property against each and keeps the best (an exact hit in any one
 // requested area should win). No areas at all → no constraint.
-export function scoreLocationMulti(propLoc: string, req: { location: string; locations?: string[] }): number {
+export function scoreLocationMulti(
+  propLoc: string,
+  req: { location: string; locations?: string[] },
+  ix: AreaIndex | null = loadedAreas(),
+): number {
   const areas = (req.locations && req.locations.length ? req.locations : [req.location])
     .map(norm).filter(Boolean)
   if (!areas.length) return 100
-  return Math.max(...areas.map(a => scoreLocation(propLoc, a)))
+  return Math.max(...areas.map(a => scoreLocation(propLoc, a, ix)))
 }
 
 export function scoreBedrooms(propBeds: number, clientBeds: number): number {
@@ -118,7 +178,11 @@ export type ClientLike = Pick<Client, 'req' | 'budget' | 'type'>
 export const MATCH_THRESHOLD = 50
 
 // Weights: budget 40%, location 25%, type 15%, bedrooms 12%, amenities 8%.
-export function computeScore(prop: Property, client: ClientLike): ScoreResult {
+export function computeScore(
+  prop: Property,
+  client: ClientLike,
+  ix: AreaIndex | null = loadedAreas(),
+): ScoreResult {
   // Sale listings compare against the price; rentals against the monthly rent,
   // so the client's single budget is read in the same terms as the listing.
   const price    = prop.transaction === 'For Rent' ? prop.rent : prop.price
@@ -139,7 +203,9 @@ export function computeScore(prop: Property, client: ClientLike): ScoreResult {
     || (client.type === 'Renter' ? 'For Rent' : client.type === 'Buyer' ? 'For Sale' : '')
   const txnOk = !wantTxn || prop.transaction === wantTxn
   // A client can be open to several areas — score against the best-matching one.
-  const rawLoc = scoreLocationMulti(`${prop.district} ${prop.city}`, client.req)
+  // Comma-joined, not space-joined: "Achrafieh, Beirut" can be taken apart
+  // again by the gazetteer, while "Achrafieh Beirut" is the name of nowhere.
+  const rawLoc = scoreLocationMulti([prop.district, prop.city].filter(Boolean).join(', '), client.req, ix)
   const b  = rawBudget === BUDGET_EXCLUDE ? 0 : rawBudget
   const l  = rawLoc === LOCATION_EXCLUDE ? 0 : rawLoc
   const t  = typeOk ? 100 : 0
@@ -168,10 +234,11 @@ export function matchProperties(
   client: ClientLike,
   properties: Property[],
   threshold = MATCH_THRESHOLD,
+  ix: AreaIndex | null = loadedAreas(),
 ): PropertyMatch[] {
   return properties
     .filter(p => p.status !== 'Sold')
-    .map(p => ({ property: p, score: computeScore(p, client) }))
+    .map(p => ({ property: p, score: computeScore(p, client, ix) }))
     .filter(r => r.score.eligible && r.score.total >= threshold)
     .sort((a, b) => b.score.total - a.score.total)
 }
@@ -180,9 +247,10 @@ export function matchClients(
   property: Property,
   clients: Client[],
   threshold = MATCH_THRESHOLD,
+  ix: AreaIndex | null = loadedAreas(),
 ): ClientMatch[] {
   return clients
-    .map(c => ({ client: c, score: computeScore(property, c) }))
+    .map(c => ({ client: c, score: computeScore(property, c, ix) }))
     .filter(r => r.score.eligible && r.score.total >= threshold)
     .sort((a, b) => b.score.total - a.score.total)
 }
