@@ -9,6 +9,7 @@ import MatchCards from '@/components/matching/MatchCards'
 import OffersSection from '@/components/offers/OffersSection'
 import ClientDetailModal from './ClientDetailModal'
 import PhotoGallery from '@/components/listing/PhotoGallery'
+import { hasField, type ListingField } from '@/lib/property-fields'
 import { SendToMarketingButton } from '@/components/marketing/SendToMarketing'
 
 interface Props {
@@ -29,6 +30,8 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
   const { scrollRef: pullScrollRef, panelRef: pullPanelRef, pulling, progress } = usePullToClose(onClose)
   const sc = statusStyle(p.status)
   const photos = p.photos ?? []
+  // Which facts this kind of listing has at all.
+  const has = (field: ListingField) => hasField(p.type, field)
   const [stackedClient, setStackedClient] = useState<Client | null>(null)
   const [shareOpen, setShareOpen] = useState(false)
   const [shareBusy, setShareBusy] = useState(false)
@@ -218,18 +221,21 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
 
             <div className="grid grid-cols-3 gap-3">
               {[
-                { label: 'Size',      value: `${p.size} m²` },
-                { label: 'Bedrooms',  value: p.beds > 0 ? String(p.beds) : 'N/A' },
-                { label: 'Bathrooms', value: String(p.baths) },
-                { label: 'View',      value: p.view || '—' },
-                { label: 'Garden',    value: p.garden ? 'Yes' : 'No' },
-                { label: 'Balcony',   value: p.balcony ? 'Yes' : 'No' },
-                ...(p.terrace ? [{ label: 'Terrace', value: 'Yes' }] : []),
-                ...(p.furnishing ? [{ label: 'Furnishing', value: p.furnishing }] : []),
-                ...(p.parkings ? [{ label: 'Parking', value: String(p.parkings) }] : []),
-                ...(p.buildingAge ? [{ label: 'Building Age', value: `${p.buildingAge} yrs` }] : []),
-                ...(p.floor ? [{ label: 'Floor', value: p.floor }] : []),
-                ...(p.needsRenovation ? [{ label: 'Renovation', value: 'Needed' }] : []),
+                // Only the facts this kind of listing actually has. A plot
+                // used to report "Bedrooms N/A, Garden No, Balcony No" under a
+                // photograph of a field.
+                ...(has('size') ? [{ label: 'Size', value: `${p.size} m²` }] : []),
+                ...(has('beds') ? [{ label: 'Bedrooms', value: p.beds > 0 ? String(p.beds) : 'N/A' }] : []),
+                ...(has('baths') ? [{ label: 'Bathrooms', value: String(p.baths) }] : []),
+                ...(has('view') ? [{ label: 'View', value: p.view || '—' }] : []),
+                ...(has('garden') ? [{ label: 'Garden', value: p.garden ? 'Yes' : 'No' }] : []),
+                ...(has('balcony') ? [{ label: 'Balcony', value: p.balcony ? 'Yes' : 'No' }] : []),
+                ...(p.terrace && has('terrace') ? [{ label: 'Terrace', value: 'Yes' }] : []),
+                ...(p.furnishing && has('furnishing') ? [{ label: 'Furnishing', value: p.furnishing }] : []),
+                ...(p.parkings && has('parkings') ? [{ label: 'Parking', value: String(p.parkings) }] : []),
+                ...(p.buildingAge && has('buildingAge') ? [{ label: 'Building Age', value: `${p.buildingAge} yrs` }] : []),
+                ...(p.floor && has('floor') ? [{ label: 'Floor', value: p.floor }] : []),
+                ...(p.needsRenovation && has('needsRenovation') ? [{ label: 'Renovation', value: 'Needed' }] : []),
                 ...(p.advancedPayment ? [{ label: 'Advanced pay', value: p.advancedPayment }] : []),
                 ...(p.referredBy ? [{ label: 'Referred by', value: p.referredBy }] : []),
               ].map(({ label, value }) => (

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import {
   Client, ClientType, ClientStatus, ClientReq,
   PROPERTIES, CURRENT_AGENT_ID, formatPrice, CLIENT_TAG_PRESETS, tagStyle,
-  PROPERTY_TYPES, propertyTypeLabel, FURNISHINGS, FLOORS, propertyLocation, PROPERTY_AMENITIES, BUILDING_FEATURES
+  PROPERTY_TYPES, PropertyType, propertyTypeLabel, FURNISHINGS, FLOORS, propertyLocation, amenitiesFor, BUILDING_FEATURES
 } from '@/lib/data'
 import { matchProperties, MATCH_THRESHOLD, PropertyMatch } from '@/lib/matching'
 import { dbRowToProperty } from '@/lib/db-mappers'
@@ -12,6 +12,7 @@ import { useSession } from '@/hooks/use-session'
 import { useLockBodyScroll } from '@/hooks/use-lock-body-scroll'
 import AreaInput from '@/components/form/AreaInput'
 import { loadAreas } from '@/lib/lebanon/areas'
+import { hasField, type ListingField } from '@/lib/property-fields'
 import { isManager } from '@/lib/permissions'
 import DeleteRecord from './DeleteRecord'
 
@@ -95,6 +96,11 @@ export default function NewClientModal({ onClose, onSaved, onDeleted, matchThres
 
   const needsAgent   = manager && agentOptions.length > 0
   const agentMissing = needsAgent && !assignedAgent
+
+  // Only ask for what the kind of property they want actually has — a client
+  // looking for land is not asked how many bedrooms it should have. No type
+  // chosen means "any", and every field stays.
+  const wants = (field: ListingField) => hasField(req.type, field)
 
   function setR(k: keyof ClientReq, v: string | number | boolean) {
     setReq(r => ({ ...r, [k]: v }))
@@ -338,62 +344,78 @@ export default function NewClientModal({ onClose, onSaved, onDeleted, matchThres
                   </label>
                   <input className={inp} style={inpStyle} type="number" value={budget} onChange={e => setBudget(e.target.value)} placeholder={type === 'Renter' ? '2000' : '500000'} />
                 </div>
-                <div>
-                  <label className={label} style={labelStyle}>Beds</label>
-                  <input className={inp} style={inpStyle} type="number" value={req.beds || ''} onChange={e => setR('beds', parseInt(e.target.value) || 0)} placeholder="3" />
-                </div>
-                <div>
-                  <label className={label} style={labelStyle}>Baths</label>
-                  <input className={inp} style={inpStyle} type="number" value={req.baths || ''} onChange={e => setR('baths', parseInt(e.target.value) || 0)} placeholder="2" />
-                </div>
-                <div>
-                  <label className={label} style={labelStyle}>Parking spaces</label>
-                  <input className={inp} style={inpStyle} type="number" value={req.parkings || ''} onChange={e => setR('parkings', parseInt(e.target.value) || 0)} placeholder="1" />
-                </div>
+                {wants('beds') && (
+                  <div>
+                    <label className={label} style={labelStyle}>Beds</label>
+                    <input className={inp} style={inpStyle} type="number" value={req.beds || ''} onChange={e => setR('beds', parseInt(e.target.value) || 0)} placeholder="3" />
+                  </div>
+                )}
+                {wants('baths') && (
+                  <div>
+                    <label className={label} style={labelStyle}>Baths</label>
+                    <input className={inp} style={inpStyle} type="number" value={req.baths || ''} onChange={e => setR('baths', parseInt(e.target.value) || 0)} placeholder="2" />
+                  </div>
+                )}
+                {wants('parkings') && (
+                  <div>
+                    <label className={label} style={labelStyle}>Parking spaces</label>
+                    <input className={inp} style={inpStyle} type="number" value={req.parkings || ''} onChange={e => setR('parkings', parseInt(e.target.value) || 0)} placeholder="1" />
+                  </div>
+                )}
                 <div>
                   <label className={label} style={labelStyle}>Min size (m²)</label>
                   <input className={inp} style={inpStyle} type="number" value={req.size || ''} onChange={e => setR('size', parseInt(e.target.value) || 0)} placeholder="100" />
                 </div>
-                <div>
-                  <label className={label} style={labelStyle}>View</label>
-                  <input className={inp} style={inpStyle} value={req.view ?? ''} onChange={e => setR('view', e.target.value)} placeholder="Sea, Mountain…" />
-                </div>
-                <div>
-                  <label className={label} style={labelStyle}>Furnishing</label>
-                  <select className={inp} style={inpStyle} value={req.furnishing ?? ''} onChange={e => setR('furnishing', e.target.value)}>
-                    <option value="">Any</option>
-                    {FURNISHINGS.map(f => <option key={f} value={f}>{f}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className={label} style={labelStyle}>Max building age (yrs)</label>
-                  <input className={inp} style={inpStyle} type="number" value={req.buildingAge || ''} onChange={e => setR('buildingAge', parseInt(e.target.value) || 0)} placeholder="e.g. 10" />
-                </div>
-                <div>
-                  <label className={label} style={labelStyle}>Floor</label>
-                  <select className={inp} style={inpStyle} value={req.floor ?? ''} onChange={e => setR('floor', e.target.value)}>
-                    <option value="">Any</option>
-                    {FLOORS.map(f => <option key={f} value={f}>{f}</option>)}
-                  </select>
-                </div>
+                {wants('view') && (
+                  <div>
+                    <label className={label} style={labelStyle}>View</label>
+                    <input className={inp} style={inpStyle} value={req.view ?? ''} onChange={e => setR('view', e.target.value)} placeholder="Sea, Mountain…" />
+                  </div>
+                )}
+                {wants('furnishing') && (
+                  <div>
+                    <label className={label} style={labelStyle}>Furnishing</label>
+                    <select className={inp} style={inpStyle} value={req.furnishing ?? ''} onChange={e => setR('furnishing', e.target.value)}>
+                      <option value="">Any</option>
+                      {FURNISHINGS.map(f => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                  </div>
+                )}
+                {wants('buildingAge') && (
+                  <div>
+                    <label className={label} style={labelStyle}>Max building age (yrs)</label>
+                    <input className={inp} style={inpStyle} type="number" value={req.buildingAge || ''} onChange={e => setR('buildingAge', parseInt(e.target.value) || 0)} placeholder="e.g. 10" />
+                  </div>
+                )}
+                {wants('floor') && (
+                  <div>
+                    <label className={label} style={labelStyle}>Floor</label>
+                    <select className={inp} style={inpStyle} value={req.floor ?? ''} onChange={e => setR('floor', e.target.value)}>
+                      <option value="">Any</option>
+                      {FLOORS.map(f => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
 
               {/* Must-have features — the same options as a listing, so they match */}
               <div>
                 <label className={label} style={labelStyle}>Must-have features</label>
                 <div className="flex gap-2 flex-wrap">
-                  {featureChip('Garden', req.garden, () => setR('garden', !req.garden))}
-                  {featureChip('Balcony', req.balcony, () => setR('balcony', !req.balcony))}
-                  {featureChip('Terrace', !!req.terrace, () => setR('terrace', !req.terrace))}
-                  {PROPERTY_AMENITIES.map(a => featureChip(a, (req.amenities ?? []).includes(a), () => toggleFeature('amenities', a)))}
+                  {wants('garden') && featureChip('Garden', req.garden, () => setR('garden', !req.garden))}
+                  {wants('balcony') && featureChip('Balcony', req.balcony, () => setR('balcony', !req.balcony))}
+                  {wants('terrace') && featureChip('Terrace', !!req.terrace, () => setR('terrace', !req.terrace))}
+                  {amenitiesFor((req.type || 'Appartement') as PropertyType).map(a => featureChip(a, (req.amenities ?? []).includes(a), () => toggleFeature('amenities', a)))}
                 </div>
               </div>
-              <div>
-                <label className={label} style={labelStyle}>Building features</label>
-                <div className="flex gap-2 flex-wrap">
-                  {BUILDING_FEATURES.map(a => featureChip(a, (req.buildingFeatures ?? []).includes(a), () => toggleFeature('buildingFeatures', a)))}
+              {wants('buildingFeatures') && (
+                <div>
+                  <label className={label} style={labelStyle}>Building features</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {BUILDING_FEATURES.map(a => featureChip(a, (req.buildingFeatures ?? []).includes(a), () => toggleFeature('buildingFeatures', a)))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="flex flex-wrap gap-4 pt-1">
                 {type === 'Renter' && (

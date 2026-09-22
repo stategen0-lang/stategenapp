@@ -32,9 +32,12 @@ export const FLOORS: Floor[] = ['Ground level', 'Mid floor', 'Last floor']
 // Tick-box amenities stored as free arrays (so the list can grow without a
 // migration). Garden/Balcony/Terrace keep their own booleans for backward
 // compatibility and matching; these are the extras.
-export const PROPERTY_AMENITIES = [
-  'Pool', "Helper's Room", 'Air Conditioning', 'Credit Facilities', 'Prime Location',
-]
+// Things only somewhere you live has.
+const HOME_AMENITIES = ['Pool', "Helper's Room", 'Air Conditioning']
+// Things any listing can have, whatever it is.
+const ANY_AMENITIES = ['Credit Facilities', 'Prime Location']
+
+export const PROPERTY_AMENITIES = [...HOME_AMENITIES, ...ANY_AMENITIES]
 
 // Only meaningful on a plot, so the listing form offers these for Land alone —
 // "Flat Land" on an apartment is noise the agent has to read past every time.
@@ -42,9 +45,23 @@ export const LAND_AMENITIES = [
   'Flat Land (0% slope)', 'Road Access', 'Building Permit',
 ]
 
-/** The tick-boxes to offer for a listing of this type. */
+/**
+ * The tick-boxes to offer for a listing of this type.
+ *
+ * A plot has no pool and no maid's room; a shop has no maid's room but is
+ * often air-conditioned; a whole building's pool is a shared one, which lives
+ * in BUILDING_FEATURES instead.
+ */
 export function amenitiesFor(type: PropertyType): string[] {
-  return type === 'Land' ? [...PROPERTY_AMENITIES, ...LAND_AMENITIES] : PROPERTY_AMENITIES
+  switch (type) {
+    case 'Land':      return [...ANY_AMENITIES, ...LAND_AMENITIES]
+    case 'Building':  return ANY_AMENITIES
+    case 'Garage':    return ANY_AMENITIES
+    case 'Warehouse':
+    case 'Shop': case 'Office': case 'Showroom': case 'Restaurant':
+      return ['Air Conditioning', ...ANY_AMENITIES]
+    default:          return PROPERTY_AMENITIES
+  }
 }
 export const BUILDING_FEATURES = [
   'Concierge', '24/7 Security', 'Elevator', 'Gym', 'Shared Pool',

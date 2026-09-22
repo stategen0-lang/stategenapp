@@ -12,6 +12,7 @@ import DeleteRecord from './DeleteRecord'
 import { renderTitle } from '@/lib/title-template'
 import AreaInput from '@/components/form/AreaInput'
 import { listingWarnings } from '@/lib/listing-sanity'
+import { hasField, clearedByTypeChange, fieldLabel, type ListingField } from '@/lib/property-fields'
 
 
 interface Props {
@@ -98,6 +99,8 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [dupes, setDupes] = useState<{ id: number; title: string }[]>([])
+  // What the last type change wiped, so the agent is told rather than surprised.
+  const [droppedFields, setDroppedFields] = useState<string[]>([])
   const [templates, setTemplates] = useState<DescriptionTemplate[]>(loadTemplates())
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('none')
   const [templateOpen, setTemplateOpen] = useState(false)
@@ -148,6 +151,27 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
 
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId)
   const typeWarning = listingWarnings(form)[0]
+  const shows = (field: ListingField) => hasField(form.type, field)
+
+  /**
+   * Changing the type takes the fields that no longer apply with it.
+   *
+   * Without this, switching an apartment to land leaves the bedrooms behind:
+   * out of sight in a form that stopped showing the box, but still in the
+   * database, still in the description the AI writes, still on the card.
+   */
+  function changeType(next: string) {
+    const dropped = clearedByTypeChange(next, {
+      ...form,
+      buildingFeatures,
+    })
+    setForm(f => ({ ...f, ...dropped, type: next as PropertyType }))
+    if ('buildingFeatures' in dropped) setBuildingFeatures([])
+    // Amenities that belong to another kind of listing go too.
+    const allowed = new Set(amenitiesFor(next as PropertyType))
+    setAmenities(prev => prev.filter(a => allowed.has(a)))
+    setDroppedFields(Object.keys(dropped).filter(k => k !== 'buildingFeatures'))
+  }
 
   /**
    * The Arabic version of whatever is in the description box — including a
@@ -436,7 +460,7 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
                 className={inp}
                 style={{ ...inpStyle, ...(typeWarning ? { border: '1.5px solid #E0B44A', background: '#FFFBF0' } : {}) }}
                 value={form.type}
-                onChange={e => set('type', e.target.value)}
+                onChange={e => changeType(e.target.value)}
               >
                 {PROPERTY_TYPES.map(t => <option key={t} value={t}>{propertyTypeLabel(t)}</option>)}
               </select>
@@ -458,6 +482,17 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
             <div className="flex gap-2 px-3 py-2 rounded-xl -mt-1" style={{ background: '#FFFBF0', border: '1px solid #F0E0B5' }}>
               <span style={{ color: '#BA7517' }}>⚠</span>
               <p className="text-xs leading-snug" style={{ color: '#8A6A2F' }}>{typeWarning.text}</p>
+            </div>
+          )}
+
+          {/* Say what the type change took away, rather than letting the agent
+              wonder where the bedrooms they typed went. */}
+          {droppedFields.length > 0 && (
+            <div className="flex gap-2 px-3 py-2 rounded-xl -mt-1" style={{ background: '#F4F7FC', border: '1px solid #DCE6F5' }}>
+              <span style={{ color: '#2E5288' }}>ℹ</span>
+              <p className="text-xs leading-snug" style={{ color: '#3D4B6B' }}>
+                Cleared {droppedFields.map(fieldLabel).join(', ')} — {propertyTypeLabel(form.type).toLowerCase()} listings don&apos;t use {droppedFields.length === 1 ? 'it' : 'them'}.
+              </p>
             </div>
           )}
 
@@ -505,55 +540,72 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
             />
           </div>
 
-          {/* Size + Beds + Baths + Parking */}
-          <div className="grid grid-cols-4 gap-2">
-            <div>
-              <label className={label} style={labelStyle}>Size (m²)</label>
-              <input className={inp} style={inpStyle} type="number" value={form.size} onChange={e => set('size', e.target.value)} placeholder="145" />
-            </div>
-            <div>
-              <label className={label} style={labelStyle}>Beds</label>
-              <input className={inp} style={inpStyle} type="number" value={form.beds} onChange={e => set('beds', e.target.value)} placeholder="3" />
-            </div>
-            <div>
-              <label className={label} style={labelStyle}>Baths</label>
-              <input className={inp} style={inpStyle} type="number" value={form.baths} onChange={e => set('baths', e.target.value)} placeholder="2" />
-            </div>
-            <div>
-              <label className={label} style={labelStyle}>Parking</label>
-              <input className={inp} style={inpStyle} type="number" value={form.parkings} onChange={e => set('parkings', e.target.value)} placeholder="1" />
-            </div>
+          {/* Size + Beds + Baths + Parking — only the ones this type has.
+              A plot is asked for its size and nothing else here. */}
+          <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${(['size', 'beds', 'baths', 'parkings'] as ListingField[]).filter(shows).length}, minmax(0, 1fr))` }}>
+            {shows('size') && (
+              <div>
+                <label className={label} style={labelStyle}>Size (m²)</label>
+                <input className={inp} style={inpStyle} type="number" value={form.size} onChange={e => set('size', e.target.value)} placeholder="145" />
+              </div>
+            )}
+            {shows('beds') && (
+              <div>
+                <label className={label} style={labelStyle}>Beds</label>
+                <input className={inp} style={inpStyle} type="number" value={form.beds} onChange={e => set('beds', e.target.value)} placeholder="3" />
+              </div>
+            )}
+            {shows('baths') && (
+              <div>
+                <label className={label} style={labelStyle}>Baths</label>
+                <input className={inp} style={inpStyle} type="number" value={form.baths} onChange={e => set('baths', e.target.value)} placeholder="2" />
+              </div>
+            )}
+            {shows('parkings') && (
+              <div>
+                <label className={label} style={labelStyle}>Parking</label>
+                <input className={inp} style={inpStyle} type="number" value={form.parkings} onChange={e => set('parkings', e.target.value)} placeholder="1" />
+              </div>
+            )}
           </div>
 
           {/* View + Building Age */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={label} style={labelStyle}>View</label>
-              <input className={inp} style={inpStyle} value={form.view} onChange={e => set('view', e.target.value)} placeholder="Sea, Mountain, City…" />
+          {(shows('view') || shows('buildingAge')) && (
+            <div className="grid grid-cols-2 gap-3">
+              {shows('view') && (
+                <div>
+                  <label className={label} style={labelStyle}>View</label>
+                  <input className={inp} style={inpStyle} value={form.view} onChange={e => set('view', e.target.value)} placeholder="Sea, Mountain, City…" />
+                </div>
+              )}
+              {shows('buildingAge') && (
+                <div>
+                  <label className={label} style={labelStyle}>Building Age (yrs)</label>
+                  <input className={inp} style={inpStyle} type="number" value={form.buildingAge} onChange={e => set('buildingAge', e.target.value)} placeholder="e.g. 15" />
+                </div>
+              )}
             </div>
-            <div>
-              <label className={label} style={labelStyle}>Building Age (yrs)</label>
-              <input className={inp} style={inpStyle} type="number" value={form.buildingAge} onChange={e => set('buildingAge', e.target.value)} placeholder="e.g. 15" />
-            </div>
-          </div>
+          )}
 
           {/* Floor */}
-          <div>
-            <label className={label} style={labelStyle}>Floor</label>
-            <select className={inp} style={inpStyle} value={form.floor} onChange={e => set('floor', e.target.value)}>
-              <option value="">—</option>
-              {FLOORS.map(f => <option key={f} value={f}>{f}</option>)}
-            </select>
-          </div>
+          {shows('floor') && (
+            <div>
+              <label className={label} style={labelStyle}>Floor</label>
+              <select className={inp} style={inpStyle} value={form.floor} onChange={e => set('floor', e.target.value)}>
+                <option value="">—</option>
+                {FLOORS.map(f => <option key={f} value={f}>{f}</option>)}
+              </select>
+            </div>
+          )}
 
           {/* Property features */}
           <div>
-            <label className={label} style={labelStyle}>Property features</label>
+            <label className={label} style={labelStyle}>{form.type === 'Land' ? 'Land features' : 'Property features'}</label>
             <div className="flex gap-2 flex-wrap">
-              {featureChip('Garden', form.garden, () => set('garden', !form.garden))}
-              {featureChip('Balcony', form.balcony, () => set('balcony', !form.balcony))}
-              {featureChip('Terrace', form.terrace, () => set('terrace', !form.terrace))}
-              {featureChip('Needs Renovation', form.needsRenovation, () => set('needsRenovation', !form.needsRenovation))}
+              {shows('garden') && featureChip('Garden', form.garden, () => set('garden', !form.garden))}
+              {shows('balcony') && featureChip('Balcony', form.balcony, () => set('balcony', !form.balcony))}
+              {shows('terrace') && featureChip('Terrace', form.terrace, () => set('terrace', !form.terrace))}
+              {shows('needsRenovation') && featureChip('Needs Renovation', form.needsRenovation, () => set('needsRenovation', !form.needsRenovation))}
               {/* Land gets its own tick-boxes (slope, permit, road access) — the
                   marketing stamp reads them, and they are noise on a flat. */}
               {amenitiesFor(form.type).map(a => featureChip(a, amenities.includes(a), () => toggleIn(setAmenities, a)))}
@@ -561,14 +613,17 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
           </div>
 
           {/* Building features */}
-          <div>
-            <label className={label} style={labelStyle}>Building features</label>
-            <div className="flex gap-2 flex-wrap">
-              {BUILDING_FEATURES.map(a => featureChip(a, buildingFeatures.includes(a), () => toggleIn(setBuildingFeatures, a)))}
+          {shows('buildingFeatures') && (
+            <div>
+              <label className={label} style={labelStyle}>Building features</label>
+              <div className="flex gap-2 flex-wrap">
+                {BUILDING_FEATURES.map(a => featureChip(a, buildingFeatures.includes(a), () => toggleIn(setBuildingFeatures, a)))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Furnishing — tick boxes, single choice */}
+          {shows('furnishing') && (
           <div>
             <label className={label} style={labelStyle}>Furnishing</label>
             <div className="flex gap-2 flex-wrap">
@@ -596,6 +651,7 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
               })}
             </div>
           </div>
+          )}
 
           {/* AI Description */}
           <div>
