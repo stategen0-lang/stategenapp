@@ -28,5 +28,5 @@ export function loadedAreas(): AreaIndex | null {
   return index
 }
 
-export { foldArea, resolveArea, searchAreas, areaLabel, distanceKm } from './areas-core.ts'
-export type { Area, AreaIndex, Resolution } from './areas-core.ts'
+export { foldArea, resolveArea, resolveRegion, governorateOf, searchAreas, areaLabel, distanceKm } from './areas-core.ts'
+export type { Area, AreaIndex, Resolution, RegionMatch } from './areas-core.ts'

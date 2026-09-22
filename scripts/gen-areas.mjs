@@ -230,6 +230,13 @@ for (const [id, o] of Object.entries(BY_ID)) {
   p.hot = true
 }
 
+// Two passes. Towns that match exactly one place are pinned first; the
+// ambiguous ones are then resolved against those, because a town belongs beside
+// its neighbours. Picking the "better known" candidate instead put Ain Saade in
+// the Chouf — there are two — and that one anchor dragged five southern
+// villages into the Metn, which then matched clients looking near Saida.
+const deferred = []
+
 for (const [caza, towns] of Object.entries(TOWNS)) {
   const gov = CAZA_GOV[caza]
   for (const [name, aliases, id] of towns) {
@@ -248,18 +255,36 @@ for (const [caza, towns] of Object.entries(TOWNS)) {
       if (!hits.length) hits = pool.filter(p => spellings(p).some(x => skeletonArea(x) === s))
     }
 
-    if (hits.length !== 1) {
-      problems.push(`${hits.length === 0 ? 'no match' : hits.length + ' matches'}: ${name} (${caza})`)
-      if (!hits.length) continue
-    }
-    // On a tie the better-known place wins — the town, not the hamlet beside it.
-    const p = hits.sort((a, b) => (b.hot ? 1 : 0) - (a.hot ? 1 : 0) || b.aliases.length - a.aliases.length)[0]
-    if (name !== p.name) p.aliases.push(p.name)
-    p.aliases.push(...aliases)
-    p.name = name
-    p.caza = caza
-    p.hot = true
+    if (!hits.length) { problems.push(`no match: ${name} (${caza})`); continue }
+    if (hits.length > 1) { deferred.push({ caza, name, aliases, hits }); continue }
+    apply(hits[0], name, aliases, caza)
   }
+}
+
+function apply(p, name, aliases, caza) {
+  if (name !== p.name) p.aliases.push(p.name)
+  p.aliases.push(...aliases)
+  p.name = name
+  p.caza = caza
+  p.hot = true
+}
+
+for (const { caza, name, aliases, hits } of deferred) {
+  const pinned = merged.filter(p => p.caza === caza)
+  if (pinned.length) {
+    const lat = pinned.reduce((s, p) => s + p.lat, 0) / pinned.length
+    const lng = pinned.reduce((s, p) => s + p.lng, 0) / pinned.length
+    hits.sort((a, b) =>
+      ((a.lat - lat) ** 2 + ((a.lng - lng) * 0.83) ** 2) -
+      ((b.lat - lat) ** 2 + ((b.lng - lng) * 0.83) ** 2))
+  } else {
+    hits.sort((a, b) => (b.hot ? 1 : 0) - (a.hot ? 1 : 0) || b.aliases.length - a.aliases.length)
+  }
+  const km = pinned.length
+    ? Math.round(Math.hypot((hits[0].lat - hits[1].lat) * 111, (hits[0].lng - hits[1].lng) * 92))
+    : 0
+  problems.push(`${hits.length} matches: ${name} (${caza}) — took the one nearest its caza, ${km} km from the runner-up`)
+  apply(hits[0], name, aliases, caza)
 }
 
 // ── Caza for everywhere else ─────────────────────────────────────────────────

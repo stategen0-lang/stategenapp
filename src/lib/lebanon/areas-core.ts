@@ -142,6 +142,9 @@ interface Key { k: string; area: Area; isName: boolean }
 
 export interface AreaIndex {
   areas: Area[]
+  /** The 26 cazas and 8 governorates — agents name these as often as a town. */
+  cazas: string[]
+  governorates: string[]
   /** fold key → areas. More than one means the name is ambiguous. */
   byFold: Map<string, Area[]>
   /** The same keys without word gaps: "Kfarhbab" finds "Kfar Hbab". */
@@ -192,7 +195,12 @@ export function buildIndex(packed: string, governorates: string[], cazas: string
     }
   }
 
-  return { areas, byFold, byTight, bySkeleton, keys }
+  return {
+    areas,
+    cazas: cazas.filter(Boolean),
+    governorates: governorates.filter(Boolean),
+    byFold, byTight, bySkeleton, keys,
+  }
 }
 
 function push(m: Map<string, Area[]>, k: string, a: Area) {
@@ -246,6 +254,47 @@ function decide(found: Area[]): Resolution {
   const sameName = ranked.every(a => a.name === ranked[0].name)
   const confident = ranked.length === 1 || sameName || ranked.filter(a => a.hot).length === 1
   return { area: ranked[0], confident, candidates: ranked }
+}
+
+export interface RegionMatch {
+  kind: 'caza' | 'governorate'
+  name: string
+}
+
+/**
+ * Is this text the name of a region rather than a place?
+ *
+ * Agents say "Metn" and "Keserwan" as readily as "Jal el Dib", and those are
+ * not populated places — GeoNames has no such row. Left to the place lookup,
+ * "Metn" reached a mountain village called El Mtain through the consonant
+ * skeleton, and a client asking for the whole caza was scored on how far a
+ * listing was from that village. So regions are resolved first, against the
+ * closed list of 26 cazas and 8 governorates, where a loose match is safe.
+ */
+export function resolveRegion(ix: AreaIndex, input: string | null | undefined): RegionMatch | null {
+  const f = foldArea(input)
+  if (!f) return null
+  const t = tightArea(input)
+  const s = skeletonArea(input)
+
+  const find = (names: string[]) =>
+    names.find(n => foldArea(n) === f)
+    ?? names.find(n => tightArea(n) === t)
+    ?? names.find(n => skeletonArea(n) === s)
+
+  // Governorate first. Beirut is filed as both, and the governorate is the
+  // wider, more useful reading: someone asking for "Beirut" wants any of its
+  // districts, not the point on the map where the city is pinned.
+  const gov = find(ix.governorates)
+  if (gov) return { kind: 'governorate', name: gov }
+  const caza = find(ix.cazas)
+  if (caza) return { kind: 'caza', name: caza }
+  return null
+}
+
+/** The governorate a caza belongs to, from the areas filed under it. */
+export function governorateOf(ix: AreaIndex, caza: string): string {
+  return ix.areas.find(a => a.caza === caza)?.governorate ?? ''
 }
 
 /** Known real-estate areas first, then shorter names (the town before the hamlet). */

@@ -6,7 +6,10 @@ import type { Property, Client } from '@/lib/data'
 // Relative, not aliased: this module is unit-tested by `node --test`, which
 // does not know the "@/" alias. Only the tiny loader is imported — the 53 KB
 // of place data stays behind its dynamic import.
-import { loadedAreas, resolveArea, distanceKm, type Area, type AreaIndex } from './lebanon/areas.ts'
+import {
+  loadedAreas, resolveArea, resolveRegion, governorateOf, distanceKm,
+  type Area, type AreaIndex, type RegionMatch,
+} from './lebanon/areas.ts'
 
 // Lebanese geography. same zone = 60, adjacent zones = 35, both-known-but-far = 15.
 export const ZONES: Record<string, string[]> = {
@@ -79,13 +82,95 @@ export const SURROUNDING_KM = 20
  * turn, most specific first.
  */
 function locate(ix: AreaIndex, text: string): Area | null {
+  // CONFIDENT matches only. The fuzzy fallback is there to offer an agent a
+  // suggestion in a dropdown; letting it decide a match means a guessed village
+  // silently excludes every listing a client should have seen.
   const whole = resolveArea(ix, text)
-  if (whole) return whole.area
+  if (whole?.confident) return whole.area
   for (const part of String(text ?? '').split(',')) {
     const hit = resolveArea(ix, part.trim())
-    if (hit) return hit.area
+    if (hit?.confident) return hit.area
   }
   return null
+}
+
+/**
+ * The region a location string names, if it names one rather than a place.
+ *
+ * A caza that is also a town — Jbeil, Aley, Zahle, Baabda — is treated as the
+ * TOWN, because that is what an agent typing it means; Aaqoura is 30 km from
+ * Jbeil and should not score as an exact hit. A caza that is only a region
+ * (Metn, Keserwan, Chouf) and any governorate are treated as the region.
+ */
+function region(ix: AreaIndex, text: string, place: Area | null): RegionMatch | null {
+  const r = resolveRegion(ix, text)
+  if (!r) return null
+  // A governorate is always a region. A caza that is also a town is not:
+  // "Jbeil" means the town, and Aaqoura 30 km up the mountain is not an exact
+  // hit just because it shares the caza.
+  if (r.kind === 'caza' && place) return null
+  return r
+}
+
+/** Is this place inside that region? */
+function inside(ix: AreaIndex, area: Area, r: RegionMatch): boolean {
+  return r.kind === 'caza' ? area.caza === r.name : area.governorate === r.name
+}
+
+/** The governorate a region sits in. */
+function govOf(ix: AreaIndex, r: RegionMatch): string {
+  return r.kind === 'governorate' ? r.name : governorateOf(ix, r.name)
+}
+
+// The areas that make up a region, worked out once per region per index —
+// scoring a hundred listings would otherwise walk all 3,600 areas each time.
+const members = new WeakMap<AreaIndex, Map<string, Area[]>>()
+function areasOf(ix: AreaIndex, r: RegionMatch): Area[] {
+  let byRegion = members.get(ix)
+  if (!byRegion) { byRegion = new Map(); members.set(ix, byRegion) }
+  const key = `${r.kind}:${r.name}`
+  let list = byRegion.get(key)
+  if (!list) {
+    list = ix.areas.filter(a => (r.kind === 'caza' ? a.caza : a.governorate) === r.name)
+    byRegion.set(key, list)
+  }
+  return list
+}
+
+/**
+ * How far a place is from the nearest edge of a region — not from its middle.
+ *
+ * Distance to a centroid is the wrong measure for a caza that runs from the
+ * coast into the mountains: Achrafieh is a few minutes from the Metn at Sin el
+ * Fil, but 20 km from the Metn's centre of gravity up at Bikfaya.
+ */
+function kmToRegion(ix: AreaIndex, area: Area, r: RegionMatch): number {
+  let best = Infinity
+  for (const a of areasOf(ix, r)) {
+    const d = distanceKm(area, a)
+    if (d < best) best = d
+  }
+  return best
+}
+
+/** Score a listing against a region the client named. */
+function scoreRegion(ix: AreaIndex, propLoc: string, propArea: Area | null, r: RegionMatch): number | null {
+  const area = propArea ?? locate(ix, propLoc)
+  if (area) {
+    if (inside(ix, area, r)) return 100
+    const km = kmToRegion(ix, area, r)
+    if (km <= NEXT_DOOR_KM) return 85
+    if (km <= SURROUNDING_KM) return 75
+    return LOCATION_EXCLUDE
+  }
+  // The listing's own area is a region too ("a flat in the Metn").
+  const pr = resolveRegion(ix, propLoc)
+  if (pr) {
+    if (pr.kind === r.kind && pr.name === r.name) return 100
+    const a = govOf(ix, pr), b = govOf(ix, r)
+    return a && b && a === b ? 75 : LOCATION_EXCLUDE
+  }
+  return null   // unplaceable → let the caller fall back
 }
 
 /**
@@ -114,6 +199,23 @@ export function scoreLocation(
   if (ix) {
     const pa = locate(ix, propLoc)
     const ca = locate(ix, clientLoc)
+
+    // A region on either side is answered by containment, not by distance to a
+    // point: "Metn" means anywhere in the Metn, not within 20 km of its middle.
+    const cRegion = region(ix, clientLoc, ca)
+    if (cRegion) {
+      const score = scoreRegion(ix, propLoc, pa, cRegion)
+      if (score !== null) return score
+    } else {
+      const pRegion = region(ix, propLoc, pa)
+      if (pRegion && ca) {
+        if (inside(ix, ca, pRegion)) return 100
+        const km = kmToRegion(ix, ca, pRegion)
+        if (km <= NEXT_DOOR_KM) return 85
+        return km <= SURROUNDING_KM ? 75 : LOCATION_EXCLUDE
+      }
+    }
+
     // Both placed: the spelling each was written in no longer matters, which
     // is the whole point — Hazmieh and Hazmiyeh are one place now.
     if (pa && ca) {

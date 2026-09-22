@@ -314,3 +314,57 @@ test('matchProperties: the listing filed under another spelling now shows up', (
   const titles = matchProperties(c, props, MATCH_THRESHOLD, areas).map(r => r.property.title)
   assert.deepEqual(titles, ['spelled differently'])
 })
+
+// ── Regions ─────────────────────────────────────────────────────────────────
+// Agents name a caza as readily as a town. "Metn" is not a populated place, so
+// the place lookup reached a village called El Mtain through the consonant
+// skeleton, and every client asking for the Metn stopped matching anything.
+
+test('scoreLocation: a caza means the whole caza, not a village that sounds like it', () => {
+  assert.equal(scoreLocation('Dbayeh', 'Metn', areas), 100)
+  assert.equal(scoreLocation('Broummana', 'Metn', areas), 100)
+  assert.equal(scoreLocation('Mansourieh', 'Metn', areas), 100)
+  assert.equal(scoreLocation('Jounieh', 'Keserwan', areas), 100)
+  assert.equal(scoreLocation('Deir el Qamar', 'Chouf', areas), 100)
+  assert.equal(scoreLocation('Zahle', 'Bekaa', areas), 100)
+})
+
+test('scoreLocation: a governorate means every district in it', () => {
+  assert.equal(scoreLocation('Achrafieh', 'Beirut', areas), 100)
+  assert.equal(scoreLocation('Hamra', 'Beirut', areas), 100)
+  assert.equal(scoreLocation('Gemmayzeh', 'Beirut', areas), 100)
+})
+
+test('scoreLocation: next to a region counts, far from it does not', () => {
+  assert.equal(scoreLocation('Achrafieh', 'Metn', areas), 85)      // minutes away at Sin el Fil
+  assert.equal(scoreLocation('Saida', 'Metn', areas), LOCATION_EXCLUDE)
+  assert.equal(scoreLocation('Tripoli', 'Metn', areas), LOCATION_EXCLUDE)
+  // Measured to the region's nearest edge, not its middle: a governorate is
+  // not "nearby" just because one corner of it is.
+  assert.equal(scoreLocation('Jounieh', 'Beirut', areas), 75)
+  assert.equal(scoreLocation('Aaqoura', 'Beirut', areas), LOCATION_EXCLUDE)
+  assert.equal(scoreLocation('Barouk', 'Beirut', areas), LOCATION_EXCLUDE)
+})
+
+test('scoreLocation: a caza that is also a town still means the town', () => {
+  // Aaqoura shares the Jbeil caza but is 30 km up the mountain from Jbeil.
+  assert.equal(scoreLocation('Aaqoura', 'Jbeil', areas), LOCATION_EXCLUDE)
+  assert.equal(scoreLocation('Amchit', 'Jbeil', areas), 85)
+  assert.equal(scoreLocation('Hazmieh', 'Baabda', areas), 85)
+})
+
+test('scoreLocation: a guessed place never decides a match', () => {
+  // Only a confident resolution may drive the distance rule; anything fuzzier
+  // falls back, because a wrong guess silently excludes real matches.
+  assert.notEqual(scoreLocation('Dbayeh', 'Metn', areas), LOCATION_EXCLUDE)
+  assert.notEqual(scoreLocation('Bourj Hammoud', 'Metn', areas), LOCATION_EXCLUDE)
+})
+
+test('matchProperties: a client who named a caza still gets their matches', () => {
+  const props = [
+    prop({ id: 1, title: 'in the metn', district: 'Dbayeh', city: 'Metn', price: 300000, type: 'Appartement' }),
+    prop({ id: 2, title: 'far south', district: '', city: 'Saida', price: 300000, type: 'Appartement' }),
+  ]
+  const c = client({ budget: 300000, req: { type: 'Appartement', location: 'Metn', locations: ['Metn'], beds: 3 } })
+  assert.deepEqual(matchProperties(c, props, MATCH_THRESHOLD, areas).map(r => r.property.title), ['in the metn'])
+})
