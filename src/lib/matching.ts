@@ -369,6 +369,12 @@ export interface NearMiss {
   reasons: MatchIssue[]
 }
 
+export interface NearMissClient {
+  client: Client
+  score: ScoreResult
+  reasons: MatchIssue[]
+}
+
 const money = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`
 
 /** How far a listing is from being usable: the sum of what stands in the way. */
@@ -439,6 +445,21 @@ export function nearMisses(
 ): NearMiss[] {
   return properties
     .map(property => ({ property, score: computeScore(property, client, ix), reasons: explainMatch(property, client, ix, threshold) }))
+    .filter(r => r.reasons.length > 0)
+    .sort((a, b) => cost(a.reasons) - cost(b.reasons) || b.score.total - a.score.total)
+    .slice(0, limit)
+}
+
+/** The same, the other way round: which clients nearly wanted this listing. */
+export function nearMissClients(
+  property: Property,
+  clients: Client[],
+  ix: AreaIndex | null = loadedAreas(),
+  limit = 3,
+  threshold = MATCH_THRESHOLD,
+): NearMissClient[] {
+  return clients
+    .map(client => ({ client, score: computeScore(property, client, ix), reasons: explainMatch(property, client, ix, threshold) }))
     .filter(r => r.reasons.length > 0)
     .sort((a, b) => cost(a.reasons) - cost(b.reasons) || b.score.total - a.score.total)
     .slice(0, limit)

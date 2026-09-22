@@ -7,7 +7,7 @@ import {
   Property, Client,
   formatPrice, TYPE_GRADIENTS, propertyLocation,
 } from '@/lib/data'
-import { propFeatures, matchClients, matchProperties, nearMisses, MATCH_THRESHOLD, ScoreResult, NearMiss } from '@/lib/matching'
+import { propFeatures, matchClients, matchProperties, nearMisses, nearMissClients, MATCH_THRESHOLD, ScoreResult, MatchIssue } from '@/lib/matching'
 import { loadAreas } from '@/lib/lebanon/areas'
 import { dbRowToProperty, dbRowToClient } from '@/lib/db-mappers'
 
@@ -131,7 +131,7 @@ export default function MatchCards({ entityType, entity, onOpenProperty, onOpenC
   const [matchedProperties, setMatchedProperties] = useState<MatchedProperty[]>([])
   const [dismissed, setDismissed] = useState<Set<number>>(new Set())
   // Why nothing matched, filled in only when the answer is "nothing".
-  const [misses, setMisses] = useState<NearMiss[]>([])
+  const [misses, setMisses] = useState<{ id: number; label: string; reasons: MatchIssue[] }[]>([])
   const [loading,   setLoading]   = useState(true)
   const [busyKey,   setBusyKey]   = useState<number | null>(null)   // card minting a link
   const [copiedKey, setCopiedKey] = useState<number | null>(null)   // card that just copied
@@ -187,7 +187,10 @@ export default function MatchCards({ entityType, entity, onOpenProperty, onOpenC
             if (Array.isArray(data.clients)) pool = data.clients.map(dbRowToClient)
           }
         } catch { /* keep demo fallback */ }
-        setMatchedClients(matchClients(prop, pool, MATCH_THRESHOLD, await loadAreas().catch(() => null)).slice(0, 10))
+        const areas = await loadAreas().catch(() => null)
+        const found = matchClients(prop, pool, MATCH_THRESHOLD, areas)
+        setMatchedClients(found.slice(0, 10))
+        setMisses(found.length ? [] : nearMissClients(prop, pool, areas).map(m => ({ id: m.client.id, label: m.client.name, reasons: m.reasons })))
       } else {
         const client = entity as Client
         // Match against the agency's real listings (fall back to demo data offline).
@@ -202,7 +205,7 @@ export default function MatchCards({ entityType, entity, onOpenProperty, onOpenC
         const areas = await loadAreas().catch(() => null)
         const found = matchProperties(client, pool, MATCH_THRESHOLD, areas)
         setMatchedProperties(found.slice(0, 10))
-        setMisses(found.length ? [] : nearMisses(client, pool, areas))
+        setMisses(found.length ? [] : nearMisses(client, pool, areas).map(m => ({ id: m.property.id, label: `#${m.property.id} ${m.property.title}`, reasons: m.reasons })))
       }
       setDismissed(new Set())
     } finally {
@@ -256,13 +259,11 @@ export default function MatchCards({ entityType, entity, onOpenProperty, onOpenC
           {misses.length > 0 && (
             <div className="mt-4 rounded-xl p-3" style={{ background: '#FBFAF4', border: '1px solid #EFE7CF' }}>
               <p className="text-[11px] font-bold uppercase mb-2" style={{ color: '#8A7A3F', letterSpacing: '0.08em' }}>
-                Closest {misses.length === 1 ? 'listing' : 'listings'}, and what stopped {misses.length === 1 ? 'it' : 'them'}
+                Closest {entityType === 'property' ? (misses.length === 1 ? 'client' : 'clients') : (misses.length === 1 ? 'listing' : 'listings')}, and what stopped {misses.length === 1 ? 'it' : 'them'}
               </p>
-              {misses.map(({ property, reasons }) => (
-                <div key={property.id} className="py-1.5" style={{ borderTop: '1px solid #F2EBD8' }}>
-                  <p className="text-xs font-semibold" style={{ color: '#14223F' }}>
-                    #{property.id} {property.title}
-                  </p>
+              {misses.map(({ id, label, reasons }) => (
+                <div key={id} className="py-1.5" style={{ borderTop: '1px solid #F2EBD8' }}>
+                  <p className="text-xs font-semibold" style={{ color: '#14223F' }}>{label}</p>
                   <ul className="mt-0.5">
                     {reasons.map((r, i) => (
                       <li key={i} className="text-[11px] leading-snug" style={{ color: '#6A7488' }}>• {r.text}</li>

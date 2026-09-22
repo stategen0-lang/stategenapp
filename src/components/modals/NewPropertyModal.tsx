@@ -11,6 +11,7 @@ import { VIDEO_BUCKET, MAX_VIDEO_BYTES } from '@/lib/upload'
 import DeleteRecord from './DeleteRecord'
 import { renderTitle } from '@/lib/title-template'
 import AreaInput from '@/components/form/AreaInput'
+import { listingWarnings } from '@/lib/listing-sanity'
 
 
 interface Props {
@@ -146,6 +147,7 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
   }
 
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId)
+  const typeWarning = listingWarnings(form)[0]
 
   /**
    * The Arabic version of whatever is in the description box — including a
@@ -430,7 +432,12 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={label} style={labelStyle}>Type</label>
-              <select className={inp} style={inpStyle} value={form.type} onChange={e => set('type', e.target.value)}>
+              <select
+                className={inp}
+                style={{ ...inpStyle, ...(typeWarning ? { border: '1.5px solid #E0B44A', background: '#FFFBF0' } : {}) }}
+                value={form.type}
+                onChange={e => set('type', e.target.value)}
+              >
                 {PROPERTY_TYPES.map(t => <option key={t} value={t}>{propertyTypeLabel(t)}</option>)}
               </select>
             </div>
@@ -442,6 +449,17 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
               </select>
             </div>
           </div>
+
+          {/* The type is the first thing matching filters on, and the form
+              starts every listing as an Appartement — so a plot saved without
+              touching this dropdown reaches nobody looking for land. Warned
+              about, never blocked. */}
+          {typeWarning && (
+            <div className="flex gap-2 px-3 py-2 rounded-xl -mt-1" style={{ background: '#FFFBF0', border: '1px solid #F0E0B5' }}>
+              <span style={{ color: '#BA7517' }}>⚠</span>
+              <p className="text-xs leading-snug" style={{ color: '#8A6A2F' }}>{typeWarning.text}</p>
+            </div>
+          )}
 
           {/* Price + Status */}
           <div className="grid grid-cols-2 gap-3">
