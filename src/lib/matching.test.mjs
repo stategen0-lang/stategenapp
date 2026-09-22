@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   scoreBudget, scoreLocation, scoreLocationMulti, scoreBedrooms, scoreAmenities,
-  propFeatures, computeScore, matchProperties, matchClients, MATCH_THRESHOLD, BUDGET_EXCLUDE, LOCATION_EXCLUDE,
+  propFeatures, computeScore, matchProperties, matchClients, explainMatch, nearMisses, MATCH_THRESHOLD, BUDGET_EXCLUDE, LOCATION_EXCLUDE,
 } from './matching.ts'
 import { loadAreas } from './lebanon/areas.ts'
 
@@ -367,4 +367,53 @@ test('matchProperties: a client who named a caza still gets their matches', () =
   ]
   const c = client({ budget: 300000, req: { type: 'Appartement', location: 'Metn', locations: ['Metn'], beds: 3 } })
   assert.deepEqual(matchProperties(c, props, MATCH_THRESHOLD, areas).map(r => r.property.title), ['in the metn'])
+})
+
+// ── Explaining a non-match ──────────────────────────────────────────────────
+
+test('explainMatch: a listing that matches has nothing to explain', () => {
+  const p = prop({ price: 500000, district: '', city: 'Beirut', type: 'Appartement' })
+  const c = client({ type: 'Buyer', budget: 500000, req: { type: 'Appartement', location: 'Beirut', beds: 3 } })
+  assert.deepEqual(explainMatch(p, c, areas), [])
+})
+
+test('explainMatch: the budget band, in the money the agent sees', () => {
+  // Charbel's case: 1,700 m² of land in Batroun on a $100,000 budget.
+  const land = prop({ type: 'Land', price: 250000, district: '', city: 'Batroun', beds: 0 })
+  const buyer = client({ type: 'Buyer', budget: 100000, req: { type: 'Land', location: 'Batroun', locations: ['Batroun'], beds: 0, size: 1700 } })
+  const [reason] = explainMatch(land, buyer, areas).map(r => r.text)
+  assert.match(reason, /\$250,000/)
+  assert.match(reason, /\$50,000–\$150,000/)
+  // Everything else about it is right, so price is the ONLY thing reported.
+  assert.equal(explainMatch(land, buyer, areas).length, 1)
+})
+
+test('explainMatch: names each blocker in the agent’s words', () => {
+  const buyer = client({ type: 'Buyer', budget: 100000, req: { type: 'Land', location: 'Batroun', locations: ['Batroun'], beds: 0 } })
+  assert.match(explainMatch(prop({ type: 'Villa', price: 100000, city: 'Batroun', district: '' }), buyer, areas)[0].text, /It.s a villa — they want land/)
+  assert.match(explainMatch(prop({ type: 'Land', price: 100000, city: 'Zahle', district: '' }), buyer, areas)[0].text, /Zahle — too far from Batroun/)
+  assert.match(explainMatch(prop({ type: 'Land', price: 100000, city: '', district: '' }), buyer, areas)[0].text, /no area on it/)
+  assert.match(explainMatch(prop({ type: 'Land', price: 100000, city: 'Batroun', district: '', status: 'Sold' }), buyer, areas)[0].text, /Already sold/)
+  const rental = prop({ type: 'Land', transaction: 'For Rent', rent: 900, price: 0, city: 'Batroun', district: '' })
+  assert.match(explainMatch(rental, buyer, areas).map(r => r.text).join(' '), /for rent, and they want for sale/)
+})
+
+test('nearMisses: the one blocked on price alone comes first', () => {
+  const buyer = client({ type: 'Buyer', budget: 100000, req: { type: 'Land', location: 'Batroun', locations: ['Batroun'], beds: 0 } })
+  const pool = [
+    prop({ id: 1, title: 'wrong type and far', type: 'Villa', price: 400000, city: 'Zahle', district: '' }),
+    prop({ id: 2, title: 'right but pricey', type: 'Land', price: 250000, city: 'Batroun', district: '' }),
+    prop({ id: 3, title: 'right but far', type: 'Land', price: 100000, city: 'Tripoli', district: '' }),
+  ]
+  const misses = nearMisses(buyer, pool, areas)
+  assert.equal(misses[0].property.title, 'right but pricey')
+  assert.equal(misses[0].reasons.length, 1)
+  assert.equal(misses.length, 3)
+  assert.equal(nearMisses(buyer, pool, areas, 1).length, 1)
+})
+
+test('nearMisses: nothing to report when everything matches', () => {
+  const p = prop({ price: 500000, district: '', city: 'Beirut', type: 'Appartement' })
+  const c = client({ type: 'Buyer', budget: 500000, req: { type: 'Appartement', location: 'Beirut', beds: 3 } })
+  assert.deepEqual(nearMisses(c, [p], areas), [])
 })

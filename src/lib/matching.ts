@@ -345,6 +345,105 @@ export function matchProperties(
     .sort((a, b) => b.score.total - a.score.total)
 }
 
+// ── Why a listing did not match ──────────────────────────────────────────────
+// "No matches found" is a dead end: the agent is looking at a plot in Batroun
+// that is obviously right for the client and has no way to learn that the
+// asking price is outside ±50% of their budget. These turn every exclusion into
+// a sentence, so the agent can fix the record or tell the client.
+
+/**
+ * One thing standing in the way. `weight` is how immovable it is: an agent can
+ * talk about price, or correct a listing with no area on it, but cannot move a
+ * plot to another caza or turn a villa into land.
+ */
+export interface MatchIssue {
+  kind: 'sold' | 'type' | 'transaction' | 'budget' | 'location' | 'score'
+  text: string
+  weight: number
+}
+
+export interface NearMiss {
+  property: Property
+  score: ScoreResult
+  /** Everything standing in the way, most immovable first. */
+  reasons: MatchIssue[]
+}
+
+const money = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`
+
+/** How far a listing is from being usable: the sum of what stands in the way. */
+const cost = (issues: MatchIssue[]) => issues.reduce((n, i) => n + i.weight, 0)
+
+/** "an appartement", "a villa" — these lines are read by people. */
+const a = (word: string) => `${/^[aeiou]/i.test(word) ? 'an' : 'a'} ${word}`
+
+/** Every reason this listing is not a match. Empty means it is one. */
+export function explainMatch(
+  prop: Property,
+  client: ClientLike,
+  ix: AreaIndex | null = loadedAreas(),
+  threshold = MATCH_THRESHOLD,
+): MatchIssue[] {
+  const reasons: MatchIssue[] = []
+  const score = computeScore(prop, client, ix)
+
+  if (prop.status === 'Sold') reasons.push({ kind: 'sold', weight: 5, text: 'Already sold' })
+
+  if (client.req.type && prop.type !== client.req.type) {
+    reasons.push({ kind: 'type', weight: 4, text: `It's ${a(prop.type.toLowerCase())} — they want ${client.req.type.toLowerCase()}` })
+  }
+
+  const wantTxn = client.req.transaction
+    || (client.type === 'Renter' ? 'For Rent' : client.type === 'Buyer' ? 'For Sale' : '')
+  if (wantTxn && prop.transaction !== wantTxn) {
+    reasons.push({ kind: 'transaction', weight: 4, text: `Listed ${prop.transaction.toLowerCase()}, and they want ${wantTxn.toLowerCase()}` })
+  }
+
+  if (score.locationScore === 0) {
+    const where = [prop.district, prop.city].filter(Boolean).join(', ')
+    const wants = (client.req.locations?.length ? client.req.locations : [client.req.location]).filter(Boolean).join(' or ')
+    reasons.push(where
+      // A plot cannot move; a missing area is a record to correct.
+      ? { kind: 'location', weight: 3, text: `In ${where} — too far from ${wants}` }
+      : { kind: 'location', weight: 2, text: `The listing has no area on it, so it can't be placed near ${wants}` })
+  }
+
+  const price = prop.transaction === 'For Rent' ? prop.rent : prop.price
+  if (client.budget && scoreBudget(price, client.budget) === BUDGET_EXCLUDE) {
+    const low = money(client.budget * 0.5), high = money(client.budget * 1.5)
+    reasons.push(price
+      ? { kind: 'budget', weight: 1, text: `Asking ${money(price)} — their ${money(client.budget)} budget only reaches ${low}–${high}` }
+      : { kind: 'budget', weight: 2, text: `No price on the listing, so it can't be compared to their ${money(client.budget)} budget` })
+  }
+
+  if (!reasons.length && score.total < threshold) {
+    reasons.push({ kind: 'score', weight: 1, text: `Scores ${Math.round(score.total)}, under the ${threshold} cut-off` })
+  }
+  return reasons.sort((a, b) => b.weight - a.weight)
+}
+
+/**
+ * The listings that came closest without matching.
+ *
+ * Ranked by how fixable the obstacles are, not by score: "the right plot in the
+ * right area, but above their budget" is something an agent can act on today,
+ * while a correctly-priced plot at the other end of the country is not, even
+ * though it scores higher.
+ */
+export function nearMisses(
+  client: ClientLike,
+  properties: Property[],
+  ix: AreaIndex | null = loadedAreas(),
+  limit = 3,
+  threshold = MATCH_THRESHOLD,
+): NearMiss[] {
+  return properties
+    .map(property => ({ property, score: computeScore(property, client, ix), reasons: explainMatch(property, client, ix, threshold) }))
+    .filter(r => r.reasons.length > 0)
+    .sort((a, b) => cost(a.reasons) - cost(b.reasons) || b.score.total - a.score.total)
+    .slice(0, limit)
+}
+
 export function matchClients(
   property: Property,
   clients: Client[],
