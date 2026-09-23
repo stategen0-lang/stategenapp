@@ -66,26 +66,31 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
   // ── The title, written from the agency's pattern ───────────────────────────
   // It follows the form as the agent fills it in, and stops the moment they type
   // their own title (or when editing a listing that already has one).
-  const [titleTemplate, setTitleTemplate] = useState<string | null>(null)
+  // Empty means "the default pattern", which is what renderTitle uses when it
+  // is given nothing. Starting there rather than at null is deliberate: the
+  // title writes itself from the first keystroke, before the server has said
+  // anything, and it keeps working when the server says nothing at all.
+  //
+  // It used to start null and the effect below skipped while it was null, so a
+  // request that never resolved — an ordinary event on a Lebanese mobile
+  // connection — meant the title silently never wrote itself, with no error to
+  // show for it. The agency's own pattern still arrives and takes over, unless
+  // the agent has started typing their own title by then.
+  const [titleTemplate, setTitleTemplate] = useState<string>('')
   const [titleEdited, setTitleEdited] = useState<boolean>(!!initial?.title)
 
-  // The auto-title waits for this, so it must always finish. Left unbounded, a
-  // request that hangs — an ordinary event on a Lebanese mobile connection —
-  // leaves titleTemplate null for ever and the title silently never writes
-  // itself, with no error to show for it. Give up after four seconds and use
-  // the default pattern, which is what renderTitle falls back to anyway.
   useEffect(() => {
     let live = true
-    const done = (t: string) => { if (live) { live = false; setTitleTemplate(t) } }
     const ctrl = new AbortController()
-    const timer = setTimeout(() => { ctrl.abort(); done('') }, 4000)
+    const timer = setTimeout(() => ctrl.abort(), 4000)
 
     fetch('/api/company/template', { signal: ctrl.signal })
       .then(r => (r.ok ? r.json() : null))
-      .then(d => { clearTimeout(timer); done((d?.titleTemplate as string | null) ?? '') })
-      .catch(() => { clearTimeout(timer); done('') })
+      .then(d => { if (live && d?.titleTemplate) setTitleTemplate(d.titleTemplate as string) })
+      .catch(() => { /* the default pattern is already in use */ })
+      .finally(() => clearTimeout(timer))
 
-    return () => { live = false; clearTimeout(timer) }
+    return () => { live = false; clearTimeout(timer); ctrl.abort() }
   }, [])
 
   const [photos, setPhotos] = useState<string[]>(initial?.photos ?? [])
@@ -344,7 +349,7 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
     price: form.price, rent: form.rent, buildingAge: form.buildingAge,
   })
   useEffect(() => {
-    if (titleEdited || titleTemplate === null) return   // agent's own title, or not loaded yet
+    if (titleEdited) return   // the agent typed their own; never overwrite it
     setForm(f => (f.title === autoTitle ? f : { ...f, title: autoTitle }))
   }, [autoTitle, titleEdited, titleTemplate])
 
@@ -423,20 +428,16 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
             <label className={label} style={labelStyle}>Title *</label>
             <input
               className={inp} style={inpStyle} value={form.title}
-              onChange={e => { setTitleEdited(true); set('title', e.target.value) }}
+              // Emptying the box hands the title back to the agency's pattern,
+              // so there is a way back without offering a button for it.
+              onChange={e => { setTitleEdited(e.target.value.trim() !== ''); set('title', e.target.value) }}
               placeholder="e.g. Raouché Appartement"
             />
+            {/* The pattern is simply applied — the agent is told, not asked. */}
             <p className="text-[11px] mt-1" style={{ color: '#9AA3B2' }}>
-              {titleEdited ? (
-                <>
-                  Your own title.{' '}
-                  <button type="button" onClick={() => { setTitleEdited(false); set('title', autoTitle) }} style={{ color: '#5E8FD6', fontWeight: 600 }}>
-                    Use the agency pattern
-                  </button>
-                </>
-              ) : (
-                "Written from your agency's title pattern — type here to use your own."
-              )}
+              {titleEdited
+                ? 'Your own title — clear the box to use the agency pattern again.'
+                : "Using your agency's title pattern."}
             </p>
           </div>
 
