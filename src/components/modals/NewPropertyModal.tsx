@@ -10,6 +10,7 @@ import { createClient as createSupabaseBrowser } from '@/lib/supabase/client'
 import { VIDEO_BUCKET, MAX_VIDEO_BYTES } from '@/lib/upload'
 import DeleteRecord from './DeleteRecord'
 import { renderTitle } from '@/lib/title-template'
+import { propertyPayload } from '@/lib/property-payload'
 import AreaInput from '@/components/form/AreaInput'
 import { listingWarnings } from '@/lib/listing-sanity'
 import { hasField, clearedByTypeChange, fieldLabel, type ListingField } from '@/lib/property-fields'
@@ -357,44 +358,14 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
     setSaving(true)
     // Own code when signed in; the server re-stamps this for agents anyway.
     const agentId = (initial?.agentId ?? session?.agentCode ?? CURRENT_AGENT_ID) as AgentId
-    const payload = {
-      title: form.title,
-      type: form.type,
-      transaction: form.transaction,
-      price: parseInt(form.price) || 0,
-      rent: parseInt(form.rent) || 0,
-      // Single "area" is stored as the location; the neighborhood field is retired.
-      district: '',
-      city: form.area.trim(),
-      size: parseInt(form.size) || 0,
-      beds: parseInt(form.beds) || 0,
-      baths: parseInt(form.baths) || 0,
-      parkings: parseInt(form.parkings) || undefined,
-      buildingAge: parseInt(form.buildingAge) || undefined,
-      needsRenovation: form.needsRenovation || undefined,
-      floor: form.floor || undefined,
-      garden: form.garden,
-      balcony: form.balcony,
-      terrace: form.terrace,
+    const payload = propertyPayload(form, {
+      agentId,
       amenities,
       buildingFeatures,
-      furnishing: form.furnishing || undefined,
-      view: form.view,
-      mapUrl: form.mapUrl.trim() || undefined,
-      video: form.video.trim() || undefined,
-      status: form.status,
-      agentId,
-      aiDescription: form.aiDescription || undefined,
-      aiDescriptionAr: form.aiDescriptionAr || undefined,
-      notes: form.notes || undefined,
-      referredBy: form.referredBy.trim() || undefined,
-      ownerName: form.ownerName.trim() || undefined,
-      ownerContact: form.ownerContact.trim() || undefined,
-      documentPath: docPath || undefined,
-      documentName: docName || undefined,
-      advancedPayment: (form.transaction === 'For Rent' && form.advancedPayment) ? form.advancedPayment : undefined,
-      photos: photos.length > 0 ? photos : undefined,
-    }
+      photos,
+      documentPath: docPath,
+      documentName: docName,
+    })
     let savedId = initial?.id ?? ++_nextId
     try {
       const res = await fetch('/api/properties', {
@@ -408,8 +379,9 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
     } catch {
       setSaveError('Network error. Please try again.'); setSaving(false); return
     }
-    const p: Property = { id: savedId, ...payload, agentId, advancedPayment: payload.advancedPayment as AdvancedPayment | undefined }
-    onSaved(p)
+    // The same object the server just stored, handed back to the list so the
+    // card appears without waiting for a refetch.
+    onSaved({ id: savedId, ...payload, agentId } as unknown as Property)
   }
 
   const inp = 'w-full rounded-xl px-3 py-2 text-sm outline-none'
