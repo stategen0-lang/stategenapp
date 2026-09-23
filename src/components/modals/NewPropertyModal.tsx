@@ -69,13 +69,23 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
   const [titleTemplate, setTitleTemplate] = useState<string | null>(null)
   const [titleEdited, setTitleEdited] = useState<boolean>(!!initial?.title)
 
+  // The auto-title waits for this, so it must always finish. Left unbounded, a
+  // request that hangs — an ordinary event on a Lebanese mobile connection —
+  // leaves titleTemplate null for ever and the title silently never writes
+  // itself, with no error to show for it. Give up after four seconds and use
+  // the default pattern, which is what renderTitle falls back to anyway.
   useEffect(() => {
     let live = true
-    fetch('/api/company/template')
+    const done = (t: string) => { if (live) { live = false; setTitleTemplate(t) } }
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => { ctrl.abort(); done('') }, 4000)
+
+    fetch('/api/company/template', { signal: ctrl.signal })
       .then(r => (r.ok ? r.json() : null))
-      .then(d => { if (live) setTitleTemplate((d?.titleTemplate as string | null) ?? '') })
-      .catch(() => { if (live) setTitleTemplate('') })
-    return () => { live = false }
+      .then(d => { clearTimeout(timer); done((d?.titleTemplate as string | null) ?? '') })
+      .catch(() => { clearTimeout(timer); done('') })
+
+    return () => { live = false; clearTimeout(timer) }
   }, [])
 
   const [photos, setPhotos] = useState<string[]>(initial?.photos ?? [])
