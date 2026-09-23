@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { parseCsv } from './parse.ts'
-import { applyMapping, isValidRow, toNumber, normTransaction, normClientType } from './mapping.ts'
+import { applyMapping, isValidRow, toNumber, normTransaction, normClientType, normFloor, normFurnishing, toList } from './mapping.ts'
 
 // ── parseCsv ─────────────────────────────────────────────────────────────────
 test('parseCsv: headers + rows, trims headers, strips BOM', () => {
@@ -151,4 +151,95 @@ test('applyMapping: the full messy row comes out right', () => {
   assert.equal(p.status, 'Available')
   assert.equal(p.ownerContact, '03 555111')
   assert.equal(p.notes, 'Ref A104 · call first')
+})
+
+// ── The fields the forms gained ─────────────────────────────────────────────
+
+test('import: a features column ticks the real boxes', () => {
+  const headers = ['Title', 'Area', 'Price', 'Features']
+  const rows = [['Flat in Achrafieh', 'Achrafieh', '250000', 'elevator, generator, sea view, mid floor, 2 parking, pool, balcony, near the school']]
+  const mapping = { title: 'Title', city: 'Area', price: 'Price', features: 'Features' }
+  const [p] = applyMapping('properties', headers, rows, mapping)
+
+  assert.deepEqual(p.buildingFeatures.sort(), ['Elevator', 'Generator'])
+  assert.deepEqual(p.amenities.sort(), ['Pool'])
+  assert.equal(p.view, 'Sea')
+  assert.equal(p.floor, 'Mid floor')
+  assert.equal(p.parkings, 2)
+  assert.equal(p.balcony, true)
+  // What it could not place is kept, not dropped.
+  assert.match(p.notes, /near the school/)
+})
+
+test('import: an explicit column beats the same thing in the features text', () => {
+  const headers = ['Title', 'Features', 'Floor', 'Furnishing', 'Parking']
+  const rows = [['x', 'ground floor, furnished, 1 parking', 'last floor', 'unfurnished', '3']]
+  const [p] = applyMapping('properties', headers, rows,
+    { title: 'Title', features: 'Features', floor: 'Floor', furnishing: 'Furnishing', parkings: 'Parking' })
+  assert.equal(p.floor, 'Last floor')
+  assert.equal(p.furnishing, 'Unfurnished')
+  assert.equal(p.parkings, 3)
+})
+
+test('import: the descriptions and the owner land in their own fields', () => {
+  const headers = ['Title', 'Desc', 'Points', 'Owner', 'Phone', 'Map']
+  const rows = [['x', 'Bright flat with sea views.', 'New kitchen', 'Georges Haddad', '03 987 654', 'https://maps.google.com/?q=1,2']]
+  const [p] = applyMapping('properties', headers, rows,
+    { title: 'Title', description: 'Desc', publicNotes: 'Points', ownerName: 'Owner', ownerContact: 'Phone', mapUrl: 'Map' })
+  assert.equal(p.description, 'Bright flat with sea views.')
+  assert.equal(p.publicNotes, 'New kitchen')
+  assert.equal(p.ownerName, 'Georges Haddad')
+  assert.equal(p.ownerContact, '03 987 654')
+  assert.match(p.mapUrl, /maps\.google/)
+})
+
+test('import: a client open to several areas keeps all of them', () => {
+  const headers = ['Name', 'Areas', 'Tags', 'Wants', 'Must have']
+  const rows = [['Rita Aoun', 'Achrafieh, Hamra; Verdun', 'VIP, cash buyer', 'apartment', 'pool, parking, elevator']]
+  const [c] = applyMapping('clients', headers, rows,
+    { name: 'Name', location: 'Areas', tags: 'Tags', propertyType: 'Wants', features: 'Must have' })
+
+  assert.deepEqual(c.locations, ['Achrafieh', 'Hamra', 'Verdun'])
+  assert.equal(c.location, 'Achrafieh, Hamra, Verdun')
+  assert.deepEqual(c.tags, ['VIP', 'cash buyer'])
+  assert.equal(c.propertyType, 'Appartement')
+  assert.deepEqual(c.amenities.sort(), ['Pool'])
+  assert.deepEqual(c.buildingFeatures, ['Elevator'])
+})
+
+test('normFloor / normFurnishing: the ways a sheet writes them', () => {
+  assert.equal(normFloor('Ground Floor'), 'Ground level')
+  assert.equal(normFloor('GF'), 'Ground level')
+  assert.equal(normFloor('last'), 'Last floor')
+  assert.equal(normFloor('penthouse'), 'Last floor')
+  assert.equal(normFloor('4'), 'Mid floor')
+  assert.equal(normFloor('middle'), 'Mid floor')
+  assert.equal(normFloor(''), '')
+  assert.equal(normFloor('whatever'), '')
+
+  assert.equal(normFurnishing('Furnished'), 'Furnished')
+  assert.equal(normFurnishing('meublé'), 'Furnished')
+  assert.equal(normFurnishing('semi furnished'), 'Semi-furnished')
+  assert.equal(normFurnishing('unfurnished'), 'Unfurnished')
+  assert.equal(normFurnishing('empty'), 'Unfurnished')
+  assert.equal(normFurnishing(''), '')
+})
+
+test('toList: the separators a spreadsheet actually uses', () => {
+  assert.deepEqual(toList('a, b; c|d\ne'), ['a', 'b', 'c', 'd', 'e'])
+  assert.deepEqual(toList(''), [])
+  assert.deepEqual(toList(null), [])
+  assert.deepEqual(toList('  one  '), ['one'])
+  assert.equal(toList(Array.from({ length: 30 }, (_, i) => i).join(',')).length, 10)
+})
+
+test('import: a sheet with only the old columns still works', () => {
+  const headers = ['Title', 'Price', 'City']
+  const [p] = applyMapping('properties', headers, [['Flat', '100000', 'Achrafieh']],
+    { title: 'Title', price: 'Price', city: 'City' })
+  assert.equal(p.title, 'Flat')
+  assert.deepEqual(p.amenities, [])
+  assert.equal(p.floor, '')
+  assert.equal(p.parkings, null)
+  assert.equal(p.garden, false)
 })

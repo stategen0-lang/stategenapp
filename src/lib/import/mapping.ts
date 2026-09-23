@@ -3,6 +3,11 @@
 // itself is inferred by the AI (src/lib/ai/import-map.ts) but applied here in
 // code, so a 500-row sheet costs one AI call, not 500.
 
+// A sheet's "Features" column is free text — "elevator, generator, sea view,
+// mid floor, 2 parking". The WhatsApp bot already had to read exactly that, so
+// the same parser ticks the same boxes here instead of dumping it all in notes.
+import { sortListingFeatures } from '../whatsapp/listing-features.ts'
+
 export type ImportKind = 'properties' | 'clients'
 
 export interface FieldDef {
@@ -16,29 +21,56 @@ export const FIELDS: Record<ImportKind, FieldDef[]> = {
   properties: [
     { key: 'title', label: 'Title / description', required: true },
     { key: 'price', label: 'Price (USD)' },
-    { key: 'city', label: 'City / area' },
+    { key: 'city', label: 'Area / city' },
     { key: 'district', label: 'District / neighborhood' },
     { key: 'bedrooms', label: 'Bedrooms' },
     { key: 'bathrooms', label: 'Bathrooms' },
     { key: 'size', label: 'Size (m²)' },
+    { key: 'parkings', label: 'Parking spaces' },
     { key: 'transaction', label: 'Sale or rent' },
-    { key: 'type', label: 'Property type (apartment, villa, office…)' },
+    { key: 'type', label: 'Property type (apartment, villa, land, office…)' },
     { key: 'status', label: 'Status' },
+    { key: 'floor', label: 'Floor (ground / mid / last)' },
+    { key: 'furnishing', label: 'Furnished, semi-furnished or unfurnished' },
+    { key: 'view', label: 'View (sea, mountain, city…)' },
+    { key: 'buildingAge', label: 'Building age (years)' },
+    { key: 'features', label: 'Features / amenities (elevator, generator, pool, parking…)' },
+    { key: 'description', label: 'Marketing description (shown to clients)' },
+    { key: 'publicNotes', label: 'Selling points for clients' },
+    { key: 'ownerName', label: 'Owner name' },
     { key: 'ownerContact', label: 'Owner phone / contact' },
+    { key: 'mapUrl', label: 'Google Maps link' },
     { key: 'reference', label: 'Reference / listing number' },
-    { key: 'notes', label: 'Notes' },
+    { key: 'notes', label: 'Internal notes' },
   ],
   clients: [
     { key: 'name', label: 'Client name', required: true },
     { key: 'phone', label: 'Phone' },
     { key: 'budget', label: 'Budget (USD)' },
-    { key: 'location', label: 'Preferred location' },
+    { key: 'location', label: 'Preferred location(s)' },
+    { key: 'propertyType', label: 'Property type wanted (apartment, land, shop…)' },
     { key: 'bedrooms', label: 'Bedrooms wanted' },
+    { key: 'bathrooms', label: 'Bathrooms wanted' },
+    { key: 'size', label: 'Minimum size (m²)' },
     { key: 'type', label: 'Buyer or renter' },
+    { key: 'floor', label: 'Floor wanted' },
+    { key: 'furnishing', label: 'Furnishing wanted' },
+    { key: 'view', label: 'View wanted' },
+    { key: 'features', label: 'Must-have features (pool, parking, elevator…)' },
+    { key: 'tags', label: 'Tags / labels' },
     { key: 'email', label: 'Email' },
     { key: 'status', label: 'Status' },
     { key: 'notes', label: 'Notes' },
   ],
+}
+
+/** Split a cell that holds a list: "Achrafieh, Hamra" or "pool; parking". */
+export function toList(v: string | undefined | null, max = 10): string[] {
+  return String(v ?? '')
+    .split(/[,;|\n]+/)
+    .map(s => s.trim())
+    .filter(Boolean)
+    .slice(0, max)
 }
 
 /** { fieldKey: sourceHeader | null } */
@@ -156,11 +188,47 @@ export interface NormProperty {
   bedrooms: number | null; bathrooms: number | null; size: number | null
   transaction: 'sale' | 'rent' | null; status: string
   type: string; ownerContact: string; notes: string
+  // Everything the listing form gained: the tick-boxes, the two descriptions,
+  // and the fields that were previously lost in the notes column.
+  parkings: number | null; buildingAge: number | null
+  floor: string; furnishing: string; view: string
+  garden: boolean; balcony: boolean; terrace: boolean; needsRenovation: boolean
+  amenities: string[]; buildingFeatures: string[]
+  description: string; publicNotes: string
+  ownerName: string; mapUrl: string
 }
 export interface NormClient {
   name: string; phone: string; budget: number | null; location: string
   bedrooms: number | null; type: 'buyer' | 'renter' | null; email: string; status: string
   notes: string
+  /** Every area the client will consider, not just the first. */
+  locations: string[]
+  propertyType: string
+  bathrooms: number | null; size: number | null
+  floor: string; furnishing: string; view: string
+  garden: boolean; balcony: boolean; terrace: boolean
+  amenities: string[]; buildingFeatures: string[]
+  tags: string[]
+}
+
+/** "ground floor" / "GF" / "last" → the app's three floor values. */
+export function normFloor(v: string | undefined | null): string {
+  const s = String(v ?? '').trim().toLowerCase()
+  if (!s) return ''
+  if (/\b(ground|gf|rez|arda?i?|0)\b/.test(s)) return 'Ground level'
+  if (/\b(last|top|roof|penthouse)\b/.test(s)) return 'Last floor'
+  if (/\b(mid|middle|intermediate)\b/.test(s) || /^\d+$/.test(s)) return 'Mid floor'
+  return ''
+}
+
+/** "furnished" / "semi" / "empty" → the app's three furnishing values. */
+export function normFurnishing(v: string | undefined | null): string {
+  const s = String(v ?? '').trim().toLowerCase()
+  if (!s) return ''
+  if (/semi|partly|partially/.test(s)) return 'Semi-furnished'
+  if (/\bun\s*furnished|not furnished|empty|vide|no furniture\b/.test(s)) return 'Unfurnished'
+  if (/furnish|meubl|mafrouche|mafroush/.test(s)) return 'Furnished'
+  return ''
 }
 
 /** Key used to spot a row already in the file or already in the database. */
@@ -185,7 +253,18 @@ export function applyMapping(kind: ImportKind, headers: string[], rows: string[]
   }
 
   return rows.map(row => {
+    // The features column, read into real fields. Anything it cannot place
+    // ("near the school") is kept and appended to the notes rather than lost.
+    const sorted = sortListingFeatures(cell(row, 'features') ?? '')
+    const f = sorted.fields
+
     if (kind === 'properties') {
+      const extraNotes = [
+        cell(row, 'reference') ? `Ref ${cell(row, 'reference')}` : '',
+        cell(row, 'notes') || '',
+        sorted.unmatched.length ? sorted.unmatched.join(', ') : '',
+      ].filter(Boolean).join(' · ')
+
       const p: NormProperty = {
         title: cell(row, 'title') || '',
         price: toNumber(cell(row, 'price')),
@@ -198,20 +277,53 @@ export function applyMapping(kind: ImportKind, headers: string[], rows: string[]
         status: normPropertyStatus(cell(row, 'status')),
         type: guessPropertyType(cell(row, 'type'), cell(row, 'title')),
         ownerContact: cell(row, 'ownerContact') || '',
-        notes: [cell(row, 'reference') ? `Ref ${cell(row, 'reference')}` : '', cell(row, 'notes') || ''].filter(Boolean).join(' · '),
+        notes: extraNotes,
+        // A column of its own always wins over the same thing read out of the
+        // features text — the agent was explicit about it.
+        parkings: toBeds(cell(row, 'parkings')) ?? f.parkings ?? null,
+        buildingAge: toBeds(cell(row, 'buildingAge')),
+        floor: normFloor(cell(row, 'floor')) || f.floor || '',
+        furnishing: normFurnishing(cell(row, 'furnishing')) || f.furnishing || '',
+        view: cell(row, 'view') || f.view || '',
+        garden: !!f.garden,
+        balcony: !!f.balcony,
+        terrace: !!f.terrace,
+        needsRenovation: !!f.needsRenovation,
+        amenities: f.amenities ?? [],
+        buildingFeatures: f.buildingFeatures ?? [],
+        description: cell(row, 'description') || '',
+        publicNotes: cell(row, 'publicNotes') || '',
+        ownerName: cell(row, 'ownerName') || '',
+        mapUrl: cell(row, 'mapUrl') || '',
       }
       return p
     }
+
+    const locations = toList(cell(row, 'location'))
     const c: NormClient = {
       name: cell(row, 'name') || '',
       phone: cell(row, 'phone') || '',
       budget: toNumber(cell(row, 'budget')),
-      location: cell(row, 'location') || '',
+      // The display string keeps every area, so nothing is lost on a re-export.
+      location: locations.join(', '),
+      locations,
       bedrooms: toBeds(cell(row, 'bedrooms')),
       type: normClientType(cell(row, 'type')),
       email: cell(row, 'email') || '',
       status: normClientStatus(cell(row, 'status')),
-      notes: cell(row, 'notes') || '',
+      notes: [cell(row, 'notes') || '', sorted.unmatched.join(', ')].filter(Boolean).join(' · '),
+      propertyType: cell(row, 'propertyType') ? guessPropertyType(cell(row, 'propertyType'), '') : '',
+      bathrooms: toBeds(cell(row, 'bathrooms')),
+      size: toSize(cell(row, 'size')),
+      floor: normFloor(cell(row, 'floor')) || f.floor || '',
+      furnishing: normFurnishing(cell(row, 'furnishing')) || f.furnishing || '',
+      view: cell(row, 'view') || f.view || '',
+      garden: !!f.garden,
+      balcony: !!f.balcony,
+      terrace: !!f.terrace,
+      amenities: f.amenities ?? [],
+      buildingFeatures: f.buildingFeatures ?? [],
+      tags: toList(cell(row, 'tags'), 12),
     }
     return c
   })

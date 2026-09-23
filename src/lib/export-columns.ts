@@ -8,6 +8,7 @@ import type { CsvColumn } from '@/lib/csv'
 import type { Property, Client } from '@/lib/data'
 
 const yesNo = (b: unknown) => (b ? 'Yes' : 'No')
+const list = (a: unknown) => (Array.isArray(a) ? a.join(', ') : '')
 
 // ── Clients ─────────────────────────────────────────────────────────────────
 // Includes contact details: this is the manager's own company data, and the
@@ -21,16 +22,36 @@ export const CLIENT_COLUMNS: CsvColumn<Client>[] = [
   { header: 'Email',         value: c => c.email },
   { header: 'Status',        value: c => c.status },
   { header: 'Budget (USD)',  value: c => c.budget || '' },
-  { header: 'Wants',         value: c => c.req.location },
+  // Every area, not just the first: the array is what matching reads, and an
+  // export that loses two of a client's three areas cannot be re-imported.
+  { header: 'Wants',         value: c => (c.req.locations?.length ? c.req.locations.join(', ') : c.req.location) },
   { header: 'Property Type', value: c => c.req.type },
-  { header: 'Bedrooms',      value: c => c.req.beds || '' },
   { header: 'Transaction',   value: c => c.req.transaction },
+  { header: 'Bedrooms',      value: c => c.req.beds || '' },
+  { header: 'Bathrooms',     value: c => c.req.baths || '' },
+  { header: 'Min Size (m²)', value: c => c.req.size || '' },
+  { header: 'Parking',       value: c => c.req.parkings || '' },
+  { header: 'Floor',         value: c => c.req.floor ?? '' },
+  { header: 'Furnishing',    value: c => c.req.furnishing ?? '' },
+  { header: 'View',          value: c => c.req.view ?? '' },
+  { header: 'Max Building Age', value: c => c.req.buildingAge || '' },
+  { header: 'Garden',        value: c => yesNo(c.req.garden) },
+  { header: 'Balcony',       value: c => yesNo(c.req.balcony) },
+  { header: 'Terrace',       value: c => yesNo(c.req.terrace) },
+  { header: 'Must-have Features', value: c => list(c.req.amenities) },
+  { header: 'Building Features',  value: c => list(c.req.buildingFeatures) },
+  { header: 'Tags',          value: c => list(c.tags) },
+  { header: 'Notes',         value: c => c.req.notes ?? '' },
   { header: 'Lead Score',    value: c => c.leadScore ?? '' },
   { header: 'Agent Rating',  value: c => c.agentRating ?? '' },
   { header: 'Agent',         value: c => c.agentId ?? '' },
+  { header: 'Referred By',   value: c => c.referredByName ?? c.referredBy ?? '' },
 ]
 
 // ── Properties ──────────────────────────────────────────────────────────────
+// A manager's own company data, in full — including the owner's details, which
+// the public share page and the marketing email deliberately strip. The API
+// gates this route to managers so an agent never reaches it.
 export const PROPERTY_COLUMNS: CsvColumn<Property>[] = [
   { header: 'ID',           value: p => p.id },
   { header: 'Title',        value: p => p.title },
@@ -38,16 +59,33 @@ export const PROPERTY_COLUMNS: CsvColumn<Property>[] = [
   { header: 'Transaction',  value: p => p.transaction },
   { header: 'Price (USD)',  value: p => p.price || '' },
   { header: 'Rent /mo (USD)', value: p => p.rent || '' },
-  { header: 'City',         value: p => p.city },
+  { header: 'Area',         value: p => p.city },
   { header: 'Neighbourhood', value: p => p.district },
   { header: 'Size (m²)',    value: p => p.size || '' },
   { header: 'Bedrooms',     value: p => p.beds || '' },
   { header: 'Bathrooms',    value: p => p.baths || '' },
+  { header: 'Parking',      value: p => p.parkings || '' },
+  { header: 'Building Age', value: p => p.buildingAge || '' },
+  { header: 'Floor',        value: p => p.floor ?? '' },
+  { header: 'Furnishing',   value: p => p.furnishing ?? '' },
+  { header: 'View',         value: p => p.view ?? '' },
   { header: 'Garden',       value: p => yesNo(p.garden) },
   { header: 'Balcony',      value: p => yesNo(p.balcony) },
-  { header: 'View',         value: p => p.view ?? '' },
+  { header: 'Terrace',      value: p => yesNo(p.terrace) },
+  { header: 'Needs Renovation', value: p => yesNo(p.needsRenovation) },
+  { header: 'Features',     value: p => list(p.amenities) },
+  { header: 'Building Features', value: p => list(p.buildingFeatures) },
   { header: 'Status',       value: p => p.status },
+  { header: 'Description',  value: p => p.aiDescription ?? '' },
+  { header: 'Description (Arabic)', value: p => p.aiDescriptionAr ?? '' },
+  { header: 'Selling Points', value: p => p.publicNotes ?? '' },
+  { header: 'Internal Notes', value: p => p.notes ?? '' },
+  { header: 'Owner',        value: p => p.ownerName ?? '' },
+  { header: 'Owner Contact', value: p => p.ownerContact ?? '' },
+  { header: 'Map Link',     value: p => p.mapUrl ?? '' },
+  { header: 'Photos',       value: p => (p.photos?.length ?? 0) || '' },
   { header: 'Agent',        value: p => p.agentId ?? '' },
+  { header: 'Referred By',  value: p => p.referredBy ?? '' },
 ]
 
 // ── Deals (pipeline) ────────────────────────────────────────────────────────
