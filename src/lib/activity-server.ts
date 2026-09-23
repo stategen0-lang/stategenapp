@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { dbRowToProperty, dbRowToClient } from '@/lib/db-mappers'
-import { listingItem, clientItem, dealMoveItem, offerItem, eventItem, referralItem, mergeActivity, type ActivityItem } from '@/lib/activity'
+import { listingItem, clientItem, dealMoveItem, offerItem, eventItem, referralItem, priceChangeItem, statusChangeItem, mergeActivity, type ActivityItem } from '@/lib/activity'
 
 // Assemble the activity feed from the live tables. Company-scoped; pass an
 // agentCode to narrow it to one agent's own listings/clients/deals (an agent
@@ -63,7 +63,7 @@ export async function fetchActivity(admin: SupabaseClient, opts: Opts): Promise<
   try {
     const { data } = await admin
       .from('stage_history')
-      .select('id, changed_at, to_stage, deals!inner(company_id, agent_id, outcome, client_requests("Client Name"))')
+      .select('id, changed_at, to_stage, deals!inner(company_id, agent_id, outcome, client_requests(id, "Client Name"))')
       .eq('deals.company_id', companyId)
       .order('changed_at', { ascending: false }).limit(per * 2)
     for (const row of (data ?? []) as Row[]) {
@@ -76,6 +76,75 @@ export async function fetchActivity(admin: SupabaseClient, opts: Opts): Promise<
         id: String(row.id), at: String(row.changed_at ?? ''), toStage: String(row.to_stage ?? ''),
         outcome: (deal.outcome as string) ?? null,
         clientName: (client?.['Client Name'] as string) ?? 'a client',
+        clientId: Number(client?.id) || undefined,
+        agentCode: code, agentName: nameFor(code),
+      }))
+    }
+  } catch { /* skip this source */ }
+
+  // ── Price and status changes ──
+  // The one source that is not derived from a live table: a price moving and a
+  // listing going to Sold leave no trace once the row is overwritten.
+  try {
+    const { data } = await admin
+      .from('property_history')
+      .select('id, property_id, field, old_value, new_value, agent_code, changed_at, Properties(Title)')
+      .eq('company_id', companyId)
+      .order('changed_at', { ascending: false }).limit(per * 2)
+    for (const row of (data ?? []) as Row[]) {
+      const code = (row.agent_code as string) ?? null
+      if (agentCode && code !== agentCode) continue
+      const title = ((row.Properties as Row | null)?.Title as string) ?? `#${row.property_id}`
+      const common = {
+        id: String(row.id), propertyId: Number(row.property_id), at: String(row.changed_at ?? ''),
+        title, agentCode: code, agentName: nameFor(code),
+      }
+      if (row.field === 'status') {
+        items.push(statusChangeItem({ ...common, from: String(row.old_value ?? ''), to: String(row.new_value ?? '') }))
+      } else {
+        items.push(priceChangeItem({
+          ...common,
+          from: Number(row.old_value) || 0, to: Number(row.new_value) || 0,
+          rent: row.field === 'rent',
+        }))
+      }
+    }
+  } catch { /* the table may not exist yet — migration 028 */ }
+
+  // ── Offers logged ──
+  try {
+    const { data } = await admin
+      .from('offers')
+      .select('id, amount, side, created_at, created_by, deals(client_requests(id, "Client Name"))')
+      .eq('company_id', companyId)
+      .order('created_at', { ascending: false }).limit(per)
+    for (const row of (data ?? []) as Row[]) {
+      const code = (row.created_by as string) ?? null
+      if (agentCode && code !== agentCode) continue
+      const client = (row.deals as Row | null)?.client_requests as Row | null
+      items.push(offerItem({
+        id: String(row.id), at: String(row.created_at ?? ''),
+        amount: Number(row.amount) || 0, side: String(row.side ?? 'buyer'),
+        clientName: (client?.['Client Name'] as string) ?? null,
+        clientId: Number(client?.id) || undefined,
+        agentCode: code, agentName: nameFor(code),
+      }))
+    }
+  } catch { /* skip this source */ }
+
+  // ── Viewings and meetings put on the calendar ──
+  try {
+    const { data } = await admin
+      .from('calendar_events')
+      .select('id, created_at, kind, title, agent_code')
+      .eq('company_id', companyId)
+      .order('created_at', { ascending: false }).limit(per)
+    for (const row of (data ?? []) as Row[]) {
+      const code = (row.agent_code as string) ?? null
+      if (agentCode && code !== agentCode) continue
+      items.push(eventItem({
+        id: String(row.id), at: String(row.created_at ?? ''),
+        eventKind: String(row.kind ?? 'event'), title: String(row.title ?? 'Event'),
         agentCode: code, agentName: nameFor(code),
       }))
     }

@@ -15,6 +15,14 @@ export type ActivityKind =
   | 'offer_logged'
   | 'event_scheduled'
   | 'client_referred'
+  | 'price_changed'
+  | 'status_changed'
+
+/** The record an item is about, so a row in the feed can be opened. */
+export interface ActivityTarget {
+  type: 'property' | 'client' | 'calendar'
+  id?: number
+}
 
 export interface ActivityItem {
   id: string                 // stable, unique key (e.g. "listing:12")
@@ -24,6 +32,19 @@ export interface ActivityItem {
   agentName: string | null   // resolved from agent_code, when known
   summary: string            // "New listing: Raouché Apartment"
   detail: string | null      // secondary line, e.g. "Achrafieh, Beirut"
+  /** Where tapping the row goes. Null when there is nothing to open. */
+  target?: ActivityTarget | null
+}
+
+/**
+ * Where a feed row leads. Both list pages already open a record from
+ * `?open=<id>`, so the feed reuses that rather than inventing a route.
+ */
+export function activityHref(target: ActivityTarget | null | undefined): string | null {
+  if (!target) return null
+  if (target.type === 'calendar') return '/calendar'
+  if (!target.id) return null
+  return target.type === 'property' ? `/properties?open=${target.id}` : `/clients?open=${target.id}`
 }
 
 const STAGE_LABEL: Record<string, string> = {
@@ -40,6 +61,8 @@ export const ACTIVITY_ICON: Record<ActivityKind, string> = {
   offer_logged: '💰',
   event_scheduled: '📅',
   client_referred: '🔁',
+  price_changed: '🏷️',
+  status_changed: '🔖',
 }
 
 /** Human label for each action type — used by the per-agent report summary. */
@@ -52,6 +75,8 @@ export const ACTIVITY_LABEL: Record<ActivityKind, string> = {
   offer_logged: 'Offers logged',
   event_scheduled: 'Viewings/meetings',
   client_referred: 'Clients referred',
+  price_changed: 'Price changes',
+  status_changed: 'Status changes',
 }
 
 function fmtMoney(n: number): string {
@@ -66,6 +91,7 @@ export function listingItem(i: { id: string | number; at: string; title: string;
     id: `listing:${i.id}`, kind: 'listing_added', at: i.at,
     agentCode: i.agentCode, agentName: i.agentName,
     summary: `New listing: ${i.title}`, detail: i.where || null,
+    target: { type: 'property', id: Number(i.id) || undefined },
   }
 }
 
@@ -74,6 +100,7 @@ export function clientItem(i: { id: string | number; at: string; name: string; w
     id: `client:${i.id}`, kind: 'client_added', at: i.at,
     agentCode: i.agentCode, agentName: i.agentName,
     summary: `New client: ${i.name}`, detail: i.where ? `Looking in ${i.where}` : null,
+    target: { type: 'client', id: Number(i.id) || undefined },
   }
 }
 
@@ -81,7 +108,7 @@ export function clientItem(i: { id: string | number; at: string; name: string; w
  *  win/loss; any other move reads as "→ Stage". */
 export function dealMoveItem(i: {
   id: string; at: string; toStage: string; outcome?: string | null;
-  clientName: string; agentCode: string | null; agentName: string | null
+  clientName: string; clientId?: number; agentCode: string | null; agentName: string | null
 }): ActivityItem {
   let kind: ActivityKind = 'deal_moved'
   let summary = `${i.clientName} → ${STAGE_LABEL[i.toStage] ?? i.toStage}`
@@ -89,13 +116,16 @@ export function dealMoveItem(i: {
     kind = i.outcome === 'won' ? 'deal_won' : 'deal_lost'
     summary = `Deal ${i.outcome}: ${i.clientName}`
   }
-  return { id: `deal:${i.id}`, kind, at: i.at, agentCode: i.agentCode, agentName: i.agentName, summary, detail: null }
+  return {
+    id: `deal:${i.id}`, kind, at: i.at, agentCode: i.agentCode, agentName: i.agentName,
+    summary, detail: null, target: i.clientId ? { type: 'client', id: i.clientId } : null,
+  }
 }
 
 /** An offer/counter logged on a deal. */
 export function offerItem(i: {
   id: string; at: string; amount: number; side: string;
-  clientName?: string | null; agentCode: string | null; agentName: string | null
+  clientName?: string | null; clientId?: number; agentCode: string | null; agentName: string | null
 }): ActivityItem {
   const label = i.side === 'owner' ? 'Counter' : 'Offer'
   const amt = fmtMoney(i.amount)
@@ -104,6 +134,7 @@ export function offerItem(i: {
     agentCode: i.agentCode, agentName: i.agentName,
     summary: `${label} logged${amt ? `: ${amt}` : ''}`,
     detail: i.clientName ? `on ${i.clientName}` : null,
+    target: i.clientId ? { type: 'client', id: i.clientId } : null,
   }
 }
 
@@ -117,6 +148,7 @@ export function eventItem(i: {
     id: `event:${i.id}`, kind: 'event_scheduled', at: i.at,
     agentCode: i.agentCode, agentName: i.agentName,
     summary: `Scheduled ${k}: ${i.title}`, detail: null,
+    target: { type: 'calendar' },
   }
 }
 
@@ -131,7 +163,142 @@ export function referralItem(i: {
     agentCode: i.agentCode, agentName: i.agentName,
     summary: `Referred ${i.clientName}${i.toName ? ` to ${i.toName}` : ''}`,
     detail: null,
+    target: { type: 'client', id: Number(i.id) || undefined },
   }
+}
+
+/**
+ * A listing's price moved.
+ *
+ * The feed knew what was created and never what changed, which left out the
+ * line a manager most wants to see. A drop reads as a drop — that is the thing
+ * worth ringing a client about.
+ */
+export function priceChangeItem(i: {
+  id: string | number; propertyId: number; at: string; title: string;
+  from: number; to: number; rent?: boolean;
+  agentCode: string | null; agentName: string | null
+}): ActivityItem {
+  const down = i.to < i.from
+  const pct = i.from > 0 ? Math.round(Math.abs(i.to - i.from) / i.from * 100) : 0
+  const suffix = i.rent ? '/mo' : ''
+  return {
+    id: `price:${i.id}`, kind: 'price_changed', at: i.at,
+    agentCode: i.agentCode, agentName: i.agentName,
+    summary: `${down ? 'Price drop' : 'Price up'}: ${i.title}`,
+    detail: `${fmtMoney(i.from)}${suffix} → ${fmtMoney(i.to)}${suffix}${pct ? ` (${down ? '−' : '+'}${pct}%)` : ''}`,
+    target: { type: 'property', id: i.propertyId },
+  }
+}
+
+/** A listing's status moved — Available → Reserved → Sold. */
+export function statusChangeItem(i: {
+  id: string | number; propertyId: number; at: string; title: string;
+  from: string; to: string; agentCode: string | null; agentName: string | null
+}): ActivityItem {
+  return {
+    id: `status:${i.id}`, kind: 'status_changed', at: i.at,
+    agentCode: i.agentCode, agentName: i.agentName,
+    summary: `${i.to}: ${i.title}`,
+    detail: i.from ? `was ${i.from}` : null,
+    target: { type: 'property', id: i.propertyId },
+  }
+}
+
+// ── Filtering, for a feed that has to survive a thousand leads a month ───────
+
+export interface ActivityFilter {
+  /** Empty means every kind. */
+  kinds?: ActivityKind[]
+  agentCode?: string | null
+  /** ISO bounds, inclusive. */
+  from?: string | null
+  to?: string | null
+  /** Free text over the summary, detail and agent name. */
+  query?: string | null
+}
+
+export function filterActivity(items: ActivityItem[], f: ActivityFilter = {}): ActivityItem[] {
+  const kinds = f.kinds?.length ? new Set(f.kinds) : null
+  const q = String(f.query ?? '').trim().toLowerCase()
+  return items.filter(it => {
+    if (kinds && !kinds.has(it.kind)) return false
+    if (f.agentCode && it.agentCode !== f.agentCode) return false
+    if (f.from && it.at < f.from) return false
+    if (f.to && it.at > f.to) return false
+    if (q) {
+      const hay = `${it.summary} ${it.detail ?? ''} ${it.agentName ?? ''}`.toLowerCase()
+      if (!hay.includes(q)) return false
+    }
+    return true
+  })
+}
+
+/** The kinds actually present, in the order the chips should be shown. */
+export function kindsPresent(items: ActivityItem[]): ActivityKind[] {
+  const order = Object.keys(ACTIVITY_LABEL) as ActivityKind[]
+  const seen = new Set(items.map(i => i.kind))
+  return order.filter(k => seen.has(k))
+}
+
+/** The agents who appear, for the manager's agent filter. */
+export function agentsPresent(items: ActivityItem[]): { code: string; name: string }[] {
+  const by = new Map<string, string>()
+  for (const i of items) {
+    if (!i.agentCode) continue
+    if (!by.has(i.agentCode) || i.agentName) by.set(i.agentCode, i.agentName ?? i.agentCode)
+  }
+  return [...by.entries()].map(([code, name]) => ({ code, name })).sort((a, b) => a.name.localeCompare(b.name))
+}
+
+// ── The week at a glance ─────────────────────────────────────────────────────
+
+export interface ActivityDigest {
+  total: number
+  counts: Record<ActivityKind, number>
+  /** The same window ending where this one starts, for the up/down arrow. */
+  previousTotal: number
+  changePct: number | null
+}
+
+/**
+ * Counts for the last `days`, against the `days` before that.
+ *
+ * Null change when there is no earlier window to compare with — "+100%" off a
+ * week with nothing in it says more than it knows.
+ */
+export function digestActivity(items: ActivityItem[], days = 7, now: number = Date.now()): ActivityDigest {
+  const span = days * 86_400_000
+  const start = new Date(now - span).toISOString()
+  const prevStart = new Date(now - span * 2).toISOString()
+
+  const counts = zeroCounts()
+  let total = 0
+  let previousTotal = 0
+  for (const it of items) {
+    if (it.at >= start) { counts[it.kind] += 1; total += 1 }
+    else if (it.at >= prevStart) previousTotal += 1
+  }
+  return {
+    total, counts, previousTotal,
+    changePct: previousTotal > 0 ? Math.round((total - previousTotal) / previousTotal * 100) : null,
+  }
+}
+
+/** One bucket per day, oldest first — the heatmap strip. */
+export function activityByDay(items: ActivityItem[], days = 14, now: number = Date.now()): { date: string; count: number }[] {
+  const buckets = new Map<string, number>()
+  const today = new Date(now)
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today)
+    d.setDate(today.getDate() - i)
+    buckets.set(d.toISOString().slice(0, 10), 0)
+  }
+  for (const it of items) {
+    const day = String(it.at).slice(0, 10)
+    if (buckets.has(day)) buckets.set(day, (buckets.get(day) ?? 0) + 1)
+  }
+  return [...buckets.entries()].map(([date, count]) => ({ date, count }))
 }
 
 /** Newest first, capped. ISO timestamps sort lexicographically. */
@@ -152,6 +319,7 @@ function zeroCounts(): Record<ActivityKind, number> {
   return {
     listing_added: 0, client_added: 0, deal_moved: 0, deal_won: 0, deal_lost: 0,
     offer_logged: 0, event_scheduled: 0, client_referred: 0,
+    price_changed: 0, status_changed: 0,
   }
 }
 

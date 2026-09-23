@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Search, X } from 'lucide-react'
 import { getAgent, AGENTS, Property, Agent, PROPERTY_TYPES, propertyTypeLabel } from '@/lib/data'
 import { filterProperties } from '@/lib/search'
@@ -23,6 +24,17 @@ let PROPS_CACHE: Property[] | null = null
 let PROP_AGENTS_CACHE: AgentMap | null = null
 
 export default function PropertiesPage() {
+  return (
+    <Suspense fallback={null}>
+      <PropertiesPageInner />
+    </Suspense>
+  )
+}
+
+// useSearchParams() (for the ?open=<id> deep link from the activity feed)
+// requires a Suspense boundary above it — split into an inner component so
+// the wrapper above stays trivial, exactly as the clients page does.
+function PropertiesPageInner() {
   const [scope, setScope] = useState<'me' | 'company'>('company')
   // Lazy initialisers: localStorage is read once, on the client, never on the server.
   const [list, setList] = useState<Property[]>(() => PROPS_CACHE ?? readCache<Property[]>('properties') ?? [])
@@ -54,7 +66,14 @@ export default function PropertiesPage() {
     const fallback = AGENTS.find(x => x.id === code)
     return fallback ?? { id: code as Agent['id'], name: code, initials: code.slice(0, 2).toUpperCase(), color: '#9AA3B2', shortName: code }
   }
-  const [detailId, setDetailId] = useState<number | null>(null)
+  // ?open=<id> opens that listing straight away — the activity feed and the
+  // pipeline board both link in this way.
+  const searchParams = useSearchParams()
+  const [detailId, setDetailId] = useState<number | null>(() => {
+    const raw = searchParams.get('open')
+    const n = raw ? Number(raw) : NaN
+    return Number.isInteger(n) ? n : null
+  })
   const [addOpen, setAddOpen] = useState(false)
   // A listing just added — offer to send it to the marketing team.
   const [marketingProp, setMarketingProp] = useState<Property | null>(null)

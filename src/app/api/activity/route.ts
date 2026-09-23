@@ -14,7 +14,10 @@ export async function GET() {
   const items = await fetchActivity(admin, {
     companyId: session.companyId,
     agentCode: isManager(session.role) ? null : session.agentCode,
-    limit: 40,
+    // Enough history for the page's filters, the week-against-last-week
+    // summary and the two-week heatmap to mean something. The page paints a
+    // screenful at a time; this is what it filters over.
+    limit: 200,
   })
   return NextResponse.json({ items })
 }

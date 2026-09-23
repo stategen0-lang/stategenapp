@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse, after } from 'next/server'
+import { propertyChanges } from '@/lib/property-history'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession, companyAccessBlocked } from '@/lib/session'
@@ -135,7 +136,8 @@ export async function PATCH(req: NextRequest) {
     // Everyone can view the shared inventory; only the lister (or a manager)
     // can change a listing.
     const { data: existing } = await supabase
-      .from('Properties').select('id,Amenities').eq('id', id).eq('company_id', session.companyId).maybeSingle()
+      // Price and Status come along so a change to either can be recorded.
+      .from('Properties').select('id,Amenities,Price,Status').eq('id', id).eq('company_id', session.companyId).maybeSingle()
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     // Server-owned keys the edit form never sends. Rebuilding the blob from the
     // form alone would erase them (the listing would forget it was already sent
@@ -201,6 +203,29 @@ export async function PATCH(req: NextRequest) {
       .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    // Record a price or status move, so the team feed can report what changed
+    // and not only what was created. Never blocks the edit: a listing saving is
+    // what matters, its history line is not.
+    try {
+      const changes = propertyChanges(
+        { price: Number(existing.Price) || 0, status: String(existing.Status ?? ''), isRent: prevExtras.transaction === 'For Rent' },
+        { price: Number(body.price || body.rent) || 0, status: String(body.status ?? 'Available'), isRent: body.transaction === 'For Rent' },
+      )
+      if (changes.length) {
+        await supabase.from('property_history').insert(changes.map(c => ({
+          company_id: session.companyId,
+          property_id: id,
+          field: c.field,
+          old_value: c.old,
+          new_value: c.new,
+          agent_code: session.agentCode ?? null,
+        })))
+      }
+    } catch (e) {
+      console.error('[properties] history not recorded', e)
+    }
+
     return NextResponse.json({ property: data })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
