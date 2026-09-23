@@ -126,7 +126,15 @@ export function quickIntent(raw: string | null | undefined): IntentResult | null
   // noun: "schedule a call" books one, "my schedule" asks for the list. This
   // needs a leading command verb AND a calendar noun, so the query form can't
   // match it. The listing exclusion keeps "add listing" out.
-  if ((/^(add|book|schedule|set up|put in|create)\b/i.test(text) || /^remind\s+me\s+to\b/i.test(text))
+  // "remind me <when> to <task>" is a reminder and nothing else. It short-
+  // circuits, because the task usually mentions a property — "remind me
+  // tomorrow to call Abalen about the apartment for rent in Mazraat Yachouh" —
+  // and the rules further down would otherwise read it as a property search.
+  if (/\bremind\s+me\b[^.!?]*?\bto\s+\w/i.test(text)) {
+    return { intent: 'create_event', notes: text }
+  }
+
+  if (/^(add|book|schedule|set up|put in|create)\b/i.test(text)
       && /\b(event|viewing|meeting|call|appointment|follow[- ]?up|reminder to)\b/i.test(text)
       && !/\b(listing|propert)/i.test(text)) {
     return { intent: 'create_event', notes: text }

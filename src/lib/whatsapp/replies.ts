@@ -73,10 +73,17 @@ export function parseReminderReply(raw: string | null | undefined): ReminderRepl
   const text = (raw ?? '').trim()
   if (!text) return { action: 'unknown' }
 
-  // "remind me TO <task>" is a NEW reminder to schedule ("remind me to call Jess
-  // in 42 minutes"), never a snooze of the current follow-up — even though it
-  // contains "remind me". Hand it to intent classification (→ create_event).
-  if (/\bremind\s+me\s+to\b/i.test(text)) return { action: 'unknown' }
+  // "remind me … TO <task>" is a NEW reminder to schedule, never a snooze of
+  // the current follow-up — even though it contains "remind me". Hand it to
+  // intent classification (→ create_event).
+  //
+  // The time phrase can sit anywhere: "remind me to call Jess in 42 minutes",
+  // but also "remind me tomorrow to call Abalen" and "remind me in 2 days to
+  // call Joe". Matching only "remind me to" read those last two as a snooze and
+  // silently moved a DIFFERENT client's follow-up — the one whose reminder was
+  // outstanding. "remind me later" and "remind me next week" name no task, so
+  // they stay snoozes.
+  if (/\bremind\s+me\b[^.!?]*?\bto\s+\w/i.test(text)) return { action: 'unknown' }
 
   // A fresh command ("book a viewing tomorrow", "set X's budget…") is never a
   // reminder reply, even if it contains a date word. This stopped a real bug:

@@ -24,6 +24,14 @@ import { hasCriteria } from '@/lib/listing-search-core'
 import type { IntentResult } from '@/lib/whatsapp/intent'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+// A yes/no with nothing staged. The old wording ("send the change again") was
+// a dead end for the case that actually happens: the agent saying "no, not
+// that one" because something was already saved to the wrong record. Say what
+// to do next instead.
+const NOTHING_PENDING =
+  'Nothing is waiting for confirmation — it expired, or the change was already saved. ' +
+  'If something went in wrong, just send the correction, e.g. "remind me tomorrow to call Ahmad".'
+
 interface Profile {
   id: string
   company_id: number
@@ -195,7 +203,7 @@ async function route(
     // change might still be pending when in fact nothing is.
     return {
       intent: confirmation,
-      answer: 'There is nothing waiting for confirmation — it may have expired (confirmations last 10 minutes). Send the change again.',
+      answer: NOTHING_PENDING,
     }
   }
 
@@ -238,7 +246,7 @@ async function route(
     // Only reached for phrasings the local matcher missed ("go on then").
     case 'confirm':
     case 'cancel':
-      return { intent, answer: 'There is nothing waiting for confirmation — it may have expired (confirmations last 10 minutes). Send the change again.' }
+      return { intent, answer: NOTHING_PENDING }
     // Grok read it as a reminder reply, but nothing is outstanding — otherwise
     // the local matcher above would have handled it.
     case 'reminder_response':

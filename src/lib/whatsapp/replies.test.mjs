@@ -166,3 +166,30 @@ test('isExpired: before, after, and missing expiry', () => {
   assert.equal(isExpired(null, now), true)                    // nothing pending
   assert.equal(isExpired('rubbish', now), true)               // unparseable → treat as expired
 })
+
+test('"remind me <when> to <task>" is a new reminder, never a snooze', () => {
+  // The real one, from a screenshot: this snoozed a DIFFERENT client — whoever
+  // had the outstanding reminder — and moved their follow-up by a day.
+  assert.deepEqual(
+    parseReminderReply('Remind me tomorrow to call Abalen regarding the apartment for rent in mazraat yachouh'),
+    { action: 'unknown' })
+
+  for (const m of [
+    'remind me to call Abalen tomorrow',
+    'remind me in 2 days to call Joe',
+    'remind me next week to send Rita the listing',
+    'Remind me on Friday to follow up with Ahmad',
+  ]) {
+    assert.deepEqual(parseReminderReply(m), { action: 'unknown' }, m)
+  }
+})
+
+test('"remind me" with no task is still a snooze', () => {
+  // These name no task, so they mean "push the current follow-up back".
+  assert.deepEqual(parseReminderReply('remind me later'), { action: 'snooze', snoozeDays: 3 })
+  assert.deepEqual(parseReminderReply('remind me tomorrow'), { action: 'snooze', snoozeDays: 1 })
+  assert.deepEqual(parseReminderReply('remind me next week'), { action: 'snooze', snoozeDays: 7 })
+  assert.deepEqual(parseReminderReply('remind me in 3 days'), { action: 'snooze', snoozeDays: 3 })
+  assert.deepEqual(parseReminderReply('snooze 3d'), { action: 'snooze', snoozeDays: 3 })
+  assert.deepEqual(parseReminderReply('snooze until tomorrow to give him time'), { action: 'snooze', snoozeDays: 1 })
+})

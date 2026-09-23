@@ -309,3 +309,17 @@ test('quick intent: asking for Arabic is not the same as asking for a descriptio
   // Without Arabic it is still the English generator.
   assert.deepEqual(quickIntent('write a description for #23'), { intent: 'describe_property', propertyId: 23 })
 })
+
+test('quick intent: a reminder with a task beats the property search in it', () => {
+  // "…the apartment for rent in mazraat yachouh" used to win and turn this
+  // into a listing search.
+  assert.deepEqual(
+    quickIntent('Remind me tomorrow to call Abalen regarding the apartment for rent in mazraat yachouh'),
+    { intent: 'create_event', notes: 'Remind me tomorrow to call Abalen regarding the apartment for rent in mazraat yachouh' })
+
+  for (const m of ['remind me to call Abalen tomorrow', 'remind me in 2 days to call Joe']) {
+    assert.equal(quickIntent(m)?.intent, 'create_event', m)
+  }
+  // A plain search is still a search.
+  assert.equal(quickIntent('show me apartments for rent in mazraat yachouh')?.intent, 'query_property')
+})
