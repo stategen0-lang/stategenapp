@@ -151,3 +151,60 @@ test('hasArabic: tells an Arabic answer from an English one', () => {
   // A mixed line still counts — prices and m² stay in Latin script on purpose.
   assert.equal(hasArabic('شقة 180 م² بسعر 250,000$'), true)
 })
+
+// ── The tick-boxes ──────────────────────────────────────────────────────────
+// They were absent from the facts entirely, so a flat with a generator, a lift
+// and air conditioning was described as having none of them. The model can
+// only mention what it is told.
+
+const FULL = {
+  title: 'Sea view apartment', type: 'Appartement', transaction: 'For Sale',
+  price: 450000, district: 'Achrafieh', size: 180, beds: 3, baths: 2,
+  garden: true, balcony: true, terrace: true, view: 'Sea', parkings: 2,
+  buildingAge: 5, furnishing: 'Furnished', floor: 'Mid floor',
+  amenities: ['Pool', 'Air Conditioning', 'Credit Facilities'],
+  buildingFeatures: ['Elevator', 'Generator', '24/7 Security'],
+}
+
+test('buildFacts: every tick-box reaches the model', () => {
+  const facts = buildFacts(FULL)
+  for (const a of FULL.amenities) assert.ok(facts.includes(a), `amenity missing: ${a}`)
+  for (const b of FULL.buildingFeatures) assert.ok(facts.includes(b), `building feature missing: ${b}`)
+  assert.match(facts, /Features: Pool, Air Conditioning, Credit Facilities/)
+  assert.match(facts, /Building has: Elevator, Generator, 24\/7 Security/)
+})
+
+test('buildFacts: terrace, furnishing and floor too', () => {
+  const facts = buildFacts(FULL)
+  assert.match(facts, /Has a terrace/)
+  assert.match(facts, /Furnishing: Furnished/)
+  assert.match(facts, /Floor: Mid floor/)
+})
+
+test('buildFacts: a listing with no tick-boxes says nothing about them', () => {
+  // An empty list must not produce "Features: " with nothing after it — the
+  // model would invent something to fill it.
+  const bare = buildFacts({ ...FULL, amenities: [], buildingFeatures: [], terrace: false, furnishing: '', floor: '' })
+  assert.equal(bare.includes('Features:'), false)
+  assert.equal(bare.includes('Building has:'), false)
+  assert.equal(bare.includes('Has a terrace'), false)
+  assert.equal(bare.includes('Furnishing:'), false)
+  assert.equal(bare.includes('Floor:'), false)
+
+  const missing = buildFacts({ ...FULL, amenities: undefined, buildingFeatures: undefined })
+  assert.equal(missing.includes('Features:'), false)
+  assert.equal(missing.includes('Building has:'), false)
+})
+
+test('buildFacts: blank entries in a list are dropped, not printed', () => {
+  const facts = buildFacts({ ...FULL, amenities: ['Pool', '', '   '], buildingFeatures: [''] })
+  assert.match(facts, /Features: Pool$/m)
+  assert.equal(facts.includes('Building has:'), false)
+})
+
+test('the Arabic version is told the same tick-boxes', () => {
+  // It shares buildFacts, so it cannot fall behind the English one.
+  const { prompt } = buildArabicPrompts(FULL, 'Bright three-bedroom.')
+  assert.ok(prompt.includes('Generator'))
+  assert.ok(prompt.includes('Pool'))
+})

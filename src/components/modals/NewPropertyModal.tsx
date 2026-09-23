@@ -208,6 +208,12 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
+          // The tick-boxes live outside `form`, so spreading it alone left the
+          // model knowing nothing about the pool, the lift or the generator.
+          amenities,
+          buildingFeatures,
+          district: '',
+          city: form.area.trim(),
           template: selectedTemplate?.body || undefined,
         }),
       })

@@ -16,6 +16,7 @@ import type { IntentResult } from '@/lib/whatsapp/intent'
 import { stageLabel } from '@/lib/whatsapp/deals'
 import type { Stage } from '@/lib/pipeline'
 import { dbRowToProperty } from '@/lib/db-mappers'
+import type { Property } from '@/lib/data'
 import { generateDescription, generateArabicDescription, type DescriptionInput } from '@/lib/ai/property-description'
 import {
   buildUpdate, buildNewProperty, confirmationText, hasChanges,
@@ -217,6 +218,26 @@ export async function stagePropertyUpdate(
   })
 }
 
+/**
+ * Everything the model needs to describe a listing.
+ *
+ * Shared by the English and the Arabic flows so neither can quietly fall
+ * behind the other — the tick-boxes were missing from both, which is why a
+ * flat with a generator and a lift was described as having neither.
+ * Internal notes are deliberately absent; publicNotes are written for clients.
+ */
+function describeInput(p: Property): DescriptionInput {
+  return {
+    title: p.title, type: p.type, transaction: p.transaction, price: p.price, rent: p.rent,
+    district: p.district, city: p.city, size: p.size, beds: p.beds, baths: p.baths,
+    garden: p.garden, balcony: p.balcony, terrace: p.terrace, view: p.view,
+    parkings: p.parkings, buildingAge: p.buildingAge, needsRenovation: p.needsRenovation,
+    furnishing: p.furnishing, floor: p.floor,
+    amenities: p.amenities, buildingFeatures: p.buildingFeatures,
+    publicNotes: p.publicNotes,
+  }
+}
+
 // ── "write a description for #23" ────────────────────────────────────────────
 // Generates a listing description using the company's saved template (if any),
 // shows it, and stages a confirm-save onto the listing's Amenities.aiDescription
@@ -246,13 +267,7 @@ export async function stageDescribeProperty(
   const template = (company?.description_template as string | null) ?? null
 
   const p = dbRowToProperty(row, 0)
-  const input: DescriptionInput = {
-    title: p.title, type: p.type, transaction: p.transaction, price: p.price, rent: p.rent,
-    district: p.district, city: p.city, size: p.size, beds: p.beds, baths: p.baths,
-    garden: p.garden, balcony: p.balcony, view: p.view, parkings: p.parkings, buildingAge: p.buildingAge,
-    // The agent's public selling points; internal notes are deliberately not sent.
-    publicNotes: p.publicNotes,
-  }
+  const input: DescriptionInput = describeInput(p)
 
   let text: string
   try {
@@ -314,12 +329,7 @@ export async function stageArabicDescription(
 
   let text: string
   try {
-    text = await generateArabicDescription(english, {
-      title: p.title, type: p.type, transaction: p.transaction, price: p.price, rent: p.rent,
-      district: p.district, city: p.city, size: p.size, beds: p.beds, baths: p.baths,
-      garden: p.garden, balcony: p.balcony, view: p.view, parkings: p.parkings, buildingAge: p.buildingAge,
-      publicNotes: p.publicNotes,
-    }, { retry: false, deadlineMs: 12_000 })
+    text = await generateArabicDescription(english, describeInput(p), { retry: false, deadlineMs: 12_000 })
   } catch {
     return 'That took too long to generate — please try again in a moment.'
   }

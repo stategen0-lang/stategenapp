@@ -23,11 +23,18 @@ export interface DescriptionInput {
   baths?: number
   garden?: boolean
   balcony?: boolean
+  terrace?: boolean
   view?: string
   parkings?: number
   buildingAge?: number
   needsRenovation?: boolean
   advancedPayment?: unknown
+  furnishing?: string
+  floor?: string
+  /** The listing's own tick-boxes: Pool, Air Conditioning, Credit Facilities… */
+  amenities?: string[]
+  /** The building's: Elevator, Generator, 24/7 Security… */
+  buildingFeatures?: string[]
   notes?: string
   /** Selling points the agent wants said out loud (unlike `notes`). */
   publicNotes?: string
@@ -38,6 +45,11 @@ export interface Prompts {
   prompt: string
   maxTokens: number
   temperature: number
+}
+
+/** Tick-boxes as a readable list, or '' when there are none. */
+function list(values: string[] | undefined): string {
+  return (values ?? []).map(v => String(v ?? '').trim()).filter(Boolean).join(', ')
 }
 
 /** The property facts block both modes share. Only known values are included so
@@ -63,6 +75,15 @@ export function buildFacts(d: DescriptionInput): string {
     d.view ? `View: ${d.view}` : null,
     d.garden ? 'Has a private garden' : null,
     d.balcony ? 'Has a balcony' : null,
+    d.terrace ? 'Has a terrace' : null,
+    d.furnishing ? `Furnishing: ${d.furnishing}` : null,
+    d.floor ? `Floor: ${d.floor}` : null,
+    // The tick-boxes an agent fills in. They were missing from the facts
+    // entirely, so a flat with a generator, a lift and air conditioning — the
+    // three things a Lebanese listing leads with — was described as if it had
+    // none of them. The model can only mention what it is told.
+    list(d.amenities) ? `Features: ${list(d.amenities)}` : null,
+    list(d.buildingFeatures) ? `Building has: ${list(d.buildingFeatures)}` : null,
     d.buildingAge ? `Building age: ${d.buildingAge} years` : null,
     d.needsRenovation ? 'Needs renovation' : null,
     d.advancedPayment ? `Advanced payment: ${d.advancedPayment}` : null,
