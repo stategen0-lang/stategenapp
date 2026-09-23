@@ -642,8 +642,8 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
           </div>
           )}
 
-          {/* Public + internal notes. Both sit above the description, because
-              the description is written from them. */}
+          {/* Public notes sit above the description, because the description is
+              written from them. The internal ones live in the private section. */}
           <div>
             <label className={label} style={labelStyle}>
               Public Notes <span style={{ color: '#B0B8C8', fontWeight: 400 }}>(clients may read this)</span>
@@ -657,22 +657,9 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
               placeholder="Selling points to mention — new kitchen, quiet street, walking distance to the school…"
               onClick={() => setTemplateOpen(false)}
             />
-            <p className="text-[11px] mt-1 mb-3" style={{ color: '#9AA3B2' }}>
-              Worked into the generated description. Keep anything the client shouldn&apos;t see in Internal Notes below.
+            <p className="text-[11px] mt-1" style={{ color: '#9AA3B2' }}>
+              Worked into the generated description. Keep anything the client shouldn&apos;t see in Internal Notes, further down.
             </p>
-
-            <label className={label} style={labelStyle}>
-              Internal Notes <span style={{ color: '#B0B8C8', fontWeight: 400 }}>(private)</span>
-            </label>
-            <textarea
-              className={inp}
-              style={{ ...inpStyle, resize: 'none' }}
-              rows={2}
-              value={form.notes}
-              onChange={e => set('notes', e.target.value)}
-              placeholder="Private notes for the team…"
-              onClick={() => setTemplateOpen(false)}
-            />
           </div>
 
           {/* Referred by — partner company/agent, for co-brokering */}
@@ -909,6 +896,21 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
             <p className="text-xs font-bold mt-2 mb-1" style={{ color: '#8A5A24' }}>
               🔒 Private — only you and managers can see this
             </p>
+
+            {/* Internal notes — private, so they belong under this heading and
+                not beside the public ones. The AI is told never to repeat them. */}
+            <div className="mb-3">
+              <label className={label} style={labelStyle}>Internal Notes</label>
+              <textarea
+                className={inp}
+                style={{ ...inpStyle, resize: 'none' }}
+                rows={2}
+                value={form.notes}
+                onChange={e => set('notes', e.target.value)}
+                placeholder="Private notes for the team…"
+                onClick={() => setTemplateOpen(false)}
+              />
+            </div>
 
             {/* Owner name + number */}
             <div className="grid grid-cols-2 gap-3">
