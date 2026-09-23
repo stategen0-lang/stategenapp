@@ -642,6 +642,47 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
           </div>
           )}
 
+          {/* Public + internal notes. Both sit above the description, because
+              the description is written from them. */}
+          <div>
+            <label className={label} style={labelStyle}>
+              Public Notes <span style={{ color: '#B0B8C8', fontWeight: 400 }}>(clients may read this)</span>
+            </label>
+            <textarea
+              className={inp}
+              style={{ ...inpStyle, resize: 'none' }}
+              rows={2}
+              value={form.publicNotes}
+              onChange={e => set('publicNotes', e.target.value)}
+              placeholder="Selling points to mention — new kitchen, quiet street, walking distance to the school…"
+              onClick={() => setTemplateOpen(false)}
+            />
+            <p className="text-[11px] mt-1 mb-3" style={{ color: '#9AA3B2' }}>
+              Worked into the generated description. Keep anything the client shouldn&apos;t see in Internal Notes below.
+            </p>
+
+            <label className={label} style={labelStyle}>
+              Internal Notes <span style={{ color: '#B0B8C8', fontWeight: 400 }}>(private)</span>
+            </label>
+            <textarea
+              className={inp}
+              style={{ ...inpStyle, resize: 'none' }}
+              rows={2}
+              value={form.notes}
+              onChange={e => set('notes', e.target.value)}
+              placeholder="Private notes for the team…"
+              onClick={() => setTemplateOpen(false)}
+            />
+          </div>
+
+          {/* Referred by — partner company/agent, for co-brokering */}
+          <div>
+            <label className={label} style={labelStyle}>
+              Referred by <span style={{ color: '#B0B8C8', fontWeight: 400 }}>(partner company or agent)</span>
+            </label>
+            <input className={inp} style={inpStyle} value={form.referredBy} onChange={e => set('referredBy', e.target.value)} placeholder="e.g. Prime Realty / Karim H." />
+          </div>
+
           {/* AI Description */}
           <div>
             <label className={label} style={labelStyle}>
@@ -763,46 +804,6 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
                 )}
               </div>
             )}
-          </div>
-
-          {/* Internal Notes */}
-          <div>
-            <label className={label} style={labelStyle}>
-              Public Notes <span style={{ color: '#B0B8C8', fontWeight: 400 }}>(clients may read this)</span>
-            </label>
-            <textarea
-              className={inp}
-              style={{ ...inpStyle, resize: 'none' }}
-              rows={2}
-              value={form.publicNotes}
-              onChange={e => set('publicNotes', e.target.value)}
-              placeholder="Selling points to mention — new kitchen, quiet street, walking distance to the school…"
-              onClick={() => setTemplateOpen(false)}
-            />
-            <p className="text-[11px] mt-1 mb-3" style={{ color: '#9AA3B2' }}>
-              Worked into the generated description. Keep anything the client shouldn&apos;t see in Internal Notes below.
-            </p>
-
-            <label className={label} style={labelStyle}>
-              Internal Notes <span style={{ color: '#B0B8C8', fontWeight: 400 }}>(private)</span>
-            </label>
-            <textarea
-              className={inp}
-              style={{ ...inpStyle, resize: 'none' }}
-              rows={2}
-              value={form.notes}
-              onChange={e => set('notes', e.target.value)}
-              placeholder="Private notes for the team…"
-              onClick={() => setTemplateOpen(false)}
-            />
-          </div>
-
-          {/* Referred by — partner company/agent, for co-brokering */}
-          <div>
-            <label className={label} style={labelStyle}>
-              Referred by <span style={{ color: '#B0B8C8', fontWeight: 400 }}>(partner company or agent)</span>
-            </label>
-            <input className={inp} style={inpStyle} value={form.referredBy} onChange={e => set('referredBy', e.target.value)} placeholder="e.g. Prime Realty / Karim H." />
           </div>
 
           {/* Photos */}
