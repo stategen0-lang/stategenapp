@@ -8,7 +8,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   foldArea, tightArea, tightAreaWithArticles, skeletonArea,
-  buildIndex, resolveArea, searchAreas, areaLabel, distanceKm,
+  buildIndex, resolveArea, resolveRegion, searchAreas, areaLabel, distanceKm,
 } from './areas-core.ts'
 import { PACKED_AREAS, GOVERNORATES, CAZAS } from './areas.data.ts'
 
@@ -166,4 +166,32 @@ test('distanceKm: Lebanese distances come out Lebanese', () => {
   assert.ok(jounieh > 10 && jounieh < 30, `Beirut to Jounieh came out ${jounieh}km`)
   const tripoli = round('Beirut', 'Tripoli')
   assert.ok(tripoli > 60 && tripoli < 100, `Beirut to Tripoli came out ${tripoli}km`)
+})
+
+test('resolveRegion: cazas and governorates, however they are spelled', () => {
+  const region = q => {
+    const r = resolveRegion(ix, q)
+    return r ? `${r.kind}:${r.name}` : null
+  }
+  assert.equal(region('Metn'), 'caza:Metn')
+  assert.equal(region('El Metn'), 'caza:Metn')
+  assert.equal(region('Matn'), 'caza:Metn')
+  assert.equal(region('Keserwan'), 'caza:Keserwan')
+  assert.equal(region('Kesrouan'), 'caza:Keserwan')
+  assert.equal(region('Chouf'), 'caza:Chouf')
+  assert.equal(region('Shouf'), 'caza:Chouf')
+  // A governorate wins over a caza of the same name.
+  assert.equal(region('Beirut'), 'governorate:Beirut')
+  assert.equal(region('Mount Lebanon'), 'governorate:Mount Lebanon')
+  // A town is not a region.
+  assert.equal(region('Achrafieh'), null)
+  assert.equal(region('Dbayeh'), null)
+  assert.equal(region(''), null)
+  assert.equal(region('Kuala Lumpur'), null)
+})
+
+test('the region table is built once and covers every caza', () => {
+  assert.ok(ix.byRegion.size >= ix.cazas.length)
+  for (const caza of ix.cazas) assert.ok(resolveRegion(ix, caza), `${caza} must resolve`)
+  for (const gov of ix.governorates) assert.ok(resolveRegion(ix, gov), `${gov} must resolve`)
 })

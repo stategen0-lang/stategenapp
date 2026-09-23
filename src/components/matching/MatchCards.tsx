@@ -13,6 +13,12 @@ import { dbRowToProperty, dbRowToClient } from '@/lib/db-mappers'
 
 function norm(s: string) { return (s ?? '').toLowerCase().trim() }
 
+// Every match above the threshold is kept and ranked; these only decide how
+// many are painted at once. Ten fills the sheet without a scroll; twenty more
+// per tap gets an agent through the thirty they actually want to read.
+const FIRST_PAGE = 10
+const PAGE = 20
+
 // ── Score ring SVG ────────────────────────────────────────────────────────────
 const CIRC = 113
 
@@ -130,6 +136,10 @@ export default function MatchCards({ entityType, entity, onOpenProperty, onOpenC
   const [matchedClients,    setMatchedClients]    = useState<MatchedClient[]>([])
   const [matchedProperties, setMatchedProperties] = useState<MatchedProperty[]>([])
   const [dismissed, setDismissed] = useState<Set<number>>(new Set())
+  // How many cards are painted. An agency with a thousand clients has real
+  // matches at 70-80% well past the tenth, but a hundred score rings at once
+  // is a slow scroll on a phone — so they arrive a page at a time.
+  const [shown, setShown] = useState(FIRST_PAGE)
   // Why nothing matched, filled in only when the answer is "nothing".
   const [misses, setMisses] = useState<{ id: number; label: string; reasons: MatchIssue[] }[]>([])
   const [loading,   setLoading]   = useState(true)
@@ -189,7 +199,7 @@ export default function MatchCards({ entityType, entity, onOpenProperty, onOpenC
         } catch { /* keep demo fallback */ }
         const areas = await loadAreas().catch(() => null)
         const found = matchClients(prop, pool, MATCH_THRESHOLD, areas)
-        setMatchedClients(found.slice(0, 10))
+        setMatchedClients(found)
         setMisses(found.length ? [] : nearMissClients(prop, pool, areas).map(m => ({ id: m.client.id, label: m.client.name, reasons: m.reasons })))
       } else {
         const client = entity as Client
@@ -204,7 +214,7 @@ export default function MatchCards({ entityType, entity, onOpenProperty, onOpenC
         } catch { /* keep demo fallback */ }
         const areas = await loadAreas().catch(() => null)
         const found = matchProperties(client, pool, MATCH_THRESHOLD, areas)
-        setMatchedProperties(found.slice(0, 10))
+        setMatchedProperties(found)
         setMisses(found.length ? [] : nearMisses(client, pool, areas).map(m => ({ id: m.property.id, label: `#${m.property.id} ${m.property.title}`, reasons: m.reasons })))
       }
       setDismissed(new Set())
@@ -214,10 +224,13 @@ export default function MatchCards({ entityType, entity, onOpenProperty, onOpenC
   }, [entityType, entity])
 
   useEffect(() => { runMatching() }, [runMatching])
+  // A fresh run starts from the first page again.
+  useEffect(() => { setShown(FIRST_PAGE) }, [entityType, entity])
 
   const visibleClientMatches = matchedClients.filter(r => !dismissed.has(r.client.id))
   const visiblePropMatches   = matchedProperties.filter(r => !dismissed.has(r.property.id))
   const count = entityType === 'property' ? visibleClientMatches.length : visiblePropMatches.length
+  const hidden = Math.max(0, count - shown)
   const label = entityType === 'property' ? 'Matched clients' : 'Matched properties'
 
   return (
@@ -277,7 +290,7 @@ export default function MatchCards({ entityType, entity, onOpenProperty, onOpenC
       )}
 
       {/* ── Property → Client cards ── */}
-      {!loading && entityType === 'property' && visibleClientMatches.map(({ client: c, score: s }) => {
+      {!loading && entityType === 'property' && visibleClientMatches.slice(0, shown).map(({ client: c, score: s }) => {
         const agent    = getAgent(c.agentId)
         const initials = c.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
         const prop     = entity as Property
@@ -316,7 +329,7 @@ export default function MatchCards({ entityType, entity, onOpenProperty, onOpenC
       })}
 
       {/* ── Client → Property cards ── */}
-      {!loading && entityType === 'client' && visiblePropMatches.map(({ property: p, score: s }) => {
+      {!loading && entityType === 'client' && visiblePropMatches.slice(0, shown).map(({ property: p, score: s }) => {
         const photos   = p.photos ?? []
         const client   = entity as Client
         const features = propFeatures(p)
@@ -355,6 +368,31 @@ export default function MatchCards({ entityType, entity, onOpenProperty, onOpenC
           </MatchCard>
         )
       })}
+
+      {/* More matches below the fold. The count is the point: an agent needs to
+          know there are another 40 worth reading, not just that the list ended. */}
+      {!loading && hidden > 0 && (
+        <button
+          onClick={() => setShown(n => n + PAGE)}
+          className="w-full py-2.5 rounded-xl text-xs font-semibold transition-colors hover:opacity-80"
+          style={{ background: '#EAF0FA', color: '#2E5288' }}
+        >
+          Show {Math.min(PAGE, hidden)} more
+          <span style={{ color: '#7A93C0', fontWeight: 500 }}>
+            {' '}· {hidden} {entityType === 'property' ? 'client' : 'listing'}{hidden === 1 ? '' : 's'} left
+          </span>
+        </button>
+      )}
+
+      {!loading && hidden === 0 && count > FIRST_PAGE && (
+        <button
+          onClick={() => setShown(FIRST_PAGE)}
+          className="w-full py-2 rounded-xl text-xs font-semibold transition-colors hover:opacity-80"
+          style={{ color: '#7A8499' }}
+        >
+          Show fewer
+        </button>
+      )}
     </div>
   )
 }

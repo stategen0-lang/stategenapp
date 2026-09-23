@@ -145,6 +145,8 @@ export interface AreaIndex {
   /** The 26 cazas and 8 governorates — agents name these as often as a town. */
   cazas: string[]
   governorates: string[]
+  /** Every spelling key of those regions, built once. See resolveRegion. */
+  byRegion: Map<string, RegionMatch>
   /** fold key → areas. More than one means the name is ambiguous. */
   byFold: Map<string, Area[]>
   /** The same keys without word gaps: "Kfarhbab" finds "Kfar Hbab". */
@@ -195,10 +197,22 @@ export function buildIndex(packed: string, governorates: string[], cazas: string
     }
   }
 
+  // Cazas last so a governorate of the same name wins: someone asking for
+  // "Beirut" wants any of its districts, not the point the city is pinned at.
+  const byRegion = new Map<string, RegionMatch>()
+  for (const [names, kind] of [[cazas, 'caza'], [governorates, 'governorate']] as const) {
+    for (const name of names.filter(Boolean)) {
+      for (const key of [foldArea(name), tightArea(name), skeletonArea(name)]) {
+        if (key) byRegion.set(key, { kind, name })
+      }
+    }
+  }
+
   return {
     areas,
     cazas: cazas.filter(Boolean),
     governorates: governorates.filter(Boolean),
+    byRegion,
     byFold, byTight, bySkeleton, keys,
   }
 }
@@ -274,22 +288,12 @@ export interface RegionMatch {
 export function resolveRegion(ix: AreaIndex, input: string | null | undefined): RegionMatch | null {
   const f = foldArea(input)
   if (!f) return null
-  const t = tightArea(input)
-  const s = skeletonArea(input)
-
-  const find = (names: string[]) =>
-    names.find(n => foldArea(n) === f)
-    ?? names.find(n => tightArea(n) === t)
-    ?? names.find(n => skeletonArea(n) === s)
-
-  // Governorate first. Beirut is filed as both, and the governorate is the
-  // wider, more useful reading: someone asking for "Beirut" wants any of its
-  // districts, not the point on the map where the city is pinned.
-  const gov = find(ix.governorates)
-  if (gov) return { kind: 'governorate', name: gov }
-  const caza = find(ix.cazas)
-  if (caza) return { kind: 'caza', name: caza }
-  return null
+  // Three lookups in a table built once. Folding all 34 region names on every
+  // call cost about 400,000 string operations to score a thousand clients.
+  return ix.byRegion.get(f)
+    ?? ix.byRegion.get(tightArea(input))
+    ?? ix.byRegion.get(skeletonArea(input))
+    ?? null
 }
 
 /** The governorate a caza belongs to, from the areas filed under it. */

@@ -144,12 +144,24 @@ function areasOf(ix: AreaIndex, r: RegionMatch): Area[] {
  * coast into the mountains: Achrafieh is a few minutes from the Metn at Sin el
  * Fil, but 20 km from the Metn's centre of gravity up at Bikfaya.
  */
+const regionDistance = new WeakMap<AreaIndex, Map<string, number>>()
+
 function kmToRegion(ix: AreaIndex, area: Area, r: RegionMatch): number {
+  // Memoised per place-and-region. Scoring one listing against a thousand
+  // clients asks the same question a thousand times — the listing never moves,
+  // and a caza the size of the Metn holds 300 areas to measure against.
+  let cache = regionDistance.get(ix)
+  if (!cache) { cache = new Map(); regionDistance.set(ix, cache) }
+  const key = `${area.slug}|${r.kind}:${r.name}`
+  const hit = cache.get(key)
+  if (hit !== undefined) return hit
+
   let best = Infinity
   for (const a of areasOf(ix, r)) {
     const d = distanceKm(area, a)
     if (d < best) best = d
   }
+  cache.set(key, best)
   return best
 }
 
