@@ -9,7 +9,7 @@ import { isManager } from '@/lib/permissions'
 import { DescriptionTemplate, DEFAULT_TEMPLATES, loadTemplates, cacheTemplates, sanitizeTemplates } from '@/lib/templates'
 import { EXPORTS, EXPORT_LABELS, type ExportKind } from '@/lib/export-columns'
 import { refreshMarketingConfig } from '@/components/marketing/SendToMarketing'
-import { renderTitle, unknownTokens, DEFAULT_TITLE_TEMPLATE, TITLE_FIELDS } from '@/lib/title-template'
+import { renderTitle, unknownTokens, DEFAULT_TITLE_TEMPLATE, TITLE_FIELDS, sizeUnitOf, setSizeUnit, type SizeUnit } from '@/lib/title-template'
 
 const COMMISSION_RATE = 2.5
 const H   = '#1A2B4A'
@@ -149,6 +149,17 @@ export default function ProfilePage() {
     floor: 'Mid floor', price: 450000, buildingAge: 5,
   })
   const titleUnknown = unknownTokens(titleTemplate)
+
+  // Lebanese listings are written in SQM far more often than m², so the unit is
+  // a choice rather than a fixed token. The pattern itself says which — the
+  // toggle just rewrites it — and the preference is remembered while the
+  // template has no size in it yet, so the [size] chip inserts the right one.
+  const [sizeUnitPref, setSizeUnitPref] = useState<SizeUnit>('m2')
+  const sizeUnit = sizeUnitOf(titleTemplate) ?? sizeUnitPref
+  function chooseSizeUnit(u: SizeUnit) {
+    setSizeUnitPref(u)
+    setTitleTemplate(t => setSizeUnit(t || DEFAULT_TITLE_TEMPLATE, u))
+  }
 
   function toggleActive(id: string) {
     saveTemplates(templates.map(t => ({ ...t, active: t.id === id ? !t.active : false })))
@@ -682,10 +693,36 @@ export default function ProfilePage() {
               </p>
             )}
 
+            {/* Size unit — m² or SQM. Both write the same number. */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-xs" style={{ color: SUB }}>Size written as</p>
+              <div className="flex rounded-lg overflow-hidden" style={{ border: '1.5px solid #EEF0F4' }}>
+                {([['m2', 'm²'], ['sqm', 'SQM']] as const).map(([u, label]) => (
+                  <button
+                    key={u}
+                    onClick={() => chooseSizeUnit(u)}
+                    className="px-3 py-1 text-xs font-bold"
+                    style={sizeUnit === u
+                      ? { background: H, color: '#fff' }
+                      : { background: '#F7F8FB', color: SUB }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs" style={{ color: '#9AA3B2' }}>
+                {sizeUnit === 'sqm' ? '180 SQM — the usual way here' : '180 m²'}
+              </p>
+            </div>
+
             <div>
               <p className="text-xs mb-1.5" style={{ color: SUB }}>Tap to add a field. Anything outside [brackets] is written as-is; a field with no value disappears, along with the wording around it.</p>
               <div className="flex flex-wrap gap-1.5">
-                {TITLE_FIELDS.map(f => (
+                {TITLE_FIELDS
+                  // One size chip, not two: the toggle above decides which token
+                  // it inserts, so a manager can never end up with both.
+                  .filter(f => f.token !== (sizeUnit === 'sqm' ? '[size]' : '[size sqm]'))
+                  .map(f => (
                   <button
                     key={f.token}
                     onClick={() => setTitleTemplate(t => (t || DEFAULT_TITLE_TEMPLATE).concat(f.token))}

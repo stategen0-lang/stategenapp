@@ -2,7 +2,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { renderTitle, unknownTokens, DEFAULT_TITLE_TEMPLATE, TITLE_FIELDS } from './title-template.ts'
+import { renderTitle, unknownTokens, DEFAULT_TITLE_TEMPLATE, TITLE_FIELDS, sizeUnitOf, setSizeUnit } from './title-template.ts'
 
 // The template the agency asked for.
 const HOUSE = '[furnished or nothing][size][type][for sale/ rent][location]'
@@ -78,4 +78,49 @@ test('the help list covers the agency template\'s fields', () => {
   for (const t of ['[furnished]', '[size]', '[type]', '[for sale/rent]', '[location]']) {
     assert.ok(tokens.includes(t), `${t} should be offered in settings`)
   }
+})
+
+// ── Size unit ───────────────────────────────────────────────────────────────
+// Lebanese listings say SQM far more often than m², so the pattern itself
+// carries the choice. Both tokens write the same number.
+
+test('[size sqm] writes the unit the way listings here write it', () => {
+  assert.equal(renderTitle('[size][type] in [location]', flat), '180 m² Apartment in Kaslik')
+  assert.equal(renderTitle('[size sqm][type] in [location]', flat), '180 SQM Apartment in Kaslik')
+  // Spacing and punctuation inside the brackets are ignored, as everywhere else.
+  assert.equal(renderTitle('[SQM] [type]', flat), '180 SQM Apartment')
+  assert.equal(renderTitle('[area sqm] [type]', flat), '180 SQM Apartment')
+  // It disappears with the wording around it when there is no size.
+  assert.equal(renderTitle('[size sqm][type] in [location]', { ...flat, size: 0 }), 'Apartment in Kaslik')
+  // And the m² token is untouched by any of this.
+  assert.equal(renderTitle('[m2] [type]', flat), '180 m² Apartment')
+})
+
+test('both size tokens are offered in settings, and neither reads as unknown', () => {
+  const tokens = TITLE_FIELDS.map(f => f.token)
+  assert.ok(tokens.includes('[size]'))
+  assert.ok(tokens.includes('[size sqm]'))
+  assert.deepEqual(unknownTokens('[size sqm] [sqm] [m2]'), [])
+})
+
+test('the unit a pattern asks for', () => {
+  assert.equal(sizeUnitOf('[size][type]'), 'm2')
+  assert.equal(sizeUnitOf('[size sqm][type]'), 'sqm')
+  assert.equal(sizeUnitOf('[sqm][type]'), 'sqm')
+  assert.equal(sizeUnitOf('[type] in [location]'), null)   // no size at all
+  assert.equal(sizeUnitOf(''), 'm2')                       // the default pattern's
+  assert.equal(sizeUnitOf(null), 'm2')
+})
+
+test('switching the unit rewrites the pattern and leaves the rest alone', () => {
+  assert.equal(setSizeUnit(HOUSE, 'sqm'), '[furnished or nothing][size sqm][type][for sale/ rent][location]')
+  assert.equal(setSizeUnit('[size sqm][type] in [location]', 'm2'), '[size][type] in [location]')
+  // Switching twice comes back to where it started.
+  assert.equal(setSizeUnit(setSizeUnit(HOUSE, 'sqm'), 'm2'), '[furnished or nothing][size][type][for sale/ rent][location]')
+  // Nothing to switch: unchanged.
+  assert.equal(setSizeUnit('[type] in [location]', 'sqm'), '[type] in [location]')
+  // An unknown token is left exactly as the manager wrote it.
+  assert.equal(setSizeUnit('[size] [owner name]', 'sqm'), '[size sqm] [owner name]')
+  // And the rewritten pattern renders in the new unit.
+  assert.equal(renderTitle(setSizeUnit(HOUSE, 'sqm'), flat), 'Furnished 180 SQM Apartment for sale Kaslik')
 })

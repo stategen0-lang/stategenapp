@@ -56,7 +56,11 @@ const FIELDS: { key: string; aliases: string[]; hint: string; value: (f: TitleFi
     // how agents write titles — "Unfurnished apartment" is not a selling point.
     value: f => (/^(furnished|semi-furnished)$/i.test(String(f.furnishing ?? '').trim()) ? String(f.furnishing).trim() : ''),
   },
-  { key: 'size', hint: 'e.g. 180 m²', aliases: ['size', 'sqm', 'm2', 'area sqm', 'surface', 'sizem2'], value: f => (num(f.size) > 0 ? `${num(f.size)} m²` : '') },
+  { key: 'size', hint: 'e.g. 180 m²', aliases: ['size', 'm2', 'surface', 'sizem2', 'sizem²'], value: f => (num(f.size) > 0 ? `${num(f.size)} m²` : '') },
+  // The same number, written the way listings here are actually written. Most
+  // Lebanese agencies say SQM, not m², so the choice is a token rather than a
+  // setting: a manager picks the one they want and the template shows which.
+  { key: 'size sqm', hint: 'e.g. 180 SQM (how it is usually written in Lebanon)', aliases: ['sizesqm', 'sqm', 'sqmsize', 'areasqm', 'surfacesqm'], value: f => (num(f.size) > 0 ? `${num(f.size)} SQM` : '') },
   { key: 'type', hint: 'Apartment, Villa, Shop…', aliases: ['type', 'propertytype', 'property'], value: f => String(f.type ?? '').trim() },
   {
     key: 'for sale/rent', hint: 'for sale / for rent',
@@ -143,6 +147,41 @@ export function renderTitle(template: string | null | undefined, fields: TitleFi
     .replace(/^[\s,;:·\-–—]+|[\s,;:·\-–—]+$/g, '')
     .trim()
   return title.charAt(0).toUpperCase() + title.slice(1)
+}
+
+/**
+ * The two size tokens are the same field written two ways, so a manager should
+ * be able to switch between them without editing the text by hand — and without
+ * ending up with both in one title.
+ */
+export type SizeUnit = 'm2' | 'sqm'
+
+const SIZE_TOKEN: Record<SizeUnit, string> = { m2: '[size]', sqm: '[size sqm]' }
+
+/** Which unit a template asks for, or null when it doesn't mention the size. */
+export function sizeUnitOf(template: string | null | undefined): SizeUnit | null {
+  let unit: SizeUnit | null = null
+  for (const p of parse(String(template ?? '').trim() || DEFAULT_TITLE_TEMPLATE, {})) {
+    if (p.kind !== 'field') continue
+    const f = fieldFor(p.token)
+    // The last one wins, matching what the toggle then rewrites.
+    if (f?.key === 'size') unit = 'm2'
+    else if (f?.key === 'size sqm') unit = 'sqm'
+  }
+  return unit
+}
+
+/**
+ * Rewrite every size token to the chosen unit, keeping the manager's own
+ * wording around it. A template with no size is returned untouched — the toggle
+ * is hidden in that case anyway.
+ */
+export function setSizeUnit(template: string | null | undefined, unit: SizeUnit): string {
+  const src = String(template ?? '').trim() || DEFAULT_TITLE_TEMPLATE
+  return src.replace(/\[([^\]]*)\]/g, (whole, token: string) => {
+    const key = fieldFor(token)?.key
+    return key === 'size' || key === 'size sqm' ? SIZE_TOKEN[unit] : whole
+  })
 }
 
 /** Tokens in the template that aren't fields — shown to the manager as a warning. */
