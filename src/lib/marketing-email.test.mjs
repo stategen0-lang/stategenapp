@@ -2,7 +2,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseRecipients, renderMarketingEmail, priceLine, photoDownloadUrl, MAX_MARKETING_RECIPIENTS } from './marketing-email.ts'
+import { parseRecipients, renderMarketingEmail, priceLine, photoDownloadUrl, htmlText, htmlArabic, MAX_MARKETING_RECIPIENTS } from './marketing-email.ts'
 import { publicListing } from './share.ts'
 
 const property = {
@@ -175,4 +175,68 @@ test('marketing email: the stamp leads, in both languages', () => {
 test('marketing email: a plain listing still carries a stamp', () => {
   const { text } = email({ listing: publicListing({ ...property, view: '', amenities: [], furnishing: '' }, 'A flat.') })
   assert.match(text, /^★ NEW LISTING · عرض جديد/)
+})
+
+// ── The agency's layout survives the trip ────────────────────────────────────
+// A template is a shape — headings, bullet lists, a blank line before "More
+// Features:" — and that shape is the whole reason an agency writes one. The
+// email used to carry it with CSS white-space, which Outlook ignores and Gmail
+// strips, so it arrived as one run-on paragraph.
+
+const TEMPLATE_DESC = [
+  'Own this 135 SQM apartment in Sarba.',
+  '',
+  'This apartment consists of:',
+  ' - Living room',
+  ' - Kitchen',
+  '-3 Regular Bedrooms',
+  '',
+  'More Features:',
+  '-2 Parkings + Visitors',
+  '-Elevator 24/24',
+  '',
+  'Price: 135,000$ + 2.5% Commission',
+  'Contact us: +961 76 884 433',
+].join('\n')
+
+test('htmlText: every line break becomes a <br>, blank lines included', () => {
+  assert.equal(htmlText('a\nb'), 'a<br>b')
+  assert.equal(htmlText('a\n\nb'), 'a<br><br>b')      // the blank line survives
+  assert.equal(htmlText('a\r\nb'), 'a<br>b')          // Windows line endings
+  assert.equal(htmlText(''), '')
+  assert.equal(htmlText(null), '')
+  // Indentation is held, since HTML would otherwise swallow it.
+  assert.equal(htmlText('  x'), '&nbsp;&nbsp;x')
+  // And it still escapes.
+  assert.equal(htmlText('<b>&'), '&lt;b&gt;&amp;')
+})
+
+test('marketing email: the template keeps its shape in the HTML', () => {
+  const { html } = renderMarketingEmail({
+    listing: publicListing(property, TEMPLATE_DESC),
+    listingId: 45, shareUrl: 'https://s/l/t', agentName: 'A',
+  })
+  // The blank line before each heading is a real gap, not a collapsed space.
+  assert.ok(html.includes('<br><br>This apartment consists of:'), 'lost the gap before the first heading')
+  assert.ok(html.includes('<br><br>More Features:'), 'lost the gap before More Features')
+  assert.ok(html.includes('&nbsp;- Living room'), 'lost the indent on a list line')
+  // Nothing is left depending on a CSS property email clients drop.
+  assert.equal(html.includes('white-space'), false)
+})
+
+test('marketing email: a phone number reads correctly inside the Arabic', () => {
+  // Arabic runs right to left, so an unmarked +961 76 884 433 was laid out as
+  // "433 884 76 961+" — not a number anyone can ring.
+  const { html } = renderMarketingEmail({
+    listing: { ...publicListing(property, 'English copy.'), descriptionAr: 'اتصلوا بنا: +961 76 884 433' },
+    listingId: 45, shareUrl: 'https://s/l/t', agentName: 'A',
+  })
+  assert.ok(html.includes('<span dir="ltr">+961 76 884 433</span>'), 'the phone number is not isolated')
+})
+
+test('htmlArabic: only a long run of digits is turned around', () => {
+  // A bedroom count or a floor must not be touched.
+  assert.equal(htmlArabic('غرفتا نوم 2'), 'غرفتا نوم 2')
+  assert.equal(htmlArabic('الطابق 3'), 'الطابق 3')
+  assert.ok(htmlArabic('+961 76 884 433').startsWith('<span dir="ltr">'))
 })

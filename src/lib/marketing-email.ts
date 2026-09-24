@@ -88,6 +88,45 @@ const esc = (s: unknown) => String(s ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 
+/**
+ * A block of the agency's own writing, for the HTML half of the email.
+ *
+ * An agency's template is a layout — headings, bullet lists, a blank line
+ * before "More Features:" — and that shape is the whole reason they wrote a
+ * template. CSS cannot carry it through email: Outlook's Word engine ignores
+ * `white-space` outright and Gmail strips it in places, so every line ran
+ * together into one paragraph and the email arrived looking cramped.
+ *
+ * <br> is the one thing every client renders. Leading spaces are held with
+ * &nbsp; as well, because HTML collapses them and an indented list would
+ * otherwise lose its step.
+ */
+export function htmlText(text: unknown): string {
+  return esc(String(text ?? '').replace(/\r\n?/g, '\n'))
+    .split('\n')
+    .map(line => line.replace(/^ +/, spaces => '&nbsp;'.repeat(spaces.length)))
+    .join('<br>')
+}
+
+/**
+ * A long run of digits and the punctuation a phone number or a price is written
+ * with. Six digits or more, so a bedroom count or a floor is left alone.
+ */
+const LTR_RUN = /(\+?\d[\d٠-٩ ().\-/]{4,}\d)/g
+
+/**
+ * The same, for the Arabic half.
+ *
+ * Arabic runs right to left, and a phone number written in Western digits is a
+ * left-to-right island inside it. Left to the bidi algorithm the pieces are laid
+ * out in the wrong order — +961 76 884 433 arrived reading "433 884 76 961+",
+ * which is not a number anybody can ring. Each run is marked as its own
+ * left-to-right direction so it reads the way it was written.
+ */
+export function htmlArabic(text: unknown): string {
+  return htmlText(text).replace(LTR_RUN, '<span dir="ltr">$1</span>')
+}
+
 const money = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`
 
 export function priceLine(l: Pick<PublicListing, 'transaction' | 'price' | 'rent'>): string {
@@ -170,8 +209,8 @@ export function renderMarketingEmail(input: MarketingEmailInput): MarketingEmail
 
     <!-- 1. Description -->
     <tr><td style="background:#ffffff;border:1px solid #EEF0F4;border-radius:14px;padding:22px">
-      <p style="margin:0;font-size:15px;line-height:1.65;white-space:pre-line">${esc(description)}</p>
-      ${arabic ? `<p dir="rtl" lang="ar" style="margin:16px 0 0;padding-top:16px;border-top:1px solid #EEF0F4;font-size:15px;line-height:1.8;white-space:pre-line;text-align:right">${esc(arabic)}</p>` : ''}
+      <p style="margin:0;font-size:15px;line-height:1.65">${htmlText(description)}</p>
+      ${arabic ? `<p dir="rtl" lang="ar" style="margin:16px 0 0;padding-top:16px;border-top:1px solid #EEF0F4;font-size:15px;line-height:1.8;text-align:right">${htmlArabic(arabic)}</p>` : ''}
     </td></tr>
 
     <!-- 2. Photos -->

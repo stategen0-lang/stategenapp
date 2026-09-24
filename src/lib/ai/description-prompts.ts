@@ -184,6 +184,7 @@ Rules:
 - Keep the structure exactly: the same sections, headings, bullet points, line breaks and their order.
 - Write natural Arabic marketing copy, not a literal translation. Same meaning, same selling points, same length.
 - Leave numbers, prices and units in Western digits as they are written here: 250,000$ and 180 م².
+- Copy any phone number digit for digit, exactly as it appears in the English, and change nothing about it — not the order, not the spacing, not the + — even though the text around it runs right to left.
 - Keep the area's name as it is commonly written in Arabic in Lebanon; if you are not certain of it, leave the Latin spelling.
 - Never repeat or hint at the agent's internal notes.
 - Output only the Arabic description — no preamble, no English, no explanation, no markdown code fences.`,
