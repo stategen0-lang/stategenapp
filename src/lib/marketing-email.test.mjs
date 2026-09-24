@@ -2,7 +2,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseRecipients, renderMarketingEmail, priceLine, detailRows, photoDownloadUrl, MAX_MARKETING_RECIPIENTS } from './marketing-email.ts'
+import { parseRecipients, renderMarketingEmail, priceLine, photoDownloadUrl, MAX_MARKETING_RECIPIENTS } from './marketing-email.ts'
 import { publicListing } from './share.ts'
 
 const property = {
@@ -34,26 +34,29 @@ test('marketing email: never contains the owner, notes, documents or map pin', (
 
 test('marketing email: carries what a post needs', () => {
   const { subject, html, text } = email()
+  // Everything the team needs to identify it is on the subject line, because
+  // that is all that is left carrying the listing number and the sender.
   assert.match(subject, /#45/)
   assert.match(subject, /Sea view apartment/)
-  // Whoever the marketing team has to reply to is named in the subject.
   assert.match(subject, /from Nour Haddad/)
-  for (const s of ['$450,000', 'Kaslik, Jounieh', '180 m²', 'Nour Haddad', '+96170111222', 'https://stategen.app/l/tok', property.photos[0], 'Bright 3-bedroom']) {
+  assert.match(subject, /Kaslik, Jounieh/)
+  // And the body is the two things they post: the words and the pictures.
+  for (const s of ['Bright 3-bedroom', property.photos[0]]) {
     assert.ok(text.includes(s), `text missing ${s}`)
   }
   assert.ok(html.includes(property.photos[0]))
 })
-
 test('marketing email: listing text is HTML-escaped', () => {
+  // The description is the only listing text left in the HTML — the title now
+  // appears on the subject line, which is a header and not markup.
   const { html } = renderMarketingEmail({
-    listing: publicListing({ ...property, title: '<script>alert(1)</script>' }, 'a & b'),
+    listing: publicListing(property, '<script>alert(1)</script> a & b'),
     listingId: 1, shareUrl: 'https://s/l/t', agentName: 'A',
   })
   assert.equal(html.includes('<script>'), false)
   assert.ok(html.includes('&lt;script&gt;'))
   assert.ok(html.includes('a &amp; b'))
 })
-
 test('marketing email: an unsafe brand colour falls back to the default', () => {
   const { html } = email({ brandColor: 'red;background:url(x)' })
   assert.equal(html.includes('url(x)'), false)
@@ -64,12 +67,6 @@ test('priceLine: sale, rent, and no price', () => {
   assert.equal(priceLine({ transaction: 'For Sale', price: 450000, rent: 0 }), '$450,000')
   assert.equal(priceLine({ transaction: 'For Rent', price: 0, rent: 1200 }), '$1,200/month')
   assert.equal(priceLine({ transaction: 'For Sale', price: 0, rent: 0 }), 'Price on request')
-})
-
-test('detailRows: skips empty facts', () => {
-  const rows = detailRows(publicListing({ ...property, size: 0, beds: 0, parkings: 0, view: '', amenities: [], buildingFeatures: [] }, ''))
-  const keys = rows.map(r => r[0])
-  for (const k of ['Size', 'Bedrooms', 'Parking', 'View', 'Amenities']) assert.equal(keys.includes(k), false, k)
 })
 
 test('parseRecipients: one or several addresses, cleaned', () => {
@@ -86,18 +83,32 @@ test('parseRecipients: names the bad address, caps the count', () => {
   assert.equal(parseRecipients(many).ok, false)
 })
 
-test('marketing email: description first, then photos, then the listing card', () => {
+test('marketing email: the stamp, the description, then the photos — and nothing after', () => {
   const { html, text } = email()
-  const d = html.indexOf('Bright 3-bedroom'), ph = html.indexOf(property.photos[0]), card = html.indexOf('Listing #45')
-  assert.ok(d > -1 && ph > -1 && card > -1)
-  assert.ok(d < ph && ph < card, `html order wrong: description ${d}, photos ${ph}, card ${card}`)
+  const d = html.indexOf('Bright 3-bedroom'), ph = html.indexOf(property.photos[0])
+  assert.ok(d > -1 && ph > -1)
+  assert.ok(d < ph, `html order wrong: description ${d}, photos ${ph}`)
   assert.ok(text.indexOf('Bright 3-bedroom') < text.indexOf('Photos:'))
-  assert.ok(text.indexOf('Photos:') < text.indexOf('Listing #45'))
-  // The stamp is the first line now; the description follows it.
+  // The stamp is the first line; the description follows it.
   assert.ok(text.startsWith('★ '))
   assert.ok(text.indexOf('★ ') < text.indexOf('Bright 3-bedroom'))
 })
 
+test('marketing email: the listing card is gone, and stays gone', () => {
+  // Removed at the agency's request — the team works from the description and
+  // the photos, and the card repeated the whole listing underneath them.
+  const { html, text } = email()
+  for (const gone of ['Listing #45', 'Contact for enquiries', 'Open listing page', 'Listing page:', 'https://stategen.app/l/tok']) {
+    assert.equal(html.includes(gone), false, `html still has "${gone}"`)
+    assert.equal(text.includes(gone), false, `text still has "${gone}"`)
+  }
+  // The facts table went with it: no label/value rows are printed any more.
+  assert.equal(html.includes('Building age'), false)
+  assert.equal(text.includes('Bedrooms: 3'), false)
+  // But the listing number and the sender are still on the subject line, which
+  // is the only place the team needs them.
+  assert.match(email().subject, /New listing #45 from Nour Haddad/)
+})
 test('marketing email: attached photos are real attachments, and clicking one downloads it', () => {
   const { html, text } = email({ attachedFiles: { 0: 'listing-45-photo-1.jpg' } })
   // Never embedded inline — Gmail hides inline images from the attachment strip.

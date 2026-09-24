@@ -2,9 +2,15 @@
 // marketing team to post on OLX, Instagram, Facebook and the like.
 //
 // Layout, top to bottom — the order the marketing team works in:
-//   1. the description, ready to paste into a post
-//   2. the photos, full width (attached to the email, so they can be saved)
-//   3. the listing card: title, price, facts, contact and the listing page link
+//   1. the stamp: the listing's single strongest selling point
+//   2. the description, ready to paste into a post (English, then Arabic)
+//   3. the photos, full width (attached to the email, so they can be saved)
+//
+// And nothing else. A listing card — title, price, a facts table, the contact
+// and a link to the listing page — used to close the email and was dropped at
+// the agency's request: the team posts the description and the photos, so the
+// card was a second copy of the same listing to scroll past. The subject line
+// carries the listing number and who sent it, and the reply goes to the agency.
 //
 // Only public-safe fields reach this module (see publicListing in share.ts): the
 // email leaves the company, so the owner's name and number, internal notes and
@@ -91,25 +97,6 @@ export function priceLine(l: Pick<PublicListing, 'transaction' | 'price' | 'rent
 
 const place = (l: Pick<PublicListing, 'district' | 'city'>) => [l.district, l.city].filter(Boolean).join(', ')
 
-/** The facts a post needs, in the order a marketer would copy them. */
-export function detailRows(l: PublicListing): [string, string][] {
-  const rows: [string, string | false | undefined | null][] = [
-    ['Type', `${l.type} · ${l.transaction}`],
-    ['Price', priceLine(l)],
-    ['Location', place(l)],
-    ['Size', l.size > 0 && `${l.size} m²`],
-    ['Bedrooms', l.beds > 0 && String(l.beds)],
-    ['Bathrooms', l.baths > 0 && String(l.baths)],
-    ['Parking', l.parkings ? String(l.parkings) : null],
-    ['Furnishing', l.furnishing],
-    ['View', l.view],
-    ['Building age', l.buildingAge ? `${l.buildingAge} years` : null],
-    ['Outdoor', [l.garden && 'Garden', l.balcony && 'Balcony', l.terrace && 'Terrace'].filter(Boolean).join(', ')],
-    ['Amenities', [...l.amenities, ...l.buildingFeatures].join(', ')],
-  ]
-  return rows.filter((r): r is [string, string] => typeof r[1] === 'string' && r[1].trim() !== '')
-}
-
 /**
  * A plain description for a listing that has none written, so the email always
  * opens with text the team can paste into a post.
@@ -126,17 +113,17 @@ export function fallbackDescription(l: PublicListing): string {
 }
 
 export function renderMarketingEmail(input: MarketingEmailInput): MarketingEmail {
-  const { listing: l, listingId, shareUrl, agentName, agentPhone, companyName } = input
+  const { listing: l, listingId, agentName } = input
   const accent = /^#[0-9a-f]{6}$/i.test(input.brandColor ?? '') ? input.brandColor! : '#14223F'
   const files = input.attachedFiles ?? {}
   const where = place(l)
   // The agent's name goes early, not at the end: the marketing team works from
   // the inbox list, where a long subject is cut off, and who sent it is the
-  // first thing they need in order to reply.
+  // first thing they need in order to reply. With the listing card gone this is
+  // also the only place the listing number and the sender appear, which is the
+  // argument for having put them there.
   const from = agentName?.trim() ? ` from ${agentName.trim()}` : ''
   const subject = `New listing #${listingId}${from} to post: ${l.title}${where ? ` — ${where}` : ''}`
-  const rows = detailRows(l)
-  const contact = [agentName, agentPhone].filter(Boolean).join(' · ')
   const description = l.description.trim() || fallbackDescription(l)
   const arabic = l.descriptionAr?.trim() ?? ''
   const stamp = propertyStamp(l)
@@ -161,15 +148,7 @@ export function renderMarketingEmail(input: MarketingEmailInput): MarketingEmail
     '',
     l.photos.length ? `Photos: ${l.photos.length}${attachedCount ? ` (${attachedCount} attached)` : ''}` : 'No photos yet.',
     ...linkedPhotos.map(src => photoDownloadUrl(src, photoFilename(listingId, l.photos.indexOf(src), src))),
-    '',
-    '------------------------------',
-    `Listing #${listingId}${companyName ? ` · ${companyName}` : ''}`,
-    l.title,
-    ...rows.map(([k, v]) => `${k}: ${v}`),
-    ...(l.video ? [`Video: ${l.video}`] : []),
-    '',
-    `Contact for enquiries: ${contact}`,
-    `Listing page: ${shareUrl}`,
+    // The listing card is gone from both versions — see the HTML above.
   ].join('\n')
 
   const photoBlocks = (photoNote ? `<p style="margin:0 0 10px;font-size:13px;color:#6A7488">${esc(photoNote)}</p>` : '')
@@ -200,30 +179,11 @@ export function renderMarketingEmail(input: MarketingEmailInput): MarketingEmail
       ${l.photos.length ? photoBlocks : '<p style="margin:0 0 10px;font-size:13px;color:#6A7488">No photos yet.</p>'}
     </td></tr>
 
-    <!-- 3. Listing card -->
-    <tr><td style="background:#ffffff;border:1px solid #EEF0F4;border-radius:14px;padding:0">
-      <div style="background:${accent};padding:14px 22px;color:#ffffff;font-size:13px;font-weight:bold;border-radius:14px 14px 0 0">
-        Listing #${listingId}${companyName ? ` · ${esc(companyName)}` : ''}
-      </div>
-      <div style="padding:22px">
-        <h1 style="margin:0 0 2px;font-size:22px">${esc(l.title)}</h1>
-        <div style="font-size:14px;color:#6A7488">${esc(where)}</div>
-        <div style="margin:12px 0 18px;font-size:20px;font-weight:bold">${esc(priceLine(l))}</div>
-
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;border-top:1px solid #EEF0F4">
-          ${rows.map(([k, v]) => `<tr>
-            <td style="padding:8px 0;color:#6A7488;width:130px;border-bottom:1px solid #EEF0F4">${esc(k)}</td>
-            <td style="padding:8px 0;border-bottom:1px solid #EEF0F4">${esc(v)}</td></tr>`).join('')}
-        </table>
-
-        ${l.video ? `<p style="font-size:14px;margin:16px 0 0"><a href="${esc(l.video)}" style="color:${accent}">Watch the video</a></p>` : ''}
-
-        <div style="margin-top:18px;padding:14px;border-radius:10px;background:#F7F8FB;font-size:14px">
-          <strong>Contact for enquiries:</strong> ${esc(contact)}
-        </div>
-        <p style="margin:18px 0 0"><a href="${esc(shareUrl)}" style="display:inline-block;background:${accent};color:#ffffff;text-decoration:none;font-weight:bold;padding:10px 16px;border-radius:8px;font-size:14px">Open listing page</a></p>
-      </div>
-    </td></tr>
+    <!-- The listing card that used to sit here — the facts table, the contact
+         and the listing-page button — was removed at the agency's request. The
+         marketing team works from the description and the photos; everything
+         else was a second copy of the same listing for them to scroll past. The
+         subject line still carries the listing number and who sent it. -->
   </table>
   <p style="text-align:center;font-size:11px;color:#9AA3B2;margin-top:14px">Sent from StateGen</p>
 </body></html>`
