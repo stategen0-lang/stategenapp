@@ -11,8 +11,9 @@
 // Leaflet is loaded here on demand, the same as the properties map.
 
 import { useEffect, useRef, useState } from 'react'
-import { MapPin, X } from 'lucide-react'
+import { MapPin, X, Link2, Loader2 } from 'lucide-react'
 import type { Map as LeafletMap, Marker } from 'leaflet'
+import { readMapsPaste } from '@/lib/maps-link'
 
 const H = '#14223F'
 const SUB = '#6A7488'
@@ -33,6 +34,48 @@ export default function PinAreaModal({ name: initialName, onClose, onSaved }: Pr
   const [pin, setPin] = useState<{ lat: number; lng: number } | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [link, setLink] = useState('')
+  const [linkBusy, setLinkBusy] = useState(false)
+  const [linkError, setLinkError] = useState('')
+
+  /** Put the marker somewhere and move the map to it. */
+  const placeRef = useRef<((lat: number, lng: number, zoom?: number) => void) | null>(null)
+
+  /**
+   * Read a pasted Google Maps link. Most of them carry the coordinates in the
+   * text, so nothing is sent anywhere; the phone's Share link does not, and
+   * that one has to be followed by the server — see /api/maps/resolve.
+   */
+  async function useLink(raw: string) {
+    const text = raw.trim()
+    if (!text || linkBusy) return
+    setLinkError('')
+
+    const verdict = readMapsPaste(text)
+    if (verdict.kind === 'point') {
+      placeRef.current?.(verdict.point.lat, verdict.point.lng, 15)
+      return
+    }
+    if (verdict.kind === 'error') { setLinkError(verdict.error); return }
+
+    setLinkBusy(true)
+    try {
+      const res = await fetch('/api/maps/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: verdict.url }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.point) {
+        setLinkError(data?.error ?? 'That link could not be read. Tap the map instead.')
+      } else {
+        placeRef.current?.(data.point.lat, data.point.lng, 15)
+      }
+    } catch {
+      setLinkError('Could not reach the server. Tap the map instead.')
+    }
+    setLinkBusy(false)
+  }
 
   useEffect(() => {
     let live = true
@@ -51,10 +94,12 @@ export default function PinAreaModal({ name: initialName, onClose, onSaved }: Pr
         }).addTo(created)
         created.invalidateSize()
 
-        created.on('click', (e: { latlng: { lat: number; lng: number } }) => {
-          const { lat, lng } = e.latlng
+        // One way in for both the map tap and a pasted link, so a link that
+        // lands slightly off can still be nudged by tapping.
+        const place = (lat: number, lng: number, zoom?: number) => {
           setPin({ lat, lng })
           setError('')
+          setLinkError('')
           if (marker.current) marker.current.setLatLng([lat, lng])
           else marker.current = L.marker([lat, lng], {
             icon: L.divIcon({
@@ -63,7 +108,11 @@ export default function PinAreaModal({ name: initialName, onClose, onSaved }: Pr
               iconSize: [20, 20], iconAnchor: [10, 10],
             }),
           }).addTo(created!)
-        })
+          if (zoom) created!.setView([lat, lng], zoom)
+        }
+        placeRef.current = place
+
+        created.on('click', (e: { latlng: { lat: number; lng: number } }) => place(e.latlng.lat, e.latlng.lng))
 
         map.current = created
       } catch {
@@ -113,7 +162,7 @@ export default function PinAreaModal({ name: initialName, onClose, onSaved }: Pr
           <div>
             <p className="text-sm font-bold" style={{ color: H }}>Add this area</p>
             <p className="text-xs mt-0.5" style={{ color: SUB }}>
-              Tap the map where it is. Everyone in your agency can use it from then on.
+              Paste a Google Maps link, or tap the map. Everyone in your agency can use it from then on.
             </p>
           </div>
           <button onClick={onClose} aria-label="Close" style={{ color: SUB }}><X className="h-5 w-5" /></button>
@@ -131,13 +180,52 @@ export default function PinAreaModal({ name: initialName, onClose, onSaved }: Pr
             />
           </div>
 
+          {/* The quickest way in: the agent already has the place open in
+              Google Maps on their phone. Share → paste → done. */}
+          <div>
+            <label className="text-[11px] font-bold" style={{ color: '#9AA3B2' }}>PASTE A GOOGLE MAPS LINK</label>
+            <div className="flex gap-2 mt-1">
+              <input
+                value={link}
+                onChange={e => { setLink(e.target.value); setLinkError('') }}
+                onPaste={e => {
+                  // Acting on the paste itself saves a tap — the agent has just
+                  // come from Google Maps and has nothing else to say.
+                  const text = e.clipboardData?.getData('text') ?? ''
+                  if (text.trim()) { setLink(text.trim()); setTimeout(() => useLink(text), 0) }
+                }}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); useLink(link) } }}
+                className="flex-1 min-w-0 rounded-xl px-3 py-2.5 text-base sm:text-sm outline-none"
+                style={{ border: '1.5px solid #EEF0F4', color: H }}
+                placeholder="https://maps.app.goo.gl/…"
+                spellCheck={false}
+              />
+              <button
+                onClick={() => useLink(link)}
+                disabled={!link.trim() || linkBusy}
+                className="flex items-center gap-1.5 rounded-xl px-3 py-2.5 text-sm font-semibold disabled:opacity-50 whitespace-nowrap"
+                style={{ border: '1.5px solid #EEF0F4', background: '#F7F8FB', color: H }}
+              >
+                {linkBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />} Use
+              </button>
+            </div>
+            <p className="text-[11px] mt-1" style={{ color: SUB }}>
+              In Google Maps: hold the spot, tap Share, then paste it here. Coordinates work too.
+            </p>
+            {linkError && (
+              <p className="text-xs mt-1.5 px-3 py-2 rounded-lg" style={{ background: '#FBE7E7', color: '#A23434' }}>{linkError}</p>
+            )}
+          </div>
+
+          <p className="text-[11px] text-center" style={{ color: '#9AA3B2' }}>— or tap the map —</p>
+
           <div ref={holder} className="rounded-xl overflow-hidden"
             style={{ height: 'clamp(240px, 42vh, 380px)', border: '1.5px solid #EEF0F4', background: '#EEF2F7' }} />
 
           <p className="text-xs" style={{ color: pin ? '#1F7A4D' : SUB }}>
             {pin
               ? `Pinned at ${pin.lat.toFixed(4)}, ${pin.lng.toFixed(4)} — the caza is worked out from the nearest town.`
-              : 'No pin yet — tap the map to place one.'}
+              : 'No pin yet — paste a link or tap the map.'}
           </p>
 
           {error && (
