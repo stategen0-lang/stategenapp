@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, Suspense, lazy } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Search, X } from 'lucide-react'
+import { Search, X, Map as MapIcon, LayoutGrid } from 'lucide-react'
 import { getAgent, AGENTS, Property, Agent, PROPERTY_TYPES, propertyTypeLabel } from '@/lib/data'
 import { filterProperties } from '@/lib/search'
 import PropertyCard from '@/components/properties/MeridianPropertyCard'
@@ -14,6 +14,10 @@ import { dbRowToProperty } from '@/lib/db-mappers'
 import { useSession } from '@/hooks/use-session'
 import { isManager } from '@/lib/permissions'
 import { readCache, writeCache } from '@/lib/device-cache'
+
+// The map brings Leaflet with it, so it is a separate chunk that only loads
+// when someone actually switches to it.
+const PropertyMap = lazy(() => import('@/components/map/PropertyMap'))
 
 type AgentMap = Record<string, { name: string; initials: string; color: string; whatsapp: string | null }>
 
@@ -80,6 +84,16 @@ function PropertiesPageInner() {
   const [importOpen, setImportOpen] = useState(false)
   const [editProp, setEditProp] = useState<Property | null>(null)
   const [toast, setToast] = useState('')
+  // List or map. Remembered on the device — an agent who works from the map
+  // shouldn't have to switch to it every time they open the page. Straight
+  // localStorage rather than the device cache: that one expires, and a
+  // preference is not stale data.
+  const [view, setView] = useState<'list' | 'map'>(() => {
+    try { return localStorage.getItem('sg-properties-view') === 'map' ? 'map' : 'list' } catch { return 'list' }
+  })
+  useEffect(() => {
+    try { localStorage.setItem('sg-properties-view', view) } catch { /* private mode */ }
+  }, [view])
   // Search + filters
   const [q, setQ] = useState('')
   const [fType, setFType] = useState('')
@@ -198,17 +212,37 @@ function PropertiesPageInner() {
             <X className="h-3.5 w-3.5" /> Clear
           </button>
         )}
+
+        {/* List / map. Both show the same filtered set, so a search narrows the
+            map exactly as it narrows the grid. */}
+        <div className="flex rounded-xl overflow-hidden" style={{ border: '1.5px solid #EEF0F4' }}>
+          {([['list', 'List', LayoutGrid], ['map', 'Map', MapIcon]] as const).map(([v, label, Icon]) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              aria-pressed={view === v}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold"
+              style={view === v ? { background: '#0E1F3D', color: '#fff' } : { background: '#fff', color: '#6A7488' }}
+            >
+              <Icon className="h-4 w-4" /> {label}
+            </button>
+          ))}
+        </div>
       </div>
       {activeFilters && (
         <p className="text-xs -mt-2" style={{ color: '#9AA3B2' }}>{filtered.length} result{filtered.length === 1 ? '' : 's'}</p>
       )}
 
-      {/* Grid */}
+      {/* Grid or map */}
       {filtered.length === 0 ? (
         <div className="text-center py-20" style={{ color: '#9AA3B2' }}>
           <p className="text-base font-medium">No listings found</p>
           <p className="text-sm mt-1">{activeFilters ? 'Try clearing the search or filters' : 'Add a listing or switch to Company view'}</p>
         </div>
+      ) : view === 'map' ? (
+        <Suspense fallback={<div className="rounded-2xl" style={{ height: 'clamp(340px, 70vh, 620px)', background: '#EEF2F7' }} />}>
+          <PropertyMap properties={filtered} onSelect={setDetailId} />
+        </Suspense>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map(p => (
