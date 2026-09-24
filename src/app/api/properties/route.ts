@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse, after } from 'next/server'
-import { propertyChanges } from '@/lib/property-history'
+import { recordPropertyEdit } from '@/lib/property-edit-effects'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession, companyAccessBlocked } from '@/lib/session'
@@ -204,27 +204,17 @@ export async function PATCH(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    // Record a price or status move, so the team feed can report what changed
-    // and not only what was created. Never blocks the edit: a listing saving is
-    // what matters, its history line is not.
-    try {
-      const changes = propertyChanges(
-        { price: Number(existing.Price) || 0, status: String(existing.Status ?? ''), isRent: prevExtras.transaction === 'For Rent' },
-        { price: Number(body.price || body.rent) || 0, status: String(body.status ?? 'Available'), isRent: body.transaction === 'For Rent' },
-      )
-      if (changes.length) {
-        await supabase.from('property_history').insert(changes.map(c => ({
-          company_id: session.companyId,
-          property_id: id,
-          field: c.field,
-          old_value: c.old,
-          new_value: c.new,
-          agent_code: session.agentCode ?? null,
-        })))
-      }
-    } catch (e) {
-      console.error('[properties] history not recorded', e)
-    }
+    // Record what moved, and alert the clients a price cut brings within reach.
+    // Deferred with after() like the new-listing alerts, so the edit returns
+    // before the scan runs, and given the admin client because property_history
+    // is writable by the service role only.
+    const companyId = session.companyId
+    const agentCode = session.agentCode ?? null
+    const before = { Price: existing.Price, Status: existing.Status, Amenities: existing.Amenities }
+    const saved = data as Record<string, unknown>
+    after(async () => {
+      await recordPropertyEdit(createAdminClient(), companyId, before, saved, agentCode)
+    })
 
     return NextResponse.json({ property: data })
   } catch (err) {

@@ -26,6 +26,7 @@ import { reminderOutcome } from '@/lib/whatsapp/reminders'
 import { splitClientRef } from '@/lib/whatsapp/client-ref'
 import type { ReminderAction } from '@/lib/whatsapp/replies'
 import { createListingAlerts } from '@/lib/alerts-server'
+import { recordPropertyEdit } from '@/lib/property-edit-effects'
 import { applyOfferAction } from '@/lib/offers-server'
 import { notifyAgentNewClient } from '@/lib/whatsapp/notify'
 import { after } from 'next/server'
@@ -613,8 +614,19 @@ export async function applyPendingAction(
       }
     }
 
-    const { error } = await admin.from(p.table).update(columns).eq('id', p.id)
+    const { data: updated, error } = await admin.from(p.table).update(columns).eq('id', p.id).select().maybeSingle()
     if (error) throw error
+
+    // A price changed from a chat counts exactly as much as one changed on the
+    // web: it belongs in the team feed, and a cut should reach the clients it
+    // brings within budget. Same function the web edit uses, so the two paths
+    // can't drift apart.
+    if (p.table === 'Properties' && updated) {
+      await recordPropertyEdit(
+        admin, profile.company_id, row as Record<string, unknown>,
+        updated as Record<string, unknown>, profile.agent_code ?? null,
+      )
+    }
 
     if (actionType === 'describe_property') return `Saved — description added to ${p.label}.`
     if (actionType === 'describe_property_ar') return `Saved — Arabic version added to ${p.label}.`

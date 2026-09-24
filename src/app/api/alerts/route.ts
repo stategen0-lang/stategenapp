@@ -9,14 +9,16 @@ import type { AlertView } from '@/lib/alerts'
 
 type Row = Record<string, unknown>
 
-function propertyLabel(p: Row | null): { title: string; label: string } {
-  if (!p) return { title: 'Listing', label: '' }
-  let type = ''
-  try { type = (JSON.parse((p.Amenities as string) || '{}').type as string) || '' } catch {}
+function propertyLabel(p: Row | null): { title: string; label: string; isRent: boolean } {
+  if (!p) return { title: 'Listing', label: '', isRent: false }
+  let extras: Row = {}
+  try { extras = JSON.parse((p.Amenities as string) || '{}') as Row } catch {}
+  const type = (extras.type as string) || ''
   const where = [p.Neighborhood, p.Location].filter(Boolean).join(', ')
   return {
     title: (p.Title as string) || 'Listing',
     label: [type, where].filter(Boolean).join(' · '),
+    isRent: extras.transaction === 'For Rent',
   }
 }
 
@@ -27,7 +29,11 @@ export async function GET(req: NextRequest) {
   const supabase = await createClient()
   let query = supabase
     .from('listing_alerts')
-    .select('id, score, seen, created_at, property_id, client_id, agent_code, Properties(Title, Location, Neighborhood, Amenities), client_requests("Client Name", "client phone")')
+    // '*' rather than a column list: an alert carrying a `reason` needs
+    // migration 029, and naming a column that isn't there yet fails the whole
+    // query — the alerts page would go blank instead of simply not knowing why
+    // an alert was raised.
+    .select('*, Properties(Title, Location, Neighborhood, Amenities, Price), client_requests("Client Name", "client phone")')
     .eq('company_id', session.companyId)
     .order('created_at', { ascending: false })
     .limit(200)
@@ -50,11 +56,18 @@ export async function GET(req: NextRequest) {
     const row = r as Row
     const prop = propertyLabel(row.Properties as Row | null)
     const client = row.client_requests as Row | null
+    // Before migration 029 there is no reason column; every existing row is a
+    // new-listing alert, which is what the default says too.
+    const reason = row.reason === 'price_drop' ? 'price_drop' as const : 'new' as const
     return {
       id: row.id as string,
       score: Number(row.score) || 0,
       seen: !!row.seen,
       created_at: row.created_at as string,
+      reason,
+      oldPrice: reason === 'price_drop' ? Number(row.old_price) || null : null,
+      newPrice: Number((row.Properties as Row | null)?.Price) || null,
+      isRent: prop.isRent,
       propertyId: (row.property_id as number) ?? null,
       propertyTitle: prop.title,
       propertyLabel: prop.label,

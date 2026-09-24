@@ -52,11 +52,19 @@ export function buildAlerts(
 
 // ── Display ──────────────────────────────────────────────────────────────────
 
+/** Why the alert exists. Stored, not inferred — see migration 029. */
+export type AlertReason = 'new' | 'price_drop'
+
 export interface AlertView {
   id: string
   score: number
   seen: boolean
   created_at: string
+  reason: AlertReason
+  /** Price-drop alerts only: what it cost before, and what it costs now. */
+  oldPrice?: number | null
+  newPrice?: number | null
+  isRent?: boolean
   propertyId: number | null
   propertyTitle: string
   propertyLabel: string   // "Villa · Achrafieh, Beirut"
@@ -67,6 +75,9 @@ export interface AlertView {
 }
 
 /** A one-line summary for an alert row. */
-export function alertHeadline(a: Pick<AlertView, 'clientName' | 'propertyTitle' | 'score'>): string {
-  return `${a.propertyTitle} matches ${a.clientName} — ${a.score}%`
+export function alertHeadline(a: Pick<AlertView, 'clientName' | 'propertyTitle' | 'score' | 'reason'>): string {
+  // A price drop is not "a listing matches your client" — the client has been
+  // waiting and something changed. Saying so is the whole point of the alert.
+  const verb = a.reason === 'price_drop' ? 'is now in budget for' : 'matches'
+  return `${a.propertyTitle} ${verb} ${a.clientName} — ${a.score}%`
 }

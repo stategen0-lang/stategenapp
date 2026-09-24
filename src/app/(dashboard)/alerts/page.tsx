@@ -1,8 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Bell, Check, MessageCircle } from 'lucide-react'
+import { Bell, Check, MessageCircle, TrendingDown } from 'lucide-react'
 import type { AlertView } from '@/lib/alerts'
+import { dropLine } from '@/lib/price-drop-format'
 import { useSession } from '@/hooks/use-session'
 import { isManager } from '@/lib/permissions'
 
@@ -70,7 +71,12 @@ export default function AlertsPage() {
       if (r.ok) link = (await r.json()).url ?? ''
     } catch { /* send without the link rather than block */ }
     const first = a.clientName.split(' ')[0]
-    const msg = `Hi ${first}, I found a listing that might suit you — ${a.propertyTitle}${a.propertyLabel ? ` (${a.propertyLabel})` : ''}.${link ? `\n${link}` : ''}`
+    // A price drop is worth saying out loud — it is the reason the client is
+    // hearing about this listing now rather than when it was first added.
+    const opener = a.reason === 'price_drop'
+      ? `Hi ${first}, the price just came down on a listing I think suits you`
+      : `Hi ${first}, I found a listing that might suit you`
+    const msg = `${opener} — ${a.propertyTitle}${a.propertyLabel ? ` (${a.propertyLabel})` : ''}.${link ? `\n${link}` : ''}`
     window.open(`https://wa.me/${a.clientPhone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank')
     if (!a.seen) markOne(a.id)
   }
@@ -82,7 +88,7 @@ export default function AlertsPage() {
           <h1 className="text-xl md:text-2xl font-bold" style={{ color: H, letterSpacing: '-0.3px' }}>Alerts</h1>
           <p className="text-xs md:text-sm mt-0.5" style={{ color: SUB }}>
             {loading ? 'Loading…'
-              : alerts.length === 0 ? 'New listings that match your clients will appear here'
+              : alerts.length === 0 ? 'New listings and price drops that match your clients will appear here'
               : manager ? `${alerts.length} match${alerts.length === 1 ? '' : 'es'} across the agency${unseen ? ` · ${unseen} new` : ''}`
               : `${alerts.length} listing${alerts.length === 1 ? '' : 's'} matched to your clients${unseen ? ` · ${unseen} new` : ''}`}
           </p>
@@ -101,7 +107,7 @@ export default function AlertsPage() {
           <Bell className="h-6 w-6 mx-auto mb-2" style={{ color: '#C4CAD6' }} />
           <p className="text-sm font-semibold" style={{ color: H }}>No alerts yet</p>
           <p className="text-xs mt-1" style={{ color: SUB }}>
-            When a new listing is added that fits a client&apos;s brief, you&apos;ll be notified here.
+            When a new listing fits a client&apos;s brief — or a price drop brings one into their budget — you&apos;ll be notified here.
           </p>
         </div>
       )}
@@ -131,11 +137,25 @@ export default function AlertsPage() {
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: sc.bg, color: sc.color }}>
                     {a.score}% match
                   </span>
+                  {/* A price drop is a different kind of news from a new listing,
+                      so it says so before the agent reads a word of the rest. */}
+                  {a.reason === 'price_drop' && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full inline-flex items-center gap-1"
+                      style={{ background: '#FBE7E7', color: '#A23434' }}>
+                      <TrendingDown className="h-3 w-3" /> PRICE DROP
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs mt-0.5" style={{ color: SUB }}>
-                  matches <span style={{ color: H, fontWeight: 600 }}>{a.clientName}</span>
+                  {a.reason === 'price_drop' ? 'now in budget for ' : 'matches '}
+                  <span style={{ color: H, fontWeight: 600 }}>{a.clientName}</span>
                   {a.propertyLabel ? ` · ${a.propertyLabel}` : ''}
                 </p>
+                {a.reason === 'price_drop' && !!a.oldPrice && !!a.newPrice && (
+                  <p className="text-xs mt-1 font-semibold" style={{ color: '#A23434' }}>
+                    {dropLine(a.oldPrice, a.newPrice, !!a.isRent)}
+                  </p>
+                )}
                 {manager && a.agentName && (
                   <p className="text-[11px] mt-1 font-semibold" style={{ color: '#2E5288' }}>{a.agentName}&apos;s client</p>
                 )}

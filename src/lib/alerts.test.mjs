@@ -77,6 +77,13 @@ test('buildAlerts: empty client list is empty', () => {
 })
 
 test('alertHeadline: reads naturally', () => {
-  const h = alertHeadline({ clientName: 'Ahmed', propertyTitle: 'Raouché Apartment', score: 87 })
+  const h = alertHeadline({ clientName: 'Ahmed', propertyTitle: 'Raouché Apartment', score: 87, reason: 'new' })
   assert.match(h, /Raouché Apartment matches Ahmed — 87%/)
+  // An alert with no reason on it predates migration 029; it is a new listing.
+  assert.match(alertHeadline({ clientName: 'Ahmed', propertyTitle: 'Flat', score: 70 }), /Flat matches Ahmed/)
+})
+
+test('alertHeadline: a price drop says why the agent is hearing about it', () => {
+  const h = alertHeadline({ clientName: 'Charbel', propertyTitle: 'Land plot', score: 74, reason: 'price_drop' })
+  assert.match(h, /Land plot is now in budget for Charbel — 74%/)
 })
