@@ -131,9 +131,14 @@ export default function PropertyMap({ properties, onSelect }: Props) {
 
     return () => {
       live = false
-      map.current?.remove()
+      // ONE remove. `created` and `map.current` are the same map, and calling
+      // remove() on an already-removed one throws — from inside an effect
+      // cleanup, which React lets take the whole tree down with it. `created`
+      // is the fallback for unmounting before the async setup finished.
+      const m = map.current ?? created
       map.current = null
-      created?.remove()
+      created = null
+      try { m?.remove() } catch { /* already gone */ }
     }
   }, [])
 

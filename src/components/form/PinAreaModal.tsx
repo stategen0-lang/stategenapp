@@ -11,7 +11,7 @@
 // Leaflet is loaded here on demand, the same as the properties map.
 
 import { useEffect, useRef, useState } from 'react'
-import { MapPin, X, Link2, Loader2 } from 'lucide-react'
+import { MapPin, X, Link2, Loader2, ExternalLink } from 'lucide-react'
 import type { Map as LeafletMap, Marker } from 'leaflet'
 import { readMapsPaste } from '@/lib/maps-link'
 
@@ -120,7 +120,20 @@ export default function PinAreaModal({ name: initialName, onClose, onSaved }: Pr
       }
     })()
 
-    return () => { live = false; map.current?.remove(); map.current = null; created?.remove() }
+    // ONE remove. `created` and `map.current` are the same map, and calling
+    // remove() on an already-removed one throws — from inside an effect
+    // cleanup, which React lets take the whole tree down with it. This ran on
+    // every close of this dialog, so saving an area white-screened the listing
+    // form behind it. `created` is the fallback for unmounting before the async
+    // setup finished.
+    return () => {
+      live = false
+      const m = map.current ?? created
+      map.current = null
+      created = null
+      placeRef.current = null
+      try { m?.remove() } catch { /* already gone */ }
+    }
   }, [])
 
   // Escape closes, as everywhere else in the app.
@@ -209,9 +222,24 @@ export default function PinAreaModal({ name: initialName, onClose, onSaved }: Pr
                 {linkBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />} Use
               </button>
             </div>
-            <p className="text-[11px] mt-1" style={{ color: SUB }}>
-              In Google Maps: hold the spot, tap Share, then paste it here. Coordinates work too.
-            </p>
+            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+              {/* Half the job is finding the place. Google's search is the one
+                  every agent already knows, so send them straight to it with
+                  the name they typed — they share it back and paste. */}
+              <button
+                type="button"
+                onClick={() => window.open(
+                  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${name.trim() || 'Lebanon'}, Lebanon`)}`,
+                  '_blank', 'noopener,noreferrer')}
+                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold"
+                style={{ background: '#EAF0FA', color: '#2E5288' }}
+              >
+                <ExternalLink className="h-3.5 w-3.5" /> Find it in Google Maps
+              </button>
+              <p className="text-[11px]" style={{ color: SUB }}>
+                then hold the spot, tap Share, and paste it here.
+              </p>
+            </div>
             {linkError && (
               <p className="text-xs mt-1.5 px-3 py-2 rounded-lg" style={{ background: '#FBE7E7', color: '#A23434' }}>{linkError}</p>
             )}

@@ -210,16 +210,24 @@ export default function AreaInput({
             onSaved={saved => {
               pinningRef.current = false
               setPinning(null)
+              // The name is put in the box FIRST and by itself. Everything after
+              // this is an improvement on it — reloading the gazetteer, telling
+              // the form which area it is — and the agent is standing in a
+              // half-filled listing, so none of it may be allowed to throw and
+              // take the form down with it.
+              onChange(saved)
+              try { onEnter?.(saved) } catch (e) { console.error('[area] onEnter failed', e) }
+
               // Rebuild the index so the new place is live immediately — the
-              // agent is mid-listing and should not have to reload to use what
-              // they just taught the app.
+              // agent should not have to reload to use what they just taught it.
               forgetCompanyAreas()
-              loadCompanyAreas().then(ix => {
-                setIndex(ix)
-                onChange(saved)
-                onArea?.(resolveArea(ix, saved)?.area ?? null)
-                onEnter?.(saved)
-              }).catch(() => { onChange(saved); onEnter?.(saved) })
+              loadCompanyAreas()
+                .then(ix => {
+                  setIndex(ix)
+                  try { onArea?.(resolveArea(ix, saved)?.area ?? null) }
+                  catch (e) { console.error('[area] onArea failed', e) }
+                })
+                .catch(e => console.error('[area] reloading the gazetteer failed', e))
             }}
           />
         </Suspense>
