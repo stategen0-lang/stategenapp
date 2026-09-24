@@ -195,3 +195,60 @@ test('the region table is built once and covers every caza', () => {
   for (const caza of ix.cazas) assert.ok(resolveRegion(ix, caza), `${caza} must resolve`)
   for (const gov of ix.governorates) assert.ok(resolveRegion(ix, gov), `${gov} must resolve`)
 })
+
+// ── Never rewrite to a place the agent did not mean ──────────────────────────
+// Reported from the field: typing "Hbous" offered nothing and silently saved a
+// different area. The cause was GeoNames' machine spellings — a letter-by-letter
+// rendering of the Arabic ("hbwsh" for حبوش) folds to the same short consonant
+// key as a real Latin spelling of somewhere else, and being the only holder of
+// that key it looked certain. Those alternates are no longer imported.
+
+test('an area we do not know is a suggestion, never a correction', () => {
+  const r = resolveArea(ix, 'Hbous')
+  // It may still be offered — but not with the confidence that rewrites the box.
+  assert.ok(!r || !r.confident, 'an unknown place must never be confidently rewritten')
+})
+
+test('no area is reachable through a machine transliteration', () => {
+  // GeoNames capitalises Latin place names; all-lowercase alternates are the
+  // Arabic spelled out ("alrbwt") or another language's romanisation
+  // ("ba lei bei ke", "barubekku"). None of them belong in a Latin gazetteer.
+  const junk = []
+  for (const area of ix.areas) {
+    for (const alias of area.aliases) {
+      if (alias === alias.toLowerCase() && /[a-z]/.test(alias)) junk.push(`${area.name}: ${alias}`)
+    }
+  }
+  assert.deepEqual(junk, [], 'machine spellings must be filtered out by gen-areas.mjs')
+})
+
+test('Rabieh and Rabweh are two places, a kilometre apart', () => {
+  // GeoNames files both names on one row, which made "Rabweh" resolve —
+  // confidently — to Rabieh. Every Metn agent deals with both.
+  const rabieh = resolveArea(ix, 'Rabieh')
+  const rabweh = resolveArea(ix, 'Rabweh')
+  assert.equal(rabieh?.area.name, 'Rabieh')
+  assert.equal(rabweh?.area.name, 'Rabweh')
+  assert.ok(rabieh.confident && rabweh.confident)
+  assert.equal(rabieh.area.caza, 'Metn')
+  assert.equal(rabweh.area.caza, 'Metn')
+  assert.ok(distanceKm(rabieh.area, rabweh.area) < 3, 'neighbours, not the same pin')
+  assert.ok(distanceKm(rabieh.area, rabweh.area) > 0, 'and genuinely two pins')
+  // The short spelling agents actually type.
+  assert.equal(resolveArea(ix, 'Rabwe')?.area.name, 'Rabweh')
+})
+
+test('the spellings that must still be corrected still are', () => {
+  // Guard against over-trimming: dropping the machine aliases must not cost us
+  // the real ones.
+  const pairs = [
+    ['Ashrafiyeh', 'Achrafieh'], ['achrafiye', 'Achrafieh'], ['Sour', 'Tyre'],
+    ['Jounie', 'Jounieh'], ['Kaslick', 'Kaslik'], ['Dbaye', 'Dbayeh'],
+    ['Zalqa', 'Zalka'], ['Hazmiyeh', 'Hazmieh'], ['Baabda', 'Baabda'],
+  ]
+  for (const [typed, canonical] of pairs) {
+    const r = resolveArea(ix, typed)
+    assert.ok(r?.confident, `${typed} should still be corrected`)
+    assert.equal(r.area.name, canonical, typed)
+  }
+})

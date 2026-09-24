@@ -57,6 +57,13 @@ export default function AreaInput({
 
   useEffect(() => () => { if (blurTimer.current) clearTimeout(blurTimer.current) }, [])
 
+  // Does the gazetteer actually recognise what is typed? Only a confident
+  // resolution counts: a loose one is a suggestion, and the agent's own text is
+  // what gets saved, so they should be told that is what will happen.
+  const typed = value.trim()
+  const known = !!typed && !!index && !!resolveArea(index, typed)?.confident
+  const showKeep = !!typed && !!index && !known
+
   function pick(area: Area) {
     onChange(area.name)
     onArea?.(area)
@@ -120,11 +127,31 @@ export default function AreaInput({
         }}
       />
 
-      {open && hits.length > 0 && (
+      {open && (hits.length > 0 || showKeep) && (
         <div
           className="absolute left-0 right-0 top-full mt-1 rounded-xl overflow-y-auto z-30"
           style={{ background: '#fff', border: '1.5px solid #EEF0F4', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', maxHeight: 240 }}
         >
+          {/* An area we do not know must say so. Before this, a place missing
+              from the gazetteer simply showed no suggestions — indistinguishable
+              from the list not having loaded — and the agent had no way to tell
+              whether what they typed would be kept. It always is. */}
+          {showKeep && (
+            <button
+              type="button"
+              onMouseDown={e => { e.preventDefault(); setOpen(false); onEnter?.(settle()) }}
+              className="w-full text-left px-3 py-2 flex items-center gap-2"
+              style={{ background: '#FBF6EE', borderBottom: hits.length ? '1px solid #F4F5F8' : 'none' }}
+            >
+              <MapPin size={13} style={{ color: '#9A6516', flexShrink: 0 }} />
+              <span className="text-sm font-medium truncate" style={{ color: '#14223F' }}>
+                Keep &ldquo;{value.trim()}&rdquo;
+              </span>
+              <span className="text-xs ml-auto pl-2 whitespace-nowrap" style={{ color: '#9A6516' }}>
+                not in our list
+              </span>
+            </button>
+          )}
           {hits.map((a, i) => (
             <button
               key={a.slug}

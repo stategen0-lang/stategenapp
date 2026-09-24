@@ -104,8 +104,11 @@ const TOWNS = {
   Metn: [
     ['Dbayeh', ['Dbaye', 'Dbayé']], ['Zalka', ['Zalqa']],
     ['Jal el Dib', ['Jal ed Dib', 'Jall Al Dieb'], 273535], ['Antelias', []],
-    ['Naccache', ['Nakkache', 'En Naqqach'], 278838], ['Rabieh', ['Rabiyeh']],
-    ['Rabweh', ['Rabwe']], ['Mansourieh', ['Mansouriyeh']], ['Mkalles', []],
+    // Pinned by id: Rabieh and Rabweh are a kilometre apart and GeoNames files
+    // both names on one row, so left to the name match they both landed on it
+    // and one of the two disappeared. See WRONG_ALIASES below.
+    ['Naccache', ['Nakkache', 'En Naqqach'], 278838], ['Rabieh', ['Rabiyeh'], 6275485],
+    ['Rabweh', ['Rabwe', 'Er Raboue'], 278531], ['Mansourieh', ['Mansouriyeh']], ['Mkalles', []],
     ['Dekwaneh', ['Dekouaneh']], ['Sin el Fil', []], ['Horsh Tabet', []],
     ['Jdeideh', ['Jdeidet el Metn', 'Jdaidet el Matn'], 279854], ['Bauchrieh', ['Bouchrieh']],
     ['Bourj Hammoud', ['Burj Hammud']], ['Beit Mery', ['Bayt Miri']],
@@ -190,7 +193,17 @@ for (const line of lines) {
     lng: +lng.toFixed(3),
     hot: SEAT.has(c[7]) || Number(c[14]) > 0,
     aliases: (c[3] || '').split(',').map(clean)
-      .filter(s => s && s.length <= 40 && LATIN.test(s) && !/[()]/.test(s)),
+      .filter(s => s && s.length <= 40 && LATIN.test(s) && !/[()]/.test(s))
+      // Drop the machine spellings. GeoNames capitalises Latin place names, so
+      // an all-lowercase alternate is either a letter-by-letter rendering of the
+      // Arabic ("hbwsh" for حبوش, "alrbwt" for الربوة) or a romanisation from
+      // another language entirely ("ba lei bei ke", "barubekku"). No agent will
+      // ever type one — but they fold down to short consonant keys that collide
+      // with the real Latin spelling of a DIFFERENT town, and because the junk
+      // alias is then the only holder of that key the match looks certain and
+      // the agent's text is silently replaced. "Hbous" became Habbouch, 70 km
+      // away, through "hbwsh". Half of all alternates were this.
+      .filter(s => s !== s.toLowerCase()),
   })
 }
 
@@ -217,8 +230,25 @@ for (const p of places) {
   merged.push(p)
 }
 
-// ── Apply curation ───────────────────────────────────────────────────────────
 const problems = []
+
+// ── Aliases GeoNames files on the wrong row ──────────────────────────────────
+// 278531 is الربوة (Rabweh) — that is the only Arabic name on the row — but its
+// Latin alternates also carry الرابية (Rabieh), the separate Metn locality a
+// kilometre away that GeoNames lists again as 6275485. Left in place, the two
+// towns share a fold key and neither can be corrected to with any confidence.
+const WRONG_ALIASES = {
+  278531: ['Ar Rabiyah', 'Er Rabie', 'Er Rabié', 'Er Râbié'],
+}
+
+for (const [id, wrong] of Object.entries(WRONG_ALIASES)) {
+  const p = byId.get(Number(id))
+  if (!p) { problems.push(`id ${id} has wrong-alias entries but is not in the dump`); continue }
+  const drop = new Set(wrong.map(foldArea))
+  p.aliases = p.aliases.filter(a => !drop.has(foldArea(a)))
+}
+
+// ── Apply curation ───────────────────────────────────────────────────────────
 
 for (const [id, o] of Object.entries(BY_ID)) {
   const p = byId.get(Number(id))
