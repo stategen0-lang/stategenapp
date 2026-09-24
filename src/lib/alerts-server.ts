@@ -7,6 +7,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { dbRowToProperty, dbRowToClient } from '@/lib/db-mappers'
 import { buildAlerts } from '@/lib/alerts'
 import { priceDropAlerts, askingPrice } from '@/lib/price-drop'
+import { companyAreaIndex } from '@/lib/lebanon/company-areas-server'
 
 /**
  * Raise match alerts for a freshly-created property row. Returns how many were
@@ -27,7 +28,9 @@ export async function createListingAlerts(
       .eq('company_id', companyId)
 
     const clients = (rows ?? []).map((r, i) => dbRowToClient(r as Record<string, unknown>, i))
-    const drafts = buildAlerts(property, clients)
+    // Including the places this agency taught the app, so a listing in one of
+    // them alerts like any other.
+    const drafts = buildAlerts(property, clients, { ix: await companyAreaIndex(admin, companyId) })
     if (!drafts.length) return 0
 
     const insert = drafts.map(d => ({
@@ -76,7 +79,7 @@ export async function createPriceDropAlerts(
       .eq('company_id', companyId)
 
     const clients = (rows ?? []).map((r, i) => dbRowToClient(r as Record<string, unknown>, i))
-    const drafts = priceDropAlerts(property, clients, oldPrice)
+    const drafts = priceDropAlerts(property, clients, oldPrice, { ix: await companyAreaIndex(admin, companyId) })
     if (!drafts.length) return 0
 
     const insert = drafts.map(d => ({

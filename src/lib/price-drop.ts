@@ -19,6 +19,7 @@ import type { Property, Client } from '@/lib/data'
 // the test runner strips types without resolving the "@/" alias.
 import { matchClients } from './matching.ts'
 import { ALERT_THRESHOLD, MAX_ALERTS_PER_LISTING, type AlertDraft } from './alerts.ts'
+import type { AreaIndex } from './lebanon/areas-core.ts'
 import { dropPercent } from './price-drop-format.ts'
 
 // Re-exported so callers that already have this module don't need both, while
@@ -63,7 +64,7 @@ export function priceDropAlerts(
   property: Property,
   clients: Client[],
   oldPrice: number,
-  opts: { threshold?: number; max?: number } = {},
+  opts: { threshold?: number; max?: number; ix?: AreaIndex | null } = {},
 ): AlertDraft[] {
   if (property.status === 'Sold') return []
   const newPrice = askingPrice(property)
@@ -73,9 +74,9 @@ export function priceDropAlerts(
   const max = opts.max ?? MAX_ALERTS_PER_LISTING
 
   // Everyone the listing already suited, at the price it already had.
-  const before = new Set(matchClients(atPrice(property, oldPrice), clients, threshold).map(m => m.client.id))
+  const before = new Set(matchClients(atPrice(property, oldPrice), clients, threshold, opts.ix).map(m => m.client.id))
 
-  return matchClients(property, clients, threshold)
+  return matchClients(property, clients, threshold, opts.ix)
     .filter(m => !before.has(m.client.id))
     .slice(0, max)
     .map(({ client, score }) => ({

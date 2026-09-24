@@ -8,7 +8,7 @@ import {
   formatPrice, TYPE_GRADIENTS, propertyLocation,
 } from '@/lib/data'
 import { propFeatures, matchClients, matchProperties, nearMisses, nearMissClients, MATCH_THRESHOLD, ScoreResult, MatchIssue } from '@/lib/matching'
-import { loadAreas } from '@/lib/lebanon/areas'
+import { loadCompanyAreas } from '@/lib/lebanon/areas'
 import { dbRowToProperty, dbRowToClient } from '@/lib/db-mappers'
 
 function norm(s: string) { return (s ?? '').toLowerCase().trim() }
@@ -197,7 +197,7 @@ export default function MatchCards({ entityType, entity, onOpenProperty, onOpenC
             if (Array.isArray(data.clients)) pool = data.clients.map(dbRowToClient)
           }
         } catch { /* keep demo fallback */ }
-        const areas = await loadAreas().catch(() => null)
+        const areas = await loadCompanyAreas().catch(() => null)
         const found = matchClients(prop, pool, MATCH_THRESHOLD, areas)
         setMatchedClients(found)
         setMisses(found.length ? [] : nearMissClients(prop, pool, areas).map(m => ({ id: m.client.id, label: m.client.name, reasons: m.reasons })))
@@ -212,7 +212,7 @@ export default function MatchCards({ entityType, entity, onOpenProperty, onOpenC
             if (Array.isArray(data.properties)) pool = data.properties.map(dbRowToProperty)
           }
         } catch { /* keep demo fallback */ }
-        const areas = await loadAreas().catch(() => null)
+        const areas = await loadCompanyAreas().catch(() => null)
         const found = matchProperties(client, pool, MATCH_THRESHOLD, areas)
         setMatchedProperties(found)
         setMisses(found.length ? [] : nearMisses(client, pool, areas).map(m => ({ id: m.property.id, label: `#${m.property.id} ${m.property.title}`, reasons: m.reasons })))

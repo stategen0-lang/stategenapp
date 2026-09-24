@@ -11,7 +11,7 @@ import { dbRowToProperty } from '@/lib/db-mappers'
 import { useSession } from '@/hooks/use-session'
 import { useLockBodyScroll } from '@/hooks/use-lock-body-scroll'
 import AreaInput from '@/components/form/AreaInput'
-import { loadAreas } from '@/lib/lebanon/areas'
+import { loadCompanyAreas } from '@/lib/lebanon/areas'
 import { hasField, type ListingField } from '@/lib/property-fields'
 import { isManager } from '@/lib/permissions'
 import DeleteRecord from './DeleteRecord'
@@ -184,7 +184,7 @@ export default function NewClientModal({ onClose, onSaved, onDeleted, matchThres
     // Transaction is implied by client type (Buyer→For Sale, Renter→For Rent) —
     // there's no separate field to fill.
     const reqForMatch = { ...reqWithLocations(), transaction: (type === 'Renter' ? 'For Rent' : 'For Sale') as ClientReq['transaction'] }
-    const areas = await loadAreas().catch(() => null)
+    const areas = await loadCompanyAreas().catch(() => null)
     setMatches(matchProperties({ req: reqForMatch, budget: parseInt(budget) || 0, type }, pool, matchThreshold, areas))
     setFinding(false)
     setStep(2)

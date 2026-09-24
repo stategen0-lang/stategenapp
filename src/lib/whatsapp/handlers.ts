@@ -9,7 +9,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { canSeeClientPII, isManager, maskClientName } from '@/lib/permissions'
 import { dbRowToClient, dbRowToProperty } from '@/lib/db-mappers'
 import { matchProperties, MATCH_THRESHOLD } from '@/lib/matching'
-import { loadAreas } from '@/lib/lebanon/areas'
+import { companyAreaIndex } from '@/lib/lebanon/company-areas-server'
 import { formatPrice, propertyLocation, type Property } from '@/lib/data'
 import type { IntentResult } from '@/lib/whatsapp/intent'
 import { splitClientRef } from '@/lib/whatsapp/client-ref'
@@ -211,7 +211,10 @@ export async function handleQueryProperty(
     },
   }
 
-  const matches = matchProperties(criteria, pool, MATCH_THRESHOLD, await loadAreas().catch(() => null)).slice(0, 5)
+  // The agency's own places included, so a listing filed in an area an agent
+  // taught the app is findable from a chat too.
+  const areas = await companyAreaIndex(admin, profile.company_id).catch(() => null)
+  const matches = matchProperties(criteria, pool, MATCH_THRESHOLD, areas).slice(0, 5)
   if (!matches.length) {
     const what = [intent.budget ? formatPrice(intent.budget) : null, intent.location].filter(Boolean).join(' in ')
     return `Nothing matches ${what}.\n\nThe matcher only suggests listings within ±50% of budget${intent.location ? ` in ${intent.location}` : ''}.`

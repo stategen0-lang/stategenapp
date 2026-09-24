@@ -10,9 +10,13 @@
 //
 // The 53 KB of place data is fetched on first focus, not on page load.
 
-import { useEffect, useRef, useState } from 'react'
-import { MapPin } from 'lucide-react'
-import { loadAreas, loadedAreas, areaLabel, searchAreas, resolveArea, type Area, type AreaIndex } from '@/lib/lebanon/areas'
+import { useEffect, useRef, useState, lazy, Suspense } from 'react'
+import { MapPin, Plus } from 'lucide-react'
+import { loadCompanyAreas, loadedAreas, areaLabel, searchAreas, resolveArea, forgetCompanyAreas, type Area, type AreaIndex } from '@/lib/lebanon/areas'
+
+// Only reached when an agent teaches the app a place, and it brings Leaflet
+// with it, so it stays out of every other listing form.
+const PinAreaModal = lazy(() => import('./PinAreaModal'))
 import { toPlace } from '@/lib/whatsapp/writes'
 
 interface Props {
@@ -42,11 +46,17 @@ export default function AreaInput({
   const [active, setActive] = useState(0)
   const wrap = useRef<HTMLDivElement>(null)
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** The name being taught, while the pin dialog is open. */
+  const [pinning, setPinning] = useState<string | null>(null)
+  // A ref as well as state: the blur that follows opening the dialog must not
+  // settle the field behind it, and it can fire before the re-render lands.
+  const pinningRef = useRef(false)
 
   // Fetched once, on the first focus of the first area field in the session.
   function ensureLoaded() {
     if (index) return
-    loadAreas().then(setIndex).catch(() => {})
+    // The agency's own places come with it — see loadCompanyAreas.
+    loadCompanyAreas().then(setIndex).catch(() => {})
   }
 
   useEffect(() => {
@@ -120,6 +130,7 @@ export default function AreaInput({
         // outlive the blur by a moment or the tap lands on nothing.
         onBlur={() => {
           blurTimer.current = setTimeout(() => {
+            if (pinningRef.current) return   // the pin dialog owns the field now
             setOpen(false)
             const settled = settle()
             if (settled) onEnter?.(settled)
@@ -152,6 +163,24 @@ export default function AreaInput({
               </span>
             </button>
           )}
+          {/* …and offer to fix that for good. One pin and the place joins the
+              agency's gazetteer, so nobody has to type it blind again. */}
+          {showKeep && (
+            <button
+              type="button"
+              onMouseDown={e => { e.preventDefault(); pinningRef.current = true; setOpen(false); setPinning(value.trim()) }}
+              className="w-full text-left px-3 py-2 flex items-center gap-2"
+              style={{ background: '#F5F9FE', borderBottom: hits.length ? '1px solid #F4F5F8' : 'none' }}
+            >
+              <Plus size={13} style={{ color: '#2E5288', flexShrink: 0 }} />
+              <span className="text-sm font-medium truncate" style={{ color: '#14223F' }}>
+                Add &ldquo;{value.trim()}&rdquo; to our areas
+              </span>
+              <span className="text-xs ml-auto pl-2 whitespace-nowrap" style={{ color: '#2E5288' }}>
+                drop a pin
+              </span>
+            </button>
+          )}
           {hits.map((a, i) => (
             <button
               key={a.slug}
@@ -171,6 +200,29 @@ export default function AreaInput({
             </button>
           ))}
         </div>
+      )}
+
+      {pinning !== null && (
+        <Suspense fallback={null}>
+          <PinAreaModal
+            name={pinning}
+            onClose={() => { pinningRef.current = false; setPinning(null) }}
+            onSaved={saved => {
+              pinningRef.current = false
+              setPinning(null)
+              // Rebuild the index so the new place is live immediately — the
+              // agent is mid-listing and should not have to reload to use what
+              // they just taught the app.
+              forgetCompanyAreas()
+              loadCompanyAreas().then(ix => {
+                setIndex(ix)
+                onChange(saved)
+                onArea?.(resolveArea(ix, saved)?.area ?? null)
+                onEnter?.(saved)
+              }).catch(() => { onChange(saved); onEnter?.(saved) })
+            }}
+          />
+        </Suspense>
       )}
     </div>
   )

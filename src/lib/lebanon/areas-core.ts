@@ -185,16 +185,7 @@ export function buildIndex(packed: string, governorates: string[], cazas: string
       aliases: alts ? alts.split(';') : [],
     }
     areas.push(area)
-
-    for (const [spelling, isName] of [[name, true] as const, ...area.aliases.map(a => [a, false] as const)]) {
-      const f = foldArea(spelling)
-      if (!f) continue
-      keys.push({ k: f, area, isName })
-      push(byFold, f, area)
-      push(byTight, tightArea(spelling), area)
-      push(byTight, tightAreaWithArticles(spelling), area)
-      push(bySkeleton, skeletonArea(spelling), area)
-    }
+    indexArea(area, byFold, byTight, bySkeleton, keys)
   }
 
   // Cazas last so a governorate of the same name wins: someone asking for
@@ -220,6 +211,63 @@ export function buildIndex(packed: string, governorates: string[], cazas: string
 function push(m: Map<string, Area[]>, k: string, a: Area) {
   const at = m.get(k)
   if (at) { if (!at.includes(a)) at.push(a) } else m.set(k, [a])
+}
+
+/** Every key an area answers to, added to the four lookup maps. */
+function indexArea(
+  area: Area,
+  byFold: Map<string, Area[]>,
+  byTight: Map<string, Area[]>,
+  bySkeleton: Map<string, Area[]>,
+  keys: Key[],
+) {
+  for (const [spelling, isName] of [[area.name, true] as const, ...area.aliases.map(a => [a, false] as const)]) {
+    const f = foldArea(spelling)
+    if (!f) continue
+    keys.push({ k: f, area, isName })
+    push(byFold, f, area)
+    push(byTight, tightArea(spelling), area)
+    push(byTight, tightAreaWithArticles(spelling), area)
+    push(bySkeleton, skeletonArea(spelling), area)
+  }
+}
+
+/**
+ * The built-in gazetteer plus places an agency has taught the app.
+ *
+ * Lebanon has more named places than any dump contains — an agent's "Hbous" is
+ * real even when GeoNames has never heard of it — so when someone drops a pin
+ * on one it is remembered and used from then on, for suggestions and for
+ * matching alike.
+ *
+ * Returns a NEW index; the shared one is never mutated. That matters on the
+ * server, where one process answers for every agency: a place one agency taught
+ * must not leak into another's matching. The maps are copied (about 3,600
+ * entries, roughly a millisecond) rather than rebuilt from the packed string.
+ *
+ * A learned area never overrides a built-in one — it is pushed onto the same
+ * key, so an ambiguous name stays ambiguous and nothing already correct moves.
+ */
+export function extendIndex(base: AreaIndex, extra: Area[]): AreaIndex {
+  if (!extra.length) return base
+
+  const byFold = new Map(base.byFold)
+  const byTight = new Map(base.byTight)
+  const bySkeleton = new Map(base.bySkeleton)
+  // The value arrays are shared with the base index, so they are copied on the
+  // way past — otherwise pushing onto one would edit the shared gazetteer.
+  for (const m of [byFold, byTight, bySkeleton]) {
+    for (const [k, v] of m) m.set(k, [...v])
+  }
+  const keys = [...base.keys]
+  const areas = [...base.areas]
+
+  for (const area of extra) {
+    areas.push(area)
+    indexArea(area, byFold, byTight, bySkeleton, keys)
+  }
+
+  return { ...base, areas, byFold, byTight, bySkeleton, keys }
 }
 
 // ── Lookup ───────────────────────────────────────────────────────────────────

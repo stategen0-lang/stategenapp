@@ -10,6 +10,7 @@ import type { Property, Client } from '@/lib/data'
 // strips types without resolving the "@/" alias (matching.ts itself is
 // alias-free, so this loads).
 import { matchClients } from './matching.ts'
+import type { AreaIndex } from './lebanon/areas-core.ts'
 
 /** Proactive alerts use a higher bar than the on-screen matcher: a nudge an
  *  agent didn't ask for should be a strong fit, not a maybe. */
@@ -34,13 +35,15 @@ export interface AlertDraft {
 export function buildAlerts(
   property: Property,
   clients: Client[],
-  opts: { threshold?: number; max?: number } = {},
+  // `ix` carries the agency's own places (migration 030): a listing in an area
+  // an agent taught the app must alert just like one in Achrafieh.
+  opts: { threshold?: number; max?: number; ix?: AreaIndex | null } = {},
 ): AlertDraft[] {
   if (property.status === 'Sold') return []
   const threshold = opts.threshold ?? ALERT_THRESHOLD
   const max = opts.max ?? MAX_ALERTS_PER_LISTING
 
-  return matchClients(property, clients, threshold)
+  return matchClients(property, clients, threshold, opts.ix)
     .slice(0, max)
     .map(({ client, score }) => ({
       client_id: client.id,

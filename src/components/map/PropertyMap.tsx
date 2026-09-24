@@ -20,7 +20,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Map as LeafletMap, Marker } from 'leaflet'
 import type { Property } from '@/lib/data'
-import { loadAreas, type AreaIndex } from '@/lib/lebanon/areas'
+import { loadCompanyAreas, type AreaIndex } from '@/lib/lebanon/areas'
 import { propertyPoint, clusterPoints, boundsOf, statusColor, type PointCluster } from '@/lib/property-geo'
 
 const H = '#14223F'
@@ -97,7 +97,7 @@ export default function PropertyMap({ properties, onSelect }: Props) {
   // The gazetteer: without it only pinned listings can be placed.
   useEffect(() => {
     let live = true
-    loadAreas().then(loaded => { if (live) setIx(loaded) }).catch(() => { if (live) setFailed(true) })
+    loadCompanyAreas().then(loaded => { if (live) setIx(loaded) }).catch(() => { if (live) setFailed(true) })
     return () => { live = false }
   }, [])
 
