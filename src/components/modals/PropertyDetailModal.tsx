@@ -219,6 +219,24 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
               </div>
             )}
 
+            {/* Public Notes — the agent's own selling points. They were written
+                into the form, worked into the description and shown on the
+                share page, but there was nowhere to read them back on the
+                listing itself, so an agent could not check what they had said.
+                "Good to know" is the heading the share page gives them, kept
+                the same so it is recognisably the same text.
+                pre-wrap for the same reason as the description above. */}
+            {p.publicNotes?.trim() && (
+              <div className="rounded-xl p-3" style={{ background: '#F5F9FE', border: '1px solid #DCE8F7' }}>
+                <p className="text-[11px] font-bold mb-1.5" style={{ color: '#2E5288', letterSpacing: '0.08em' }}>
+                  GOOD TO KNOW
+                </p>
+                <p className="text-sm leading-relaxed" style={{ color: '#2B3A54', whiteSpace: 'pre-wrap' }}>
+                  {p.publicNotes.trim()}
+                </p>
+              </div>
+            )}
+
             <div className="grid grid-cols-3 gap-3">
               {[
                 // Only the facts this kind of listing actually has. A plot
