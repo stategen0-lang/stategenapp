@@ -286,7 +286,7 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
             {/* Private — only reaches the owning agent + managers (the server
                 strips these fields for everyone else, so their mere presence
                 means the viewer is allowed to see them). */}
-            {(p.ownerName || p.ownerContact || p.documentPath || p.mapUrl) && (
+            {(p.ownerName || p.ownerContact || p.documentPath || p.mapUrl || p.notes?.trim()) && (
               <div className="rounded-xl p-3" style={{ background: '#FBF6EE', border: '1px solid #EFE2CC' }}>
                 <p className="text-[11px] font-bold mb-1.5" style={{ color: '#8A5A24' }}>🔒 Private — you & managers</p>
                 {(p.ownerName || p.ownerContact) && (
@@ -305,6 +305,20 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
                         </a>
                       </div>
                     )}
+                  </div>
+                )}
+                {/* Internal notes. They belong here and nowhere else: the server
+                    now strips them for everyone but this listing's own agent and
+                    the managers, so the heading above is the literal truth
+                    rather than a hope — see stripPrivateFields. */}
+                {p.notes?.trim() && (
+                  <div className="mt-2 px-3 py-2 rounded-lg" style={{ background: '#fff', border: '1px solid #EFE2CC' }}>
+                    <p className="text-[11px] font-bold mb-1" style={{ color: '#8A5A24', letterSpacing: '0.08em' }}>
+                      INTERNAL NOTES
+                    </p>
+                    <p className="text-sm leading-relaxed" style={{ color: '#14223F', whiteSpace: 'pre-wrap' }}>
+                      {p.notes.trim()}
+                    </p>
                   </div>
                 )}
                 {p.mapUrl && (

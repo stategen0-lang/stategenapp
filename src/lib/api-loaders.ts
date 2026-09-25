@@ -12,7 +12,8 @@
 // Server-only (takes a Supabase client bound to the request).
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { isManager, owns, canSeeDeal, canSeeClientPII, maskClientName, type Session } from '@/lib/permissions'
+import { isManager, canSeeDeal, canSeeClientPII, maskClientName, type Session } from '@/lib/permissions'
+import { stripPrivateFields } from './private-fields.ts'
 import { colorFor, type RosterAgent } from '@/lib/agent-roster'
 import { loadCompanyRoster } from '@/lib/agent-roster-server'
 
@@ -20,25 +21,9 @@ type Row = Record<string, unknown>
 
 // ── Listings ────────────────────────────────────────────────────────────────
 
-/** The listing agent's code lives in the property's Amenities JSON. */
-export function propertyAgent(row: Row): string | null {
-  try { return (JSON.parse((row.Amenities as string) || '{}').agentId as string) ?? null } catch { return null }
-}
-
-/**
- * Owner name/contact and the private document are confidential to the listing's
- * own agent and managers. Everyone else in the company shares the inventory but
- * must not receive these — so we strip them from the raw row before it leaves
- * the server, not just hide them in the UI (which the network tab would expose).
- */
-export function stripPrivateFields(row: Row, session: Session): Row {
-  if (isManager(session.role) || owns(session, propertyAgent(row))) return row
-  try {
-    const ex = JSON.parse((row.Amenities as string) || '{}')
-    delete ex.ownerName; delete ex.ownerContact; delete ex.documentPath; delete ex.documentName; delete ex.mapUrl
-    return { ...row, Amenities: JSON.stringify(ex) }
-  } catch { return row }
-}
+// The privacy rule itself lives in its own module so it can be unit-tested;
+// re-exported here because this is where every caller already looks for it.
+export { propertyAgent, stripPrivateFields } from './private-fields.ts'
 
 export async function loadProperties(supabase: SupabaseClient, session: Session): Promise<Row[]> {
   const { data, error } = await supabase
