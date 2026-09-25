@@ -136,7 +136,6 @@ export async function sendListingToMarketing(
     agentName: (a.Full_name as string) || actor.fullName,
     agentPhone: (a.whatsapp_number as string) || null,
     companyName: companyName || null,
-    brandColor: (c.brand_color as string) || null,
   })
 
   // Every agency sends through the one StateGen mailbox, so without this a

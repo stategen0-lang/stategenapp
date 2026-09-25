@@ -50,7 +50,6 @@ export interface MarketingEmailInput {
   /** The agent's WhatsApp/phone, as the contact to put on the post. */
   agentPhone?: string | null
   companyName?: string | null
-  brandColor?: string | null
   /**
    * Photos attached to the email as regular files, keyed by position in
    * listing.photos, with the attachment's filename. They are deliberately NOT
@@ -153,7 +152,6 @@ export function fallbackDescription(l: PublicListing): string {
 
 export function renderMarketingEmail(input: MarketingEmailInput): MarketingEmail {
   const { listing: l, listingId, agentName } = input
-  const accent = /^#[0-9a-f]{6}$/i.test(input.brandColor ?? '') ? input.brandColor! : '#14223F'
   const files = input.attachedFiles ?? {}
   const where = place(l)
   // The agent's name goes early, not at the end: the marketing team works from
@@ -178,7 +176,8 @@ export function renderMarketingEmail(input: MarketingEmailInput): MarketingEmail
         : 'Tap a photo to download it.'
 
   const text = [
-    `★ ${stamp.text.toUpperCase()} · ${stamp.ar}`,
+    // Plain, and English only — the same line the HTML half opens with.
+    `Stamp: ${stamp.text}`,
     '',
     description,
     // Both versions ready to paste, the Arabic clearly separated so nobody
@@ -190,41 +189,40 @@ export function renderMarketingEmail(input: MarketingEmailInput): MarketingEmail
     // The listing card is gone from both versions — see the HTML above.
   ].join('\n')
 
-  const photoBlocks = (photoNote ? `<p style="margin:0 0 10px;font-size:13px;color:#6A7488">${esc(photoNote)}</p>` : '')
+  // The photos are the point, so they keep a width and nothing else — no frame,
+  // no rounded corners. Still wrapped in a link, because that is what makes a
+  // click download the file rather than open it full screen.
+  const photoBlocks = (photoNote ? `<p>${esc(photoNote)}</p>` : '')
     + l.photos.map((src, i) => `
-      <a href="${esc(downloadOf(src, i))}" download="${esc(files[i] ?? photoFilename(listingId, i, src))}" style="display:block;margin:0 0 10px;text-decoration:none">
-        <img src="${esc(src)}" alt="Photo ${i + 1}" width="620" style="display:block;width:100%;max-width:620px;height:auto;border-radius:10px;border:1px solid #EEF0F4">
+      <a href="${esc(downloadOf(src, i))}" download="${esc(files[i] ?? photoFilename(listingId, i, src))}">
+        <img src="${esc(src)}" alt="Photo ${i + 1}" width="620" style="display:block;width:100%;max-width:620px;height:auto;margin:0 0 10px">
       </a>`).join('')
 
+  // Plain, at the agency's request: no colours, no panels, no rounded corners.
+  // What is left is what the email is for — a stamp line, the copy to post, and
+  // the photos.
+  //
+  // The only styling kept is a font family (without one, clients fall back to
+  // Times), a readable line length, and dir="rtl" on the Arabic. None of that is
+  // decoration; the last is the difference between Arabic reading correctly and
+  // not.
+  //
+  // The listing card that used to close the email — the facts table, the
+  // contact and the listing-page button — was removed earlier, for the same
+  // reason: the team works from the description and the photos.
   const html = `<!doctype html>
-<html><body style="margin:0;padding:24px;background:#F7F8FB;font-family:Arial,Helvetica,sans-serif;color:#14223F">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;margin:0 auto">
+<html><body style="margin:0;padding:20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6">
+  <div style="max-width:620px">
 
-    <!-- 0. The stamp: the listing's single strongest selling point -->
-    <tr><td style="padding:0 0 12px">
-      <span style="display:inline-block;background:${accent};color:#ffffff;font-size:12px;font-weight:bold;letter-spacing:0.12em;text-transform:uppercase;padding:9px 16px;border-radius:8px">
-        ${esc(stamp.text)}&nbsp; · &nbsp;<span dir="rtl" lang="ar" style="letter-spacing:0">${esc(stamp.ar)}</span>
-      </span>
-    </td></tr>
+    <p>Stamp: ${esc(stamp.text)}</p>
 
-    <!-- 1. Description -->
-    <tr><td style="background:#ffffff;border:1px solid #EEF0F4;border-radius:14px;padding:22px">
-      <p style="margin:0;font-size:15px;line-height:1.65">${htmlText(description)}</p>
-      ${arabic ? `<p dir="rtl" lang="ar" style="margin:16px 0 0;padding-top:16px;border-top:1px solid #EEF0F4;font-size:15px;line-height:1.8;text-align:right">${htmlArabic(arabic)}</p>` : ''}
-    </td></tr>
+    <p>${htmlText(description)}</p>
+    ${arabic ? `<p dir="rtl" lang="ar">${htmlArabic(arabic)}</p>` : ''}
 
-    <!-- 2. Photos -->
-    <tr><td style="padding:14px 0 4px">
-      ${l.photos.length ? photoBlocks : '<p style="margin:0 0 10px;font-size:13px;color:#6A7488">No photos yet.</p>'}
-    </td></tr>
+    ${l.photos.length ? photoBlocks : '<p>No photos yet.</p>'}
 
-    <!-- The listing card that used to sit here — the facts table, the contact
-         and the listing-page button — was removed at the agency's request. The
-         marketing team works from the description and the photos; everything
-         else was a second copy of the same listing for them to scroll past. The
-         subject line still carries the listing number and who sent it. -->
-  </table>
-  <p style="text-align:center;font-size:11px;color:#9AA3B2;margin-top:14px">Sent from StateGen</p>
+    <p>Sent from StateGen</p>
+  </div>
 </body></html>`
 
   return { subject, html, text }
