@@ -66,6 +66,17 @@ test('marketing email: the writing and nothing else', () => {
   }
 })
 
+test('marketing email: a listing with no photos says nothing about photos', () => {
+  // It used to end on "No photos yet." — telling the marketing team something
+  // they can see for themselves, and trailing off on an apology.
+  const { html, text } = email({ listing: publicListing({ ...property, photos: [] }, 'Bright flat.') })
+  for (const half of [html, text]) {
+    assert.equal(/photo/i.test(half), false, 'the email still mentions photos')
+  }
+  // It ends on the copy instead.
+  assert.ok(text.trimEnd().endsWith('Bright flat.'), `text ended: ${JSON.stringify(text.slice(-40))}`)
+})
+
 test('marketing email: the stamp is one plain English line', () => {
   const { html, text } = email()
   assert.ok(html.includes('<p>Stamp: Sea View</p>'), 'the stamp is not a plain line')

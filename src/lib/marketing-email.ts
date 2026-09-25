@@ -183,9 +183,15 @@ export function renderMarketingEmail(input: MarketingEmailInput): MarketingEmail
     // Both versions ready to paste, the Arabic clearly separated so nobody
     // posts the two languages as one block.
     ...(arabic ? ['', '--- العربية ---', arabic] : []),
-    '',
-    l.photos.length ? `Photos: ${l.photos.length}${attachedCount ? ` (${attachedCount} attached)` : ''}` : 'No photos yet.',
-    ...linkedPhotos.map(src => photoDownloadUrl(src, photoFilename(listingId, l.photos.indexOf(src), src))),
+    // A listing with no photos says nothing about photos. Announcing their
+    // absence tells the marketing team something they can see for themselves
+    // and leaves the email trailing off on an apology; without it, it ends on
+    // the copy they came for.
+    ...(l.photos.length ? [
+      '',
+      `Photos: ${l.photos.length}${attachedCount ? ` (${attachedCount} attached)` : ''}`,
+      ...linkedPhotos.map(src => photoDownloadUrl(src, photoFilename(listingId, l.photos.indexOf(src), src))),
+    ] : []),
     // The listing card is gone from both versions — see the HTML above.
   ].join('\n')
 
@@ -219,7 +225,7 @@ export function renderMarketingEmail(input: MarketingEmailInput): MarketingEmail
     <p>${htmlText(description)}</p>
     ${arabic ? `<p dir="rtl" lang="ar">${htmlArabic(arabic)}</p>` : ''}
 
-    ${l.photos.length ? photoBlocks : '<p>No photos yet.</p>'}
+    ${l.photos.length ? photoBlocks : ''}
 
     <p>Sent from StateGen</p>
   </div>
