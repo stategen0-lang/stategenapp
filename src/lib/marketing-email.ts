@@ -204,9 +204,9 @@ export function renderMarketingEmail(input: MarketingEmailInput): MarketingEmail
         <img src="${esc(src)}" alt="Photo ${i + 1}" width="620" style="display:block;width:100%;max-width:620px;height:auto;margin:0 0 10px">
       </a>`).join('')
 
-  // Plain, at the agency's request: no colours, no panels, no rounded corners.
-  // What is left is what the email is for — a stamp line, the copy to post, and
-  // the photos.
+  // Plain, at the agency's request: no colours, no panels, no rounded corners,
+  // no footer. What is left is what the email is for, and only that — a stamp
+  // line, the copy to post, and the photos.
   //
   // The only styling kept is a font family (without one, clients fall back to
   // Times), a readable line length, and dir="rtl" on the Arabic. None of that is
@@ -226,8 +226,6 @@ export function renderMarketingEmail(input: MarketingEmailInput): MarketingEmail
     ${arabic ? `<p dir="rtl" lang="ar">${htmlArabic(arabic)}</p>` : ''}
 
     ${l.photos.length ? photoBlocks : ''}
-
-    <p>Sent from StateGen</p>
   </div>
 </body></html>`
 

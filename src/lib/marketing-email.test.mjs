@@ -73,8 +73,10 @@ test('marketing email: a listing with no photos says nothing about photos', () =
   for (const half of [html, text]) {
     assert.equal(/photo/i.test(half), false, 'the email still mentions photos')
   }
-  // It ends on the copy instead.
+  // It ends on the copy instead — no footer of any kind after it.
   assert.ok(text.trimEnd().endsWith('Bright flat.'), `text ended: ${JSON.stringify(text.slice(-40))}`)
+  assert.ok(html.trimEnd().endsWith('</body></html>'))
+  assert.equal(html.includes('Sent from StateGen'), false)
 })
 
 test('marketing email: the stamp is one plain English line', () => {
