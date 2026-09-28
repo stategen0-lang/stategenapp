@@ -2,7 +2,11 @@
 // Used by the dashboard, properties, and clients pages so the mapping stays
 // in one place.
 
-import { Property, Client, ClientReq } from '@/lib/data'
+// Type-only, and written as `import type` on purpose: it is erased at compile
+// time, which is what lets `node --test` load this module directly. A plain
+// import of the same three interfaces makes the test runner try to resolve the
+// "@/" alias and fail.
+import type { Property, Client, ClientReq } from '@/lib/data'
 
 export function dbRowToProperty(row: Record<string, unknown>, idx: number): Property {
   let extras: Record<string, unknown> = {}
