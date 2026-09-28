@@ -146,6 +146,6 @@ export async function handleQueryPipeline(
     header,
     ...rows,
     '',
-    `${deals.length} deals · ${formatPrice(grand)} total. Ask "what's in negotiation" to see a stage.`,
+    `${deals.length} deal${deals.length === 1 ? '' : 's'} · ${formatPrice(grand)} total. Ask "what's in negotiation" to see a stage.`,
   ].join('\n')
 }

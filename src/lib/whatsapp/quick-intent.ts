@@ -214,6 +214,27 @@ export function quickIntent(raw: string | null | undefined): IntentResult | null
     const target = coerceDealTarget(dealClose[2])
     if (target) return { intent: 'update_deal', clientName: dealClose[1].trim(), fields: dealFields(target) }
   }
+  // "put Ahmed in negotiating" — the same instruction, said the other way.
+  const dealPut = text.match(/^(?:put|place)\s+(.+?)(?:'s)?\s+(?:deal\s+)?(?:in|into|at|on)\s+(?:the\s+)?(\w+)(?:\s+stage)?\s*$/i)
+  if (dealPut) {
+    const target = coerceDealTarget(dealPut[2])
+    if (target) return { intent: 'update_deal', clientName: dealPut[1].trim(), fields: dealFields(target) }
+  }
+  // "update Ahmed's deal to negotiating" — unambiguous because the word "deal"
+  // is in it, which is what keeps this away from the client-status matcher.
+  const dealUpdate = text.match(/^(?:update|change|switch)\s+(.+?)(?:'s)?\s+deal\s+(?:to|into)\s+(?:the\s+)?(\w+)(?:\s+stage)?\s*$/i)
+  if (dealUpdate) {
+    const target = coerceDealTarget(dealUpdate[2])
+    if (target) return { intent: 'update_deal', clientName: dealUpdate[1].trim(), fields: dealFields(target) }
+  }
+  // "Ahmed's deal is won" / "Ahmed deal lost" — the shortest thing an agent
+  // types when a deal lands. Only for won/lost/sold, which are pipeline-only
+  // words, so this can never swallow a client status.
+  const dealIs = text.match(/^(.+?)(?:'s)?\s+deal\s+(?:is\s+|was\s+)?(won|lost|sold)\s*$/i)
+  if (dealIs) {
+    const target = coerceDealTarget(dealIs[2])
+    if (target) return { intent: 'update_deal', clientName: dealIs[1].trim(), fields: dealFields(target) }
+  }
 
   // ── pipeline reads: "my pipeline", "what's in negotiation", "show my deals" ─
   if (/\bpipeline\b/i.test(text)

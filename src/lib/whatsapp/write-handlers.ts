@@ -127,8 +127,24 @@ export async function resolveClient(admin: SupabaseClient, profile: Profile, nam
   // An area qualifier ("… in Beit Mery") disambiguates same-named clients.
   if (ref.location) q = q.ilike('prefered-location', `%${ref.location}%`)
 
-  const { data } = await q
-  const rows = data ?? []
+  let { data } = await q
+  let rows = data ?? []
+
+  // "ahmeds deal is won" — a possessive typed without the apostrophe, which is
+  // most of them on a phone keyboard. Only tried when the name as written finds
+  // nobody, so a real client called Elias or Boutros is never trimmed.
+  if (!rows.length && /s$/i.test(ref.name) && ref.name.length > 3) {
+    let retry = admin
+      .from('client_requests')
+      .select('*')
+      .eq('company_id', profile.company_id)
+      .ilike('Client Name', `%${ref.name.slice(0, -1)}%`)
+      .limit(6)
+    if (ref.location) retry = retry.ilike('prefered-location', `%${ref.location}%`)
+    const { data: again } = await retry
+    rows = again ?? []
+  }
+
   if (!rows.length) return { ok: false, message: `No client matching "${ref.name}"${ref.location ? ` in ${ref.location}` : ''}.` }
   if (rows.length > 1) {
     // Masked names for the same reason as above (no enumerating other agents'
