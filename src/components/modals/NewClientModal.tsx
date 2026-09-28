@@ -528,7 +528,7 @@ export default function NewClientModal({ onClose, onSaved, onDeleted, matchThres
                   const subs = [
                     { label: 'Budget',   v: s.budgetScore },
                     { label: 'Location', v: s.locationScore },
-                    { label: 'Type',     v: s.typeScore },
+                    { label: 'Must-haves', v: s.mustHaveScore },
                     { label: 'Beds',     v: s.bedroomScore },
                   ]
                   return (

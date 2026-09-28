@@ -13,18 +13,18 @@ import { loadAreas } from './lebanon/areas.ts'
 // ── scoreLocationMulti: a client open to several areas ───────────────────────
 test('scoreLocationMulti: best of the requested areas wins', () => {
   // Property in Achrafieh; client open to Jounieh (far) OR Achrafieh (exact).
-  const s = scoreLocationMulti('Achrafieh Beirut', { location: '', locations: ['Jounieh', 'Achrafieh'] })
+  const s = scoreLocationMulti('Achrafieh, Beirut', { location: '', locations: ['Jounieh', 'Achrafieh'] })
   assert.equal(s, 100)
 })
 test('scoreLocationMulti: none matching excludes', () => {
-  const s = scoreLocationMulti('Tripoli North', { location: '', locations: ['Jounieh', 'Achrafieh'] })
+  const s = scoreLocationMulti('Tripoli, North', { location: '', locations: ['Jounieh', 'Achrafieh'] })
   assert.equal(s, LOCATION_EXCLUDE)
 })
 test('scoreLocationMulti: no areas = no constraint', () => {
   assert.equal(scoreLocationMulti('Anywhere', { location: '', locations: [] }), 100)
 })
 test('scoreLocationMulti: falls back to the single location field', () => {
-  assert.equal(scoreLocationMulti('Achrafieh Beirut', { location: 'Achrafieh' }), 100)
+  assert.equal(scoreLocationMulti('Achrafieh, Beirut', { location: 'Achrafieh' }), 100)
 })
 
 // ── fixtures ────────────────────────────────────────────────────────────────
@@ -54,39 +54,39 @@ test('scoreBudget: within ±10% → 100 (either direction)', () => {
   assert.equal(scoreBudget(550000, 500000), 100) // +10%
   assert.equal(scoreBudget(450000, 500000), 100) // -10%
 })
-test('scoreBudget: ±20% → 80', () => {
-  assert.equal(scoreBudget(600000, 500000), 80) // +20%
-  assert.equal(scoreBudget(400000, 500000), 80) // -20%
+test('scoreBudget: ±20% → 75', () => {
+  assert.equal(scoreBudget(600000, 500000), 75) // +20%
+  assert.equal(scoreBudget(400000, 500000), 75) // -20%
 })
-test('scoreBudget: ±30% → 50', () => {
-  assert.equal(scoreBudget(650000, 500000), 50) // +30%
-  assert.equal(scoreBudget(350000, 500000), 50) // -30%
+test('scoreBudget: ±30% → 40', () => {
+  assert.equal(scoreBudget(650000, 500000), 40) // +30%
+  assert.equal(scoreBudget(350000, 500000), 40) // -30%
 })
-test('scoreBudget: ±50% → 25', () => {
-  assert.equal(scoreBudget(725000, 500000), 25) // +45%
-  assert.equal(scoreBudget(275000, 500000), 25) // -45%
-})
-test('scoreBudget: beyond ±50% → BUDGET_EXCLUDE', () => {
+test('scoreBudget: beyond ±30% is not a match at all', () => {
+  // Half as much again is not the same property. The band used to run to ±50%,
+  // which had a $500,000 client alerted about $750,000 listings.
+  assert.equal(scoreBudget(725000, 500000), BUDGET_EXCLUDE) // +45%
+  assert.equal(scoreBudget(275000, 500000), BUDGET_EXCLUDE) // -45%
   assert.equal(scoreBudget(800000, 500000), BUDGET_EXCLUDE) // +60%
   assert.equal(scoreBudget(200000, 500000), BUDGET_EXCLUDE) // -60%
 })
 
 // ── scoreLocation ───────────────────────────────────────────────────────────
 test('scoreLocation: no client location → 100', () => {
-  assert.equal(scoreLocation('Hamra Beirut', ''), 100)
+  assert.equal(scoreLocation('Hamra, Beirut', ''), 100)
 })
 test('scoreLocation: exact area requested → 100', () => {
-  assert.equal(scoreLocation('Hamra Beirut', 'Beirut'), 100)
-  assert.equal(scoreLocation('Hamra Beirut', 'Hamra'), 100)
+  assert.equal(scoreLocation('Hamra, Beirut', 'Beirut'), 100)
+  assert.equal(scoreLocation('Hamra, Beirut', 'Hamra'), 100)
 })
 test('scoreLocation: different district in the same region → 75 (surrounding)', () => {
   // wants Hamra, property in Achrafieh (both Beirut) → 75, not 100
-  assert.equal(scoreLocation('Achrafieh Beirut', 'Hamra'), 75)
-  assert.equal(scoreLocation('Hamra Beirut', 'Verdun'), 75)
+  assert.equal(scoreLocation('Achrafieh, Beirut', 'Hamra'), 75)
+  assert.equal(scoreLocation('Hamra, Beirut', 'Verdun'), 75)
 })
 test('scoreLocation: neighbouring region → 75 (surrounding)', () => {
-  assert.equal(scoreLocation('Dbayeh Metn', 'Hamra'), 75)
-  assert.equal(scoreLocation('Hamra Beirut', 'Metn'), 75) // region name recognised
+  assert.equal(scoreLocation('Dbayeh, Metn', 'Hamra'), 75)
+  assert.equal(scoreLocation('Hamra, Beirut', 'Metn'), 75) // region name recognised
 })
 test('scoreLocation: far apart → LOCATION_EXCLUDE', () => {
   assert.equal(scoreLocation('Tripoli', 'Zahle'), LOCATION_EXCLUDE)
@@ -137,7 +137,8 @@ test('computeScore: specified-but-mismatched property type → ineligible (hard 
     prop({ type: 'Appartement', price: 400000 }),
     client({ budget: 500000, req: { type: 'Shop', location: 'Beirut', priceMax: 500000, beds: 3 } }),
   )
-  assert.equal(s.typeScore, 0)
+  // Type is a hard filter now, not a number: a Shop is not a fraction of an
+  // apartment, so there is nothing to score.
   assert.equal(s.eligible, false)
 })
 test('computeScore: no client type preference does not filter (eligible)', () => {
@@ -245,11 +246,11 @@ test('matchClients: sorts best-first and honours the threshold', () => {
 test('propFeatures + wishlist: client must-haves match a listing\'s features', () => {
   const listing = prop({ price: 500000, amenities: ['Pool'], buildingFeatures: ['Elevator', 'Generator'], parkings: 1, terrace: true })
   const wantAll = client({ budget: 500000, req: { type: 'Appartement', location: 'Beirut', beds: 3, amenities: ['Pool'], buildingFeatures: ['Elevator'], parkings: 1, terrace: true } })
-  assert.equal(computeScore(listing, wantAll).amenityScore, 100)
+  assert.equal(computeScore(listing, wantAll).mustHaveScore, 100)
   // "Pool" (private) must not be satisfied by a shared pool.
   const shared = prop({ price: 500000, buildingFeatures: ['Shared Pool'] })
   const wantPool = client({ budget: 500000, req: { type: 'Appartement', location: 'Beirut', beds: 3, amenities: ['Pool'] } })
-  assert.equal(computeScore(shared, wantPool).amenityScore, 0)
+  assert.equal(computeScore(shared, wantPool).mustHaveScore, 0)
 })
 
 // ── Location scoring with the gazetteer ──────────────────────────────────────
@@ -278,8 +279,13 @@ test('scoreLocation: the stored "area, city" pair still resolves', () => {
 })
 
 test('scoreLocation: graded by real distance', () => {
-  assert.equal(scoreLocation('Hamra', 'Achrafieh', areas), 85)        // ~3 km
-  assert.equal(scoreLocation('Dbayeh', 'Achrafieh', areas), 75)       // ~11 km
+  // Next door is 2 km and surrounding is 4 km, so "nearby" means the next
+  // streets rather than the next town. A client open to more than one area
+  // lists them; the radius does not guess on their behalf.
+  assert.equal(scoreLocation('Badaro', 'Achrafieh', areas), 85)       // 1.3 km
+  assert.equal(scoreLocation('Hamra', 'Achrafieh', areas), 75)        // 3.6 km
+  assert.equal(scoreLocation('Jal el Dib', 'Achrafieh', areas), LOCATION_EXCLUDE)  // 6.1 km
+  assert.equal(scoreLocation('Dbayeh', 'Achrafieh', areas), LOCATION_EXCLUDE)      // 9.6 km
   assert.equal(scoreLocation('Tripoli', 'Achrafieh', areas), LOCATION_EXCLUDE)
   assert.equal(scoreLocation('Saida', 'Jounieh', areas), LOCATION_EXCLUDE)
 })
@@ -292,7 +298,9 @@ test('scoreLocation: a place up the mountain is no longer "surrounding"', () => 
 
 test('scoreLocation: text the gazetteer cannot place falls back, never crashes', () => {
   assert.equal(scoreLocation('Behind the Old Mill Road', 'Achrafieh', areas), LOCATION_EXCLUDE)
-  assert.equal(scoreLocation('Hamra Beirut', 'Verdun', areas), 75)   // zone fallback
+  // The gazetteer places the first comma part, so this is real distance
+  // (1.3 km), not the zone fallback.
+  assert.equal(scoreLocation('Hamra, Beirut', 'Verdun', areas), 85)
   assert.equal(scoreLocation('Achrafieh', '', areas), 100)
   assert.equal(scoreLocation('', 'Achrafieh', areas), LOCATION_EXCLUDE)
 })
@@ -341,7 +349,7 @@ test('scoreLocation: next to a region counts, far from it does not', () => {
   assert.equal(scoreLocation('Tripoli', 'Metn', areas), LOCATION_EXCLUDE)
   // Measured to the region's nearest edge, not its middle: a governorate is
   // not "nearby" just because one corner of it is.
-  assert.equal(scoreLocation('Jounieh', 'Beirut', areas), 75)
+  assert.equal(scoreLocation('Jounieh', 'Beirut', areas), LOCATION_EXCLUDE)
   assert.equal(scoreLocation('Aaqoura', 'Beirut', areas), LOCATION_EXCLUDE)
   assert.equal(scoreLocation('Barouk', 'Beirut', areas), LOCATION_EXCLUDE)
 })
@@ -349,8 +357,8 @@ test('scoreLocation: next to a region counts, far from it does not', () => {
 test('scoreLocation: a caza that is also a town still means the town', () => {
   // Aaqoura shares the Jbeil caza but is 30 km up the mountain from Jbeil.
   assert.equal(scoreLocation('Aaqoura', 'Jbeil', areas), LOCATION_EXCLUDE)
-  assert.equal(scoreLocation('Amchit', 'Jbeil', areas), 85)
-  assert.equal(scoreLocation('Hazmieh', 'Baabda', areas), 85)
+  assert.equal(scoreLocation('Amchit', 'Jbeil', areas), 75)     // 3.0 km
+  assert.equal(scoreLocation('Hazmieh', 'Baabda', areas), 75)   // 2.2 km
 })
 
 test('scoreLocation: a guessed place never decides a match', () => {
@@ -383,7 +391,7 @@ test('explainMatch: the budget band, in the money the agent sees', () => {
   const buyer = client({ type: 'Buyer', budget: 100000, req: { type: 'Land', location: 'Batroun', locations: ['Batroun'], beds: 0, size: 1700 } })
   const [reason] = explainMatch(land, buyer, areas).map(r => r.text)
   assert.match(reason, /\$250,000/)
-  assert.match(reason, /\$50,000–\$150,000/)
+  assert.match(reason, /\$70,000–\$130,000/)
   // Everything else about it is right, so price is the ONLY thing reported.
   assert.equal(explainMatch(land, buyer, areas).length, 1)
 })

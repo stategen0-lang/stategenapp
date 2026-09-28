@@ -7,11 +7,10 @@ import {
   Property, Client,
   formatPrice, TYPE_GRADIENTS, propertyLocation,
 } from '@/lib/data'
-import { propFeatures, matchClients, matchProperties, nearMisses, nearMissClients, MATCH_THRESHOLD, ScoreResult, MatchIssue } from '@/lib/matching'
+import { propFeatures, mustHaves, matchClients, matchProperties, nearMisses, nearMissClients, MATCH_THRESHOLD, MAX_MATCHES, ScoreResult, MatchIssue, MustHave } from '@/lib/matching'
 import { loadCompanyAreas } from '@/lib/lebanon/areas'
 import { dbRowToProperty, dbRowToClient } from '@/lib/db-mappers'
 
-function norm(s: string) { return (s ?? '').toLowerCase().trim() }
 
 // Every match above the threshold is kept and ranked; these only decide how
 // many are painted at once. Ten fills the sheet without a scroll; twenty more
@@ -49,21 +48,24 @@ function ScoreRing({ score }: { score: number }) {
   )
 }
 
-// ── Amenity overlap pills ─────────────────────────────────────────────────────
-function AmenityPills({ features, wishlist }: { features: string[]; wishlist: string[] }) {
-  const show = wishlist.length > 0 ? wishlist : features.slice(0, 4)
+// ── Must-have pills ───────────────────────────────────────────────────────────
+// Exactly what the score counted, ticked or crossed. Built by mustHaves() in
+// the matching engine rather than here, so the chips and the number can never
+// tell the agent two different stories — they used to list only garden and
+// balcony while the score weighed a dozen things.
+function MustHavePills({ items, features }: { items: MustHave[]; features: string[] }) {
+  const show = items.length > 0
+    ? items
+    : features.slice(0, 4).map(f => ({ label: f, met: true }))
   if (!show.length) return null
   return (
     <div className="flex flex-wrap gap-1 mt-2">
-      {show.map(w => {
-        const has = features.some(a => norm(a).includes(norm(w)) || norm(w).includes(norm(a)))
-        return (
-          <span key={w} className="text-xs px-2 py-0.5 rounded-full font-medium"
-            style={{ background: has ? '#E3F4EA' : '#FBE7E7', color: has ? '#1F7A4D' : '#A23434' }}>
-            {has ? '✓' : '✗'} {w}
-          </span>
-        )
-      })}
+      {show.map(({ label, met }) => (
+        <span key={label} className="text-xs px-2 py-0.5 rounded-full font-medium"
+          style={{ background: met ? '#E3F4EA' : '#FBE7E7', color: met ? '#1F7A4D' : '#A23434' }}>
+          {met ? '✓' : '✗'} {label}
+        </span>
+      ))}
     </div>
   )
 }
@@ -73,7 +75,9 @@ function SubScores({ s }: { s: ScoreResult }) {
   const items = [
     { label: 'Budget',   value: s.budgetScore   },
     { label: 'Location', value: s.locationScore  },
-    { label: 'Type',     value: s.typeScore      },
+    // Type is a hard filter now, so every listing shown has it right — the
+    // number said nothing. What the client asked for on top does.
+    { label: 'Must-haves', value: s.mustHaveScore },
     { label: 'Beds',     value: s.bedroomScore   },
   ]
   return (
@@ -244,6 +248,11 @@ export default function MatchCards({ entityType, entity, onOpenProperty, onOpenC
               {count}
             </span>
           )}
+          {/* At the cap, say so. "50" on its own reads as "there are 50", when
+              what it means is "these are the best 50 of more". */}
+          {!loading && count === MAX_MATCHES && (
+            <span className="text-xs" style={{ color: '#9AA3B2' }}>best {MAX_MATCHES}</span>
+          )}
         </div>
         <button onClick={runMatching}
           className="flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-lg transition-colors hover:bg-gray-100"
@@ -295,7 +304,7 @@ export default function MatchCards({ entityType, entity, onOpenProperty, onOpenC
         const initials = c.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
         const prop     = entity as Property
         const features = propFeatures(prop)
-        const wishlist = [...(c.req.garden ? ['garden'] : []), ...(c.req.balcony ? ['balcony'] : [])]
+        const wants    = mustHaves(prop, c.req)
         const first    = c.name.split(' ')[0]
         return (
           <MatchCard key={c.id} score={s.total} onDismiss={() => setDismissed(prev => new Set([...prev, c.id]))}>
@@ -308,7 +317,7 @@ export default function MatchCards({ entityType, entity, onOpenProperty, onOpenC
                 <p className="text-xs" style={{ color: '#7A8499' }}>
                   Budget {formatPrice(c.budget)} · {c.req.type || 'Any type'} · {c.req.location || 'Any area'}
                 </p>
-                <AmenityPills features={features} wishlist={wishlist} />
+                <MustHavePills items={wants} features={features} />
                 <SubScores s={s} />
               </div>
               <ScoreRing score={s.total} />
@@ -333,7 +342,7 @@ export default function MatchCards({ entityType, entity, onOpenProperty, onOpenC
         const photos   = p.photos ?? []
         const client   = entity as Client
         const features = propFeatures(p)
-        const wishlist = [...(client.req.garden ? ['garden'] : []), ...(client.req.balcony ? ['balcony'] : [])]
+        const wants    = mustHaves(p, client.req)
         const first    = client.name.split(' ')[0]
         return (
           <MatchCard key={p.id} score={s.total} onDismiss={() => setDismissed(prev => new Set([...prev, p.id]))}>
@@ -349,7 +358,7 @@ export default function MatchCards({ entityType, entity, onOpenProperty, onOpenC
                   {formatPrice(p.transaction === 'For Rent' ? p.rent : p.price)}{p.transaction === 'For Rent' ? '/mo' : ''} · {p.type} · {propertyLocation(p)}
                   {p.beds > 0 ? ` · ${p.beds}bd` : ''}
                 </p>
-                <AmenityPills features={features} wishlist={wishlist} />
+                <MustHavePills items={wants} features={features} />
                 <SubScores s={s} />
               </div>
               <ScoreRing score={s.total} />

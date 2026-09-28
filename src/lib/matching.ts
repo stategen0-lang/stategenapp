@@ -49,29 +49,43 @@ export function propFeatures(p: Property): string[] {
 }
 
 // Sentinel returned by scoreBudget when the price is too far from budget to
-// recommend at all (more than ±50% off).
+// recommend at all (more than ±30% off).
 export const BUDGET_EXCLUDE = -1
+
+/** How far off budget a listing may be before it is not a match at all. */
+export const BUDGET_BAND = 0.30
 
 // Budget: symmetric band scoring around the client's single budget figure.
 // Deviation = |price − budget| / budget (same whether over OR under):
-// ≤10% → 100, ≤20% → 80, ≤30% → 50, ≤50% → 25, beyond ±50% → BUDGET_EXCLUDE.
+// ≤10% → 100, ≤20% → 75, ≤30% → 40, beyond ±30% → BUDGET_EXCLUDE.
+//
+// The band used to run to ±50%, which meant a client with $500,000 was shown —
+// and alerted about — a $750,000 listing, still scoring 70% because everything
+// else about it fitted. Half as much again is not the same property.
 export function scoreBudget(propPrice: number, budget: number): number {
   if (!budget) return 100                     // no budget given → no constraint
   const dev = Math.abs(propPrice - budget) / budget
   if (dev <= 0.10) return 100
-  if (dev <= 0.20) return 80
-  if (dev <= 0.30) return 50
-  if (dev <= 0.50) return 25
+  if (dev <= 0.20) return 75
+  if (dev <= BUDGET_BAND) return 40
   return BUDGET_EXCLUDE
 }
 
 // Sentinel: location too far from the client's preferred area to recommend.
 export const LOCATION_EXCLUDE = -1
 
-/** Next door: Achrafieh to Hamra, Jounieh to Kaslik. */
-export const NEXT_DOOR_KM = 8
-/** Still worth showing: Beirut to Dbayeh, Jounieh to Jbeil. Beyond it, excluded. */
-export const SURROUNDING_KM = 20
+/**
+ * Next door: the next street over, not the next town.
+ *
+ * These were 8 km and 20 km, which in Beirut is most of the city and in the
+ * Metn is half the caza — a client asking for Achrafieh was shown Jounieh. A
+ * client who is open to more than one area says so by listing them, and the
+ * matcher takes the best; it does not need a wide radius to do that job for
+ * them.
+ */
+export const NEXT_DOOR_KM = 2
+/** Still worth showing. Beyond it, excluded. */
+export const SURROUNDING_KM = 4
 
 /**
  * Find the area a stored location string refers to.
@@ -206,7 +220,18 @@ export function scoreLocation(
   // "".includes() is true of everything, which used to score it a perfect 100
   // against every client alive.
   if (!p) return LOCATION_EXCLUDE
-  if (p.includes(c) || c.includes(p)) return 100   // exact area requested
+  // The same place, named the same way — whole string, or any comma-separated
+  // part of it, since a listing is stored as "Achrafieh, Beirut" and a client
+  // asks for "Achrafieh".
+  //
+  // Whole PARTS, never a substring: "Bint Jbeil" contains "Jbeil" and is 113 km
+  // from it, so a client looking in Byblos was being shown listings in the
+  // south at a confident 100. Anything short of a whole name matching is the
+  // gazetteer's job, which knows where both places actually are.
+  if (p === c) return 100
+  const pieces = (s: string) => s.split(',').map(x => x.trim()).filter(Boolean)
+  const cParts = pieces(c)
+  if (pieces(p).some(x => cParts.includes(x))) return 100
 
   if (ix) {
     const pa = locate(ix, propLoc)
@@ -239,6 +264,9 @@ export function scoreLocation(
     }
   }
 
+  // Last resort, for text the gazetteer cannot place at all ("behind the old
+  // mill road"). A loose contains-test is acceptable HERE and nowhere else:
+  // there is nothing better to go on, and it can only ever return 75.
   const pZone = Object.entries(ZONES).find(([zone, areas]) => p.includes(zone) || areas.some(a => p.includes(a)))?.[0]
   const cZone = Object.entries(ZONES).find(([zone, areas]) => c.includes(zone) || areas.some(a => c.includes(a)))?.[0]
 
@@ -274,14 +302,76 @@ export function scoreAmenities(features: string[], wishlist: string[]): number {
   return Math.round((matched.length / wishlist.length) * 100)
 }
 
+// ── Must-haves ───────────────────────────────────────────────────────────────
+// Everything the client form asks for that is neither price, place, type nor
+// bedrooms. Six of these — view, furnishing, bathrooms, size, building age and
+// floor — were collected from the agent on the client form and then ignored
+// completely: a listing with none of what a client asked for scored exactly the
+// same as one with all of it. They are worth 18% together.
+//
+// Each is one item, met or not met, and the score is the share met. A client
+// who asked for three things and gets two scores 67, not "amenities: 100".
+
+export interface MustHave {
+  /** Shown on the match card, so it reads as the client said it. */
+  label: string
+  met: boolean
+}
+
+const listed = (values: string[] | undefined, want: string) =>
+  (values ?? []).some(v => norm(v) === norm(want))
+
+/** A number the listing must reach (bathrooms, size, parking). */
+const atLeast = (has: number | undefined, wanted: number) => (Number(has) || 0) >= wanted
+
+export function mustHaves(prop: Property, req: ClientLike['req']): MustHave[] {
+  const out: MustHave[] = []
+  const add = (label: string, met: boolean) => out.push({ label, met })
+
+  if (req.garden)  add('Garden', !!prop.garden)
+  if (req.balcony) add('Balcony', !!prop.balcony)
+  if (req.terrace) add('Terrace', !!prop.terrace)
+  if ((req.parkings ?? 0) > 0) add(`${req.parkings} parking`, atLeast(prop.parkings, req.parkings!))
+
+  for (const a of req.amenities ?? []) add(a, listed(prop.amenities, a))
+  for (const b of req.buildingFeatures ?? []) add(b, listed(prop.buildingFeatures, b))
+
+  // A view is asked for loosely ("sea", "Sea view", "open") and stored loosely,
+  // so it is compared loosely — but only against the listing's own view field.
+  if (req.view?.trim()) {
+    const want = norm(req.view), has = norm(prop.view ?? '')
+    add(`${req.view} view`, !!has && (has.includes(want) || want.includes(has)))
+  }
+  if (req.furnishing) add(req.furnishing, norm(prop.furnishing ?? '') === norm(req.furnishing))
+  if (req.floor) add(req.floor, norm(prop.floor ?? '') === norm(req.floor))
+  if ((req.baths ?? 0) > 0) add(`${req.baths} bathrooms`, atLeast(prop.baths, req.baths))
+  if ((req.size ?? 0) > 0) add(`${req.size} m² or more`, atLeast(prop.size, req.size))
+  // An age limit: a listing that does not say how old it is cannot be claimed
+  // to be under it, so it counts as unmet rather than quietly passing.
+  if ((req.buildingAge ?? 0) > 0) {
+    const age = Number(prop.buildingAge)
+    add(`${req.buildingAge} years old or less`, Number.isFinite(age) && age > 0 && age <= req.buildingAge!)
+  }
+
+  return out
+}
+
+/** The share of the client's must-haves this listing meets. None asked → 100. */
+export function scoreMustHaves(prop: Property, req: ClientLike['req']): number {
+  const items = mustHaves(prop, req)
+  if (!items.length) return 100
+  return Math.round((items.filter(i => i.met).length / items.length) * 100)
+}
+
 export interface ScoreResult {
   total: number
   budgetScore: number
   locationScore: number
-  typeScore: number
   bedroomScore: number
-  amenityScore: number
-  eligible: boolean   // false = hard-excluded (type mismatch or budget out of range)
+  /** The share of the client's must-haves met — see mustHaves(). */
+  mustHaveScore: number
+  /** false = hard-excluded: wrong type, wrong transaction, out of budget, too far. */
+  eligible: boolean
 }
 
 // A record only needs its requirements + budget + type to be scored — this lets
@@ -299,17 +389,7 @@ export function computeScore(
 ): ScoreResult {
   // Sale listings compare against the price; rentals against the monthly rent,
   // so the client's single budget is read in the same terms as the listing.
-  const price    = prop.transaction === 'For Rent' ? prop.rent : prop.price
-  const features = propFeatures(prop)
-  const wish: string[] = [
-    ...(client.req.garden  ? ['garden']  : []),
-    ...(client.req.balcony ? ['balcony'] : []),
-    // The client form's other must-haves, in propFeatures' terms.
-    ...(client.req.terrace ? ['terrace'] : []),
-    ...((client.req.parkings ?? 0) > 0 ? ['parking'] : []),
-    ...(client.req.amenities ?? []).map(a => `unit:${norm(a)}`),
-    ...(client.req.buildingFeatures ?? []).map(b => `building:${norm(b)}`),
-  ]
+  const price = prop.transaction === 'For Rent' ? prop.rent : prop.price
   const rawBudget = scoreBudget(price, client.budget)
   const typeOk = !client.req.type || prop.type === client.req.type
   // Desired transaction: the explicit requirement, else derived from Buyer/Renter.
@@ -322,27 +402,70 @@ export function computeScore(
   const rawLoc = scoreLocationMulti([prop.district, prop.city].filter(Boolean).join(', '), client.req, ix)
   const b  = rawBudget === BUDGET_EXCLUDE ? 0 : rawBudget
   const l  = rawLoc === LOCATION_EXCLUDE ? 0 : rawLoc
-  const t  = typeOk ? 100 : 0
   const br = scoreBedrooms(prop.beds, client.req.beds)
-  const a  = scoreAmenities(features, wish)
-  // Hard filters (any one makes the match ineligible regardless of the rest):
-  // mismatched specified type, buy/rent transaction mismatch, price >±50% off
-  // budget, or a location outside the surrounding area.
+  const m  = scoreMustHaves(prop, client.req)
+  // Hard filters. Any one of them and the listing is not a match at all,
+  // whatever it scored: the wrong type, the wrong side of buy/rent, a price
+  // more than ±30% off budget, or a location outside the surrounding area.
+  //
+  // Type is a filter and NOT a scored part. A villa is not 85% of an apartment;
+  // a client who asked for one does not want the other at any score. Its old
+  // 15% went to location.
   const eligible = typeOk && txnOk && rawBudget !== BUDGET_EXCLUDE && rawLoc !== LOCATION_EXCLUDE
-  const total = (b * 0.40) + (l * 0.25) + (t * 0.15) + (br * 0.12) + (a * 0.08)
+  // location 40% · budget 30% · must-haves 18% · bedrooms 12%
+  const total = (l * 0.40) + (b * 0.30) + (m * 0.18) + (br * 0.12)
   return {
     total: Math.round(total * 100) / 100,
-    budgetScore: b, locationScore: l, typeScore: t, bedroomScore: br, amenityScore: a,
+    budgetScore: b, locationScore: l, bedroomScore: br, mustHaveScore: m,
     eligible,
   }
 }
 
 // ── Match finders ─────────────────────────────────────────────────────────────
-// Both return results sorted best-first, above the threshold. Sold listings are
-// excluded when matching properties to a client.
+// Both return results sorted best-first, above the threshold, capped.
 
 export interface PropertyMatch { property: Property; score: ScoreResult }
 export interface ClientMatch   { client: Client;    score: ScoreResult }
+
+/**
+ * The most matches anybody is shown. Beyond the fiftieth best fit, a longer
+ * list is not a shortlist — and an agent who scrolls that far is not choosing,
+ * they are browsing the whole inventory, which the Properties page already does
+ * better.
+ */
+export const MAX_MATCHES = 50
+
+/**
+ * Statuses a listing can still be offered in. Sold, Rented and Reserved are
+ * spoken for; sending a client to see one wastes everybody's morning.
+ *
+ * Pending and Under Construction are deliberately kept: a deposit falls
+ * through, and off-plan is sold here every day. Take either out of this list
+ * and it disappears from matching — one line, no other change.
+ */
+export const MATCHABLE_STATUSES = ['Available', 'Pending', 'Under Construction']
+
+export function isMatchable(property: Pick<Property, 'status'>): boolean {
+  // An empty status is an older or imported listing, and those are on the
+  // market until somebody says otherwise.
+  const s = String(property.status ?? '').trim()
+  return !s || MATCHABLE_STATUSES.includes(s)
+}
+
+/**
+ * Has this client told us anything to match on?
+ *
+ * "No preference" scores 100 on every part, so a client saved with a name and
+ * nothing else used to match every listing in the agency at a perfect 100% —
+ * and, above the alert threshold, told 25 agents about it. A brief needs at
+ * least one of the three things that actually narrow anything: a budget, an
+ * area, or a property type.
+ */
+export function hasBrief(client: ClientLike): boolean {
+  const areas = (client.req.locations?.length ? client.req.locations : [client.req.location])
+    .map(a => String(a ?? '').trim()).filter(Boolean)
+  return (Number(client.budget) || 0) > 0 || areas.length > 0 || !!client.req.type
+}
 
 export function matchProperties(
   client: ClientLike,
@@ -350,17 +473,19 @@ export function matchProperties(
   threshold = MATCH_THRESHOLD,
   ix: AreaIndex | null = loadedAreas(),
 ): PropertyMatch[] {
+  if (!hasBrief(client)) return []
   return properties
-    .filter(p => p.status !== 'Sold')
+    .filter(isMatchable)
     .map(p => ({ property: p, score: computeScore(p, client, ix) }))
     .filter(r => r.score.eligible && r.score.total >= threshold)
     .sort((a, b) => b.score.total - a.score.total)
+    .slice(0, MAX_MATCHES)
 }
 
 // ── Why a listing did not match ──────────────────────────────────────────────
 // "No matches found" is a dead end: the agent is looking at a plot in Batroun
 // that is obviously right for the client and has no way to learn that the
-// asking price is outside ±50% of their budget. These turn every exclusion into
+// asking price is outside ±30% of their budget. These turn every exclusion into
 // a sentence, so the agent can fix the record or tell the client.
 
 /**
@@ -428,7 +553,8 @@ export function explainMatch(
 
   const price = prop.transaction === 'For Rent' ? prop.rent : prop.price
   if (client.budget && scoreBudget(price, client.budget) === BUDGET_EXCLUDE) {
-    const low = money(client.budget * 0.5), high = money(client.budget * 1.5)
+    // The band scoreBudget actually uses, so the sentence and the rule agree.
+    const low = money(client.budget * (1 - BUDGET_BAND)), high = money(client.budget * (1 + BUDGET_BAND))
     reasons.push(price
       ? { kind: 'budget', weight: 1, text: `Asking ${money(price)} — their ${money(client.budget)} budget only reaches ${low}–${high}` }
       : { kind: 'budget', weight: 2, text: `No price on the listing, so it can't be compared to their ${money(client.budget)} budget` })
@@ -455,7 +581,12 @@ export function nearMisses(
   limit = 3,
   threshold = MATCH_THRESHOLD,
 ): NearMiss[] {
+  // The same two gates the match list uses: a client with nothing on file has
+  // no near misses either, and a listing that is spoken for is not nearly
+  // anybody's.
+  if (!hasBrief(client)) return []
   return properties
+    .filter(isMatchable)
     .map(property => ({ property, score: computeScore(property, client, ix), reasons: explainMatch(property, client, ix, threshold) }))
     .filter(r => r.reasons.length > 0)
     .sort((a, b) => cost(a.reasons) - cost(b.reasons) || b.score.total - a.score.total)
@@ -470,7 +601,9 @@ export function nearMissClients(
   limit = 3,
   threshold = MATCH_THRESHOLD,
 ): NearMissClient[] {
+  if (!isMatchable(property)) return []
   return clients
+    .filter(hasBrief)
     .map(client => ({ client, score: computeScore(property, client, ix), reasons: explainMatch(property, client, ix, threshold) }))
     .filter(r => r.reasons.length > 0)
     .sort((a, b) => cost(a.reasons) - cost(b.reasons) || b.score.total - a.score.total)
@@ -483,8 +616,11 @@ export function matchClients(
   threshold = MATCH_THRESHOLD,
   ix: AreaIndex | null = loadedAreas(),
 ): ClientMatch[] {
+  if (!isMatchable(property)) return []
   return clients
+    .filter(hasBrief)
     .map(c => ({ client: c, score: computeScore(property, c, ix) }))
     .filter(r => r.score.eligible && r.score.total >= threshold)
     .sort((a, b) => b.score.total - a.score.total)
+    .slice(0, MAX_MATCHES)
 }
