@@ -6,7 +6,7 @@ import { parseRecipients, renderMarketingEmail, priceLine, photoDownloadUrl, htm
 import { publicListing } from './share.ts'
 
 const property = {
-  id: 45, title: 'Sea view apartment', type: 'Appartement', transaction: 'For Sale',
+  id: 45, title: 'Sea view apartment', type: 'Apartment', transaction: 'For Sale',
   price: 450000, rent: 0, district: 'Kaslik', city: 'Jounieh', size: 180, beds: 3, baths: 2,
   garden: false, balcony: true, terrace: false, view: 'Sea', parkings: 2, furnishing: 'Unfurnished',
   amenities: ['Generator'], buildingFeatures: ['Elevator'], status: 'Available', agentId: 'NH-1',
@@ -151,7 +151,7 @@ test('marketing email: no written description still opens with one', () => {
   const { text } = renderMarketingEmail({
     listing: publicListing(property, ''), listingId: 45, shareUrl: 'https://s/l/t', agentName: 'A',
   })
-  assert.match(text, /^Stamp: [^\n]+\n\n180 m² appartement in Kaslik, Jounieh with 3 bedrooms and 2 bathrooms, for sale at \$450,000\./)
+  assert.match(text, /^Stamp: [^\n]+\n\n180 m² apartment in Kaslik, Jounieh with 3 bedrooms and 2 bathrooms, for sale at \$450,000\./)
 })
 
 test('photoDownloadUrl: storage photos download, other links untouched', () => {

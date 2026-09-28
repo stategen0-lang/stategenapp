@@ -103,7 +103,7 @@ export function toText(v: unknown): string | null {
 
 /**
  * A place name, tidied for display. Typed on a phone it arrives as "zekrit",
- * which then becomes the listing title ("3 bed Appartement in zekrit") and is
+ * which then becomes the listing title ("3 bed Apartment in zekrit") and is
  * shown throughout the app.
  *
  * Words that already carry a capital are left alone, so "Achrafieh" and
@@ -127,10 +127,23 @@ export function toPlace(v: unknown): string | null {
 }
 
 /** Case-insensitive match against an allowed set, returning the canonical form. */
+/**
+ * Other words that mean one of the allowed values. Agents here write in three
+ * languages and will keep typing the French spelling long after the app stopped
+ * using it, so it is accepted as input and stored as the English one.
+ */
+const SYNONYMS: Record<string, string> = {
+  appartement: 'Apartment', appartements: 'Apartment', apartments: 'Apartment',
+  apt: 'Apartment', flat: 'Apartment',
+}
+
 export function toEnum(allowed: string[]) {
   return (v: unknown): string | null => {
     const s = String(v ?? '').trim().toLowerCase()
-    return allowed.find(a => a.toLowerCase() === s) ?? null
+    const exact = allowed.find(a => a.toLowerCase() === s)
+    if (exact) return exact
+    const synonym = SYNONYMS[s]
+    return synonym && allowed.includes(synonym) ? synonym : null
   }
 }
 
@@ -139,7 +152,7 @@ const PROPERTY_STATUSES = ['Available', 'Reserved', 'Sold', 'Rented']
 // Keep in sync with PROPERTY_TYPES in src/lib/data.ts (this module is a pure,
 // self-contained unit-tested file, so it can't import from there).
 export const PROPERTY_TYPES = [
-  'Appartement', 'Duplex', 'Studio', 'Villa', 'Chalet', 'Standalone',
+  'Apartment', 'Duplex', 'Studio', 'Villa', 'Chalet', 'Standalone',
   'Building', 'Land', 'Shop', 'Office', 'Showroom', 'Restaurant',
   'Garage', 'Warehouse',
 ]

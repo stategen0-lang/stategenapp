@@ -15,6 +15,7 @@
 import type { IntentResult } from '@/lib/whatsapp/intent'
 import { toMoney } from './writes.ts'
 import { coerceDealTarget, findStageInText, type DealTarget } from './deals.ts'
+import { parseWhen } from './when.ts'
 
 /** Flatten a pipeline target into the intent's fields (only ever strings). */
 function dealFields(t: DealTarget): Record<string, string> {
@@ -134,10 +135,33 @@ export function quickIntent(raw: string | null | undefined): IntentResult | null
     return { intent: 'create_event', notes: text }
   }
 
+  // A thing that goes in the calendar. "Showing" is the word half the agents
+  // use for a viewing, and it was missing — so "Book my schedule tomorrow,
+  // Showing for Charbel" fell past this rule and was answered as if the agent
+  // had ASKED what was on tomorrow.
+  // Plurals included: \bviewing\b does not match "viewings", so "what viewings
+  // do I have tomorrow" matched none of these.
+  const EVENT_NOUN = /\b(events?|viewings?|showings?|visits?|tours?|meetings?|appointments?|calls?|follow[- ]?ups?|reminder to)\b/i
+  const ABOUT_A_LISTING = /\b(listing|propert)/i
+  // A question, not an instruction: "what viewings do I have tomorrow".
+  const ASKS = /^(what|whats|when|which|who|how|any|anything|do i|is there|show me|list|see)\b|\?\s*$/i
+
   if (/^(add|book|schedule|set up|put in|create)\b/i.test(text)
-      && /\b(event|viewing|meeting|call|appointment|follow[- ]?up|reminder to)\b/i.test(text)
-      && !/\b(listing|propert)/i.test(text)) {
+      && EVENT_NOUN.test(text)
+      && !ABOUT_A_LISTING.test(text)) {
     return { intent: 'create_event', notes: text }
+  }
+
+  // No command verb at all — "Showing tomorrow @4:00 pm for Charbel Salameh",
+  // which is how an agent writes it standing outside the building. A calendar
+  // word and a real time, in the future, is an instruction; the bot used to
+  // answer "Sorry, I didn't understand that".
+  //
+  // The time must be in the future, which is what separates booking one from
+  // reporting on one that happened ("the viewing yesterday went well").
+  if (EVENT_NOUN.test(text) && !ABOUT_A_LISTING.test(text) && !ASKS.test(text)) {
+    const when = parseWhen(text)
+    if (when && when.start.getTime() > Date.now()) return { intent: 'create_event', notes: text }
   }
 
   // ── "add a client" / "new buyer Ahmed" ───────────────────────────────────
@@ -150,11 +174,28 @@ export function quickIntent(raw: string | null | undefined): IntentResult | null
   }
 
   // ── "what's on today" / "my schedule tomorrow" ────────────────────────────
-  if (/\b(schedule|calendar|agenda|diary)\b/i.test(text)
+  // "Book my schedule tomorrow at 4" is an instruction that happens to contain
+  // the word "schedule", and answering it with today's agenda is the worst kind
+  // of wrong — it looks like it worked. A booking verb with a future time is
+  // never a question.
+  const booksSomething = /^(add|book|schedule|set up|put in|create)\b/i.test(text)
+    && (() => { const w = parseWhen(text); return !!w && w.start.getTime() > Date.now() })()
+
+  if (!booksSomething && (
+      /\b(schedule|calendar|agenda|diary)\b/i.test(text)
       || /\bwhat('?s| is)?\s+(on|up|happening)\b/i.test(text)
-      || /\bany(thing)?\s+(on|booked|scheduled)\b/i.test(text)) {
+      || /\bany(thing)?\s+(on|booked|scheduled)\b/i.test(text)
+      // "what viewings do I have tomorrow" — a question naming a calendar
+      // thing, which is the same question said a different way.
+      //
+      // It must also name a day or say "my", or this swallows questions that
+      // merely share a word: "what's in viewing" is about the PIPELINE stage,
+      // and "what follow-ups are overdue" has an intent of its own.
+      || (ASKS.test(text) && EVENT_NOUN.test(text) && !ABOUT_A_LISTING.test(text)
+          && (/\bmy\b/i.test(text) || !!parseWhen(text))))) {
     return { intent: 'query_schedule', notes: text }
   }
+  if (booksSomething) return { intent: 'create_event', notes: text }
 
   // ── "what's new" / "recent activity" → the activity feed ──────────────────
   // A feed of recent actions, distinct from the performance report below. The
@@ -184,6 +225,18 @@ export function quickIntent(raw: string | null | undefined): IntentResult | null
     const word = (propStatus[2].match(/^\d+$/) ? propStatus[1] : propStatus[2]).toLowerCase()
     if (Number.isFinite(id) && PROPERTY_STATUS_WORDS[word]) {
       return { intent: 'update_property', propertyId: id, fields: { status: PROPERTY_STATUS_WORDS[word] } }
+    }
+  }
+
+  // ── "set property #23 price to 520k" ──────────────────────────────────────
+  // A price change is the most common edit after a status, and the agent has
+  // given the listing number and the figure outright — there is nothing for a
+  // model to work out.
+  const propPrice = text.match(/^(?:set|update|change|make)\s+(?:property|listing)\s*#?\s*(\d+)(?:'s)?\s+(price|rent)\s+(?:to|=|at)\s*(.+)$/i)
+  if (propPrice) {
+    const amount = toMoney(propPrice[3])
+    if (amount) {
+      return { intent: 'update_property', propertyId: Number(propPrice[1]), fields: { [propPrice[2].toLowerCase()]: amount } }
     }
   }
 

@@ -60,8 +60,8 @@ test('findClientDupes: too-short phone does not match by phone', () => {
 
 // ── findPropertyDupes ──────────────────────────────────────────────────────
 const props = [
-  { id: 10, title: 'Sea-view apartment', district: 'Achrafieh', city: 'Beirut', type: 'Appartement', transaction: 'For Sale', price: 500000, rent: 0 },
-  { id: 11, title: 'Cozy studio', district: 'Hamra', city: 'Beirut', type: 'Appartement', transaction: 'For Rent', price: 0, rent: 1200 },
+  { id: 10, title: 'Sea-view apartment', district: 'Achrafieh', city: 'Beirut', type: 'Apartment', transaction: 'For Sale', price: 500000, rent: 0 },
+  { id: 11, title: 'Cozy studio', district: 'Hamra', city: 'Beirut', type: 'Apartment', transaction: 'For Rent', price: 0, rent: 1200 },
 ]
 test('findPropertyDupes: matches on identical title', () => {
   const hits = findPropertyDupes(
@@ -73,7 +73,7 @@ test('findPropertyDupes: matches on identical title', () => {
 })
 test('findPropertyDupes: matches on same location+type+price', () => {
   const hits = findPropertyDupes(
-    { title: 'totally other title', district: 'Achrafieh', city: 'Beirut', type: 'Appartement', transaction: 'For Sale', price: 500000, rent: 0 },
+    { title: 'totally other title', district: 'Achrafieh', city: 'Beirut', type: 'Apartment', transaction: 'For Sale', price: 500000, rent: 0 },
     props,
   )
   assert.equal(hits.length, 1)
@@ -81,14 +81,14 @@ test('findPropertyDupes: matches on same location+type+price', () => {
 })
 test('findPropertyDupes: same location+type but different price is NOT a dupe', () => {
   const hits = findPropertyDupes(
-    { title: 'other', district: 'Achrafieh', city: 'Beirut', type: 'Appartement', transaction: 'For Sale', price: 650000, rent: 0 },
+    { title: 'other', district: 'Achrafieh', city: 'Beirut', type: 'Apartment', transaction: 'For Sale', price: 650000, rent: 0 },
     props,
   )
   assert.equal(hits.length, 0)
 })
 test('findPropertyDupes: rent compared for rentals', () => {
   const hits = findPropertyDupes(
-    { title: 'x', district: 'Hamra', city: 'Beirut', type: 'Appartement', transaction: 'For Rent', price: 0, rent: 1200 },
+    { title: 'x', district: 'Hamra', city: 'Beirut', type: 'Apartment', transaction: 'For Rent', price: 0, rent: 1200 },
     props,
   )
   assert.equal(hits.length, 1)
@@ -96,7 +96,7 @@ test('findPropertyDupes: rent compared for rentals', () => {
 })
 test('findPropertyDupes: excludes self when editing', () => {
   const hits = findPropertyDupes(
-    { title: 'Sea-view apartment', district: 'Achrafieh', city: 'Beirut', type: 'Appartement', transaction: 'For Sale', price: 500000, rent: 0 },
+    { title: 'Sea-view apartment', district: 'Achrafieh', city: 'Beirut', type: 'Apartment', transaction: 'For Sale', price: 500000, rent: 0 },
     props, 10,
   )
   assert.equal(hits.length, 0)

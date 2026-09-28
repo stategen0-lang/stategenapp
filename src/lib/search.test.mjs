@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { filterProperties, filterClients } from './search.ts'
 
 const props = [
-  { id: 1, title: 'Sea View Flat', district: 'Achrafieh', city: 'Beirut', type: 'Appartement', transaction: 'For Sale', status: 'Available', view: 'Sea' },
+  { id: 1, title: 'Sea View Flat', district: 'Achrafieh', city: 'Beirut', type: 'Apartment', transaction: 'For Sale', status: 'Available', view: 'Sea' },
   { id: 2, title: 'Hillside Villa', district: 'Broumana', city: 'Metn', type: 'Villa', transaction: 'For Sale', status: 'Sold', view: 'Mountain' },
   { id: 3, title: 'Downtown Office', district: 'Hamra', city: 'Beirut', type: 'Office', transaction: 'For Rent', status: 'Available', view: '' },
 ]

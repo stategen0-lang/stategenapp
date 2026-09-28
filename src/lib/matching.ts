@@ -517,7 +517,7 @@ const money = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`
 /** How far a listing is from being usable: the sum of what stands in the way. */
 const cost = (issues: MatchIssue[]) => issues.reduce((n, i) => n + i.weight, 0)
 
-/** "an appartement", "a villa" — these lines are read by people. */
+/** "an apartment", "a villa" — these lines are read by people. */
 const a = (word: string) => `${/^[aeiou]/i.test(word) ? 'an' : 'a'} ${word}`
 
 /** Every reason this listing is not a match. Empty means it is one. */

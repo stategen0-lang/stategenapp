@@ -29,7 +29,7 @@ test('scoreLocationMulti: falls back to the single location field', () => {
 
 // ── fixtures ────────────────────────────────────────────────────────────────
 const prop = (o = {}) => ({
-  type: 'Appartement', transaction: 'For Sale', price: 500000, rent: 0,
+  type: 'Apartment', transaction: 'For Sale', price: 500000, rent: 0,
   district: 'Hamra', city: 'Beirut', beds: 3, baths: 2, size: 150,
   garden: false, balcony: false, view: '', status: 'Available', photos: [],
   ...o,
@@ -126,7 +126,7 @@ test('propFeatures: garden + balcony + view, excludes Street view', () => {
 test('computeScore: perfect match → 100', () => {
   const s = computeScore(
     prop({ price: 500000, garden: true }),
-    client({ budget: 500000, req: { type: 'Appartement', location: 'Beirut', beds: 3, garden: true } }),
+    client({ budget: 500000, req: { type: 'Apartment', location: 'Beirut', beds: 3, garden: true } }),
   )
   assert.equal(s.total, 100)
   assert.equal(s.budgetScore, 100)
@@ -134,7 +134,7 @@ test('computeScore: perfect match → 100', () => {
 })
 test('computeScore: specified-but-mismatched property type → ineligible (hard filter)', () => {
   const s = computeScore(
-    prop({ type: 'Appartement', price: 400000 }),
+    prop({ type: 'Apartment', price: 400000 }),
     client({ budget: 500000, req: { type: 'Shop', location: 'Beirut', priceMax: 500000, beds: 3 } }),
   )
   // Type is a hard filter now, not a number: a Shop is not a fraction of an
@@ -152,7 +152,7 @@ test('computeScore: rental compares MONTHLY rent to the budget (not annualised)'
   // Renter budget 2000 vs a 2000/mo rental → perfect. If it wrongly used
   // rent×12 (24,000) this would instead be excluded.
   const s = computeScore(
-    prop({ transaction: 'For Rent', rent: 2000, price: 0, type: 'Appartement', district: 'Hamra', city: 'Beirut' }),
+    prop({ transaction: 'For Rent', rent: 2000, price: 0, type: 'Apartment', district: 'Hamra', city: 'Beirut' }),
     client({ type: 'Renter', budget: 2000, req: { location: 'Beirut', beds: 0 } }),
   )
   assert.equal(s.budgetScore, 100)
@@ -161,10 +161,10 @@ test('computeScore: rental compares MONTHLY rent to the budget (not annualised)'
 
 // ── matchProperties / matchClients ──────────────────────────────────────────
 test('matchProperties: drops sub-threshold + Sold, keeps strong matches', () => {
-  const c = client({ budget: 500000, req: { location: 'Beirut', priceMax: 500000, beds: 3, type: 'Appartement' } })
+  const c = client({ budget: 500000, req: { location: 'Beirut', priceMax: 500000, beds: 3, type: 'Apartment' } })
   const props = [
-    prop({ title: 'perfect', price: 400000, district: 'Hamra', city: 'Beirut', beds: 3, type: 'Appartement' }),
-    prop({ title: 'sold', price: 400000, district: 'Hamra', city: 'Beirut', beds: 3, type: 'Appartement', status: 'Sold' }),
+    prop({ title: 'perfect', price: 400000, district: 'Hamra', city: 'Beirut', beds: 3, type: 'Apartment' }),
+    prop({ title: 'sold', price: 400000, district: 'Hamra', city: 'Beirut', beds: 3, type: 'Apartment', status: 'Sold' }),
     prop({ title: 'weak', price: 900000, district: 'Tripoli', city: 'Tripoli', beds: 6, type: 'Villa' }),
   ]
   const res = matchProperties(c, props)
@@ -174,10 +174,10 @@ test('matchProperties: drops sub-threshold + Sold, keeps strong matches', () => 
 })
 
 test('matchProperties: ordered by descending score', () => {
-  const c = client({ budget: 500000, req: { location: 'Beirut', priceMax: 500000, beds: 3, type: 'Appartement' } })
+  const c = client({ budget: 500000, req: { location: 'Beirut', priceMax: 500000, beds: 3, type: 'Apartment' } })
   const props = [
-    prop({ title: 'good', price: 400000, district: 'Hamra', city: 'Beirut', beds: 4, type: 'Appartement' }),
-    prop({ title: 'best', price: 400000, district: 'Hamra', city: 'Beirut', beds: 3, type: 'Appartement' }),
+    prop({ title: 'good', price: 400000, district: 'Hamra', city: 'Beirut', beds: 4, type: 'Apartment' }),
+    prop({ title: 'best', price: 400000, district: 'Hamra', city: 'Beirut', beds: 3, type: 'Apartment' }),
   ]
   assert.deepEqual(matchProperties(c, props).map(r => r.property.title), ['best', 'good'])
 })
@@ -185,57 +185,57 @@ test('matchProperties: ordered by descending score', () => {
 // ── transaction (buy vs rent) hard filter ────────────────────────────────────
 test('computeScore: a Buyer is excluded from a rental listing', () => {
   const s = computeScore(
-    prop({ transaction: 'For Rent', rent: 1500, price: 0, type: 'Appartement', district: 'Hamra', city: 'Beirut' }),
+    prop({ transaction: 'For Rent', rent: 1500, price: 0, type: 'Apartment', district: 'Hamra', city: 'Beirut' }),
     client({ type: 'Buyer', budget: 500000, req: { location: 'Beirut', priceMax: 500000, beds: 2 } }),
   )
   assert.equal(s.eligible, false)
 })
 test('computeScore: a Renter is excluded from a sale listing', () => {
   const s = computeScore(
-    prop({ transaction: 'For Sale', price: 400000, type: 'Appartement', district: 'Hamra', city: 'Beirut' }),
+    prop({ transaction: 'For Sale', price: 400000, type: 'Apartment', district: 'Hamra', city: 'Beirut' }),
     client({ type: 'Renter', budget: 30000, req: { location: 'Beirut', priceMax: 30000, beds: 2 } }),
   )
   assert.equal(s.eligible, false)
 })
 test('computeScore: explicit req.transaction drives the filter', () => {
   const s = computeScore(
-    prop({ transaction: 'For Sale', price: 400000, type: 'Appartement', district: 'Hamra', city: 'Beirut' }),
+    prop({ transaction: 'For Sale', price: 400000, type: 'Apartment', district: 'Hamra', city: 'Beirut' }),
     client({ budget: 500000, req: { transaction: 'For Rent', location: 'Beirut', priceMax: 500000, beds: 2 } }),
   )
   assert.equal(s.eligible, false)
 })
 test('matchProperties: a Buyer only sees sale listings', () => {
-  const c = client({ type: 'Buyer', budget: 600000, req: { type: 'Appartement', location: 'Beirut', priceMin: 300000, priceMax: 600000, beds: 2 } })
+  const c = client({ type: 'Buyer', budget: 600000, req: { type: 'Apartment', location: 'Beirut', priceMin: 300000, priceMax: 600000, beds: 2 } })
   const props = [
-    prop({ title: 'sale', transaction: 'For Sale', price: 500000, type: 'Appartement', district: 'Hamra', city: 'Beirut', beds: 2 }),
-    prop({ title: 'rent', transaction: 'For Rent', rent: 1500, price: 0, type: 'Appartement', district: 'Hamra', city: 'Beirut', beds: 2 }),
+    prop({ title: 'sale', transaction: 'For Sale', price: 500000, type: 'Apartment', district: 'Hamra', city: 'Beirut', beds: 2 }),
+    prop({ title: 'rent', transaction: 'For Rent', rent: 1500, price: 0, type: 'Apartment', district: 'Hamra', city: 'Beirut', beds: 2 }),
   ]
   assert.deepEqual(matchProperties(c, props).map(r => r.property.title), ['sale'])
 })
 
 test('matchProperties: excludes far-away listings (location hard filter)', () => {
-  const c = client({ budget: 500000, req: { location: 'Beirut', beds: 3, type: 'Appartement' } })
+  const c = client({ budget: 500000, req: { location: 'Beirut', beds: 3, type: 'Apartment' } })
   const props = [
-    prop({ title: 'near', price: 500000, district: 'Hamra', city: 'Beirut', beds: 3, type: 'Appartement' }),
-    prop({ title: 'far',  price: 500000, district: 'Tyre',  city: 'South',  beds: 3, type: 'Appartement' }),
+    prop({ title: 'near', price: 500000, district: 'Hamra', city: 'Beirut', beds: 3, type: 'Apartment' }),
+    prop({ title: 'far',  price: 500000, district: 'Tyre',  city: 'South',  beds: 3, type: 'Apartment' }),
   ]
   assert.deepEqual(matchProperties(c, props).map(r => r.property.title), ['near'])
 })
 
 test('matchProperties: excludes wrong-type and >±50%-off-budget listings', () => {
-  const c = client({ budget: 600000, req: { type: 'Appartement', location: 'Beirut', priceMin: 400000, priceMax: 600000, beds: 3 } })
+  const c = client({ budget: 600000, req: { type: 'Apartment', location: 'Beirut', priceMin: 400000, priceMax: 600000, beds: 3 } })
   const props = [
-    prop({ title: 'right',        type: 'Appartement', price: 500000, district: 'Hamra', city: 'Beirut', beds: 3 }),
+    prop({ title: 'right',        type: 'Apartment', price: 500000, district: 'Hamra', city: 'Beirut', beds: 3 }),
     prop({ title: 'wrong-type',   type: 'Shop',        price: 500000, district: 'Hamra', city: 'Beirut', beds: 3 }),
-    prop({ title: 'too-pricey',   type: 'Appartement', price: 1000000, district: 'Hamra', city: 'Beirut', beds: 3 }),
+    prop({ title: 'too-pricey',   type: 'Apartment', price: 1000000, district: 'Hamra', city: 'Beirut', beds: 3 }),
   ]
   assert.deepEqual(matchProperties(c, props).map(r => r.property.title), ['right'])
 })
 
 test('matchClients: sorts best-first and honours the threshold', () => {
-  const p = prop({ price: 400000, district: 'Hamra', city: 'Beirut', beds: 3, type: 'Appartement' })
+  const p = prop({ price: 400000, district: 'Hamra', city: 'Beirut', beds: 3, type: 'Apartment' })
   const clients = [
-    client({ budget: 500000, req: { location: 'Beirut', priceMax: 500000, beds: 3, type: 'Appartement' } }),
+    client({ budget: 500000, req: { location: 'Beirut', priceMax: 500000, beds: 3, type: 'Apartment' } }),
     client({ budget: 100000, req: { location: 'Tripoli', priceMax: 100000, beds: 1, type: 'Villa' } }),
   ]
   const res = matchClients(p, clients)
@@ -245,11 +245,11 @@ test('matchClients: sorts best-first and honours the threshold', () => {
 
 test('propFeatures + wishlist: client must-haves match a listing\'s features', () => {
   const listing = prop({ price: 500000, amenities: ['Pool'], buildingFeatures: ['Elevator', 'Generator'], parkings: 1, terrace: true })
-  const wantAll = client({ budget: 500000, req: { type: 'Appartement', location: 'Beirut', beds: 3, amenities: ['Pool'], buildingFeatures: ['Elevator'], parkings: 1, terrace: true } })
+  const wantAll = client({ budget: 500000, req: { type: 'Apartment', location: 'Beirut', beds: 3, amenities: ['Pool'], buildingFeatures: ['Elevator'], parkings: 1, terrace: true } })
   assert.equal(computeScore(listing, wantAll).mustHaveScore, 100)
   // "Pool" (private) must not be satisfied by a shared pool.
   const shared = prop({ price: 500000, buildingFeatures: ['Shared Pool'] })
-  const wantPool = client({ budget: 500000, req: { type: 'Appartement', location: 'Beirut', beds: 3, amenities: ['Pool'] } })
+  const wantPool = client({ budget: 500000, req: { type: 'Apartment', location: 'Beirut', beds: 3, amenities: ['Pool'] } })
   assert.equal(computeScore(shared, wantPool).mustHaveScore, 0)
 })
 
@@ -318,7 +318,7 @@ test('matchProperties: the listing filed under another spelling now shows up', (
     prop({ id: 1, title: 'spelled differently', district: '', city: 'Hazmiyeh', price: 300000 }),
     prop({ id: 2, title: 'far away', district: '', city: 'Tripoli', price: 300000 }),
   ]
-  const c = client({ budget: 300000, req: { type: 'Appartement', location: 'Hazmieh', beds: 3 } })
+  const c = client({ budget: 300000, req: { type: 'Apartment', location: 'Hazmieh', beds: 3 } })
   const titles = matchProperties(c, props, MATCH_THRESHOLD, areas).map(r => r.property.title)
   assert.deepEqual(titles, ['spelled differently'])
 })
@@ -370,18 +370,18 @@ test('scoreLocation: a guessed place never decides a match', () => {
 
 test('matchProperties: a client who named a caza still gets their matches', () => {
   const props = [
-    prop({ id: 1, title: 'in the metn', district: 'Dbayeh', city: 'Metn', price: 300000, type: 'Appartement' }),
-    prop({ id: 2, title: 'far south', district: '', city: 'Saida', price: 300000, type: 'Appartement' }),
+    prop({ id: 1, title: 'in the metn', district: 'Dbayeh', city: 'Metn', price: 300000, type: 'Apartment' }),
+    prop({ id: 2, title: 'far south', district: '', city: 'Saida', price: 300000, type: 'Apartment' }),
   ]
-  const c = client({ budget: 300000, req: { type: 'Appartement', location: 'Metn', locations: ['Metn'], beds: 3 } })
+  const c = client({ budget: 300000, req: { type: 'Apartment', location: 'Metn', locations: ['Metn'], beds: 3 } })
   assert.deepEqual(matchProperties(c, props, MATCH_THRESHOLD, areas).map(r => r.property.title), ['in the metn'])
 })
 
 // ── Explaining a non-match ──────────────────────────────────────────────────
 
 test('explainMatch: a listing that matches has nothing to explain', () => {
-  const p = prop({ price: 500000, district: '', city: 'Beirut', type: 'Appartement' })
-  const c = client({ type: 'Buyer', budget: 500000, req: { type: 'Appartement', location: 'Beirut', beds: 3 } })
+  const p = prop({ price: 500000, district: '', city: 'Beirut', type: 'Apartment' })
+  const c = client({ type: 'Buyer', budget: 500000, req: { type: 'Apartment', location: 'Beirut', beds: 3 } })
   assert.deepEqual(explainMatch(p, c, areas), [])
 })
 
@@ -421,7 +421,7 @@ test('nearMisses: the one blocked on price alone comes first', () => {
 })
 
 test('nearMisses: nothing to report when everything matches', () => {
-  const p = prop({ price: 500000, district: '', city: 'Beirut', type: 'Appartement' })
-  const c = client({ type: 'Buyer', budget: 500000, req: { type: 'Appartement', location: 'Beirut', beds: 3 } })
+  const p = prop({ price: 500000, district: '', city: 'Beirut', type: 'Apartment' })
+  const c = client({ type: 'Buyer', budget: 500000, req: { type: 'Apartment', location: 'Beirut', beds: 3 } })
   assert.deepEqual(nearMisses(c, [p], areas), [])
 })

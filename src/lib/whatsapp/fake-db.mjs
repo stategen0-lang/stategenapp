@@ -12,10 +12,27 @@
 // Deliberately small. It is not a database; it is enough of one to prove that a
 // handler asks for the right rows and writes the right columns.
 
-const norm = v => (v === null || v === undefined ? v : typeof v === 'number' ? v : String(v))
+// Compared as text on both sides, the way PostgREST ends up doing it: an id
+// read out of a JSON payload arrives as "500" and the seeded row holds 500, and
+// a filter that misses on that alone would have this reporting bugs that do not
+// exist.
+const norm = v => (v === null || v === undefined ? v : String(v))
 
-/** @param {Record<string, object[]>} tables seed rows, by table name */
-export function fakeDb(tables = {}) {
+/**
+ * @param {Record<string, object[]>} tables seed rows, by table name
+ * @param {object} [opts]
+ * @param {Record<string, string>} [opts.links] embedded selects, as
+ *   `"<table>.<embedded table>": "<foreign key column>"`. PostgREST infers
+ *   these from the schema; here they are declared, because guessing which
+ *   column joins deals to client_requests is how a fake starts lying.
+ */
+export function fakeDb(tables = {}, opts = {}) {
+  const links = opts.links ?? {
+    'deals.client_requests': 'client_id',
+    'deals.Properties': 'property_id',
+    'listing_alerts.Properties': 'property_id',
+    'listing_alerts.client_requests': 'client_id',
+  }
   const data = Object.fromEntries(Object.entries(tables).map(([t, rows]) => [t, rows.map(r => ({ ...r }))]))
   /** Every write attempted, in order: { table, op, values, filters }. */
   const writes = []
@@ -23,6 +40,7 @@ export function fakeDb(tables = {}) {
   const from = (table) => {
     data[table] ??= []
     const filters = []
+    let embeds = []
     let op = 'select'
     let values = null
     let limit = Infinity
@@ -30,14 +48,30 @@ export function fakeDb(tables = {}) {
 
     const rows = () => {
       let out = data[table].filter(row =>
-        filters.every(([kind, col, val]) => kind === 'ilike'
-          ? String(row[col] ?? '').toLowerCase().includes(String(val).replace(/%/g, '').toLowerCase())
-          : norm(row[col]) === norm(val)))
+        filters.every(([kind, col, val]) => {
+          if (kind === 'ilike') return String(row[col] ?? '').toLowerCase().includes(String(val).replace(/%/g, '').toLowerCase())
+          if (kind === 'in') return val.map(norm).includes(norm(row[col]))
+          return norm(row[col]) === norm(val)
+        }))
       if (order) {
         const { col, ascending } = order
         out = [...out].sort((a, b) => (a[col] > b[col] ? 1 : a[col] < b[col] ? -1 : 0) * (ascending ? 1 : -1))
       }
-      return out.slice(0, limit)
+      out = out.slice(0, limit)
+      // Embedded selects — deals.select('…, client_requests("Client Name")').
+      // Only ever attached for a read: they produce COPIES, and an update
+      // writing to a copy would look like it worked and change nothing.
+      if (embeds.length && op === 'select') {
+        out = out.map(row => {
+          const withRelated = { ...row }
+          for (const name of embeds) {
+            const fk = links[table + '.' + name]
+            withRelated[name] = fk ? (data[name] ?? []).find(r => norm(r.id) === norm(row[fk])) ?? null : null
+          }
+          return withRelated
+        })
+      }
+      return out
     }
 
     const run = () => {
@@ -62,13 +96,18 @@ export function fakeDb(tables = {}) {
     }
 
     const api = {
-      select() { if (op === 'select') op = 'select'; return api },
+      select(cols) {
+        // "id, agent_id, client_requests(\"Client Name\")" — pick out the embeds.
+        for (const m of String(cols ?? '').matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*\(/g)) embeds.push(m[1])
+        return api
+      },
       insert(v) { op = 'insert'; values = v; return api },
       update(v) { op = 'update'; values = v; return api },
       upsert(v) { op = 'insert'; values = v; return api },
       delete() { op = 'delete'; return api },
       eq(col, val) { filters.push(['eq', col, val]); return api },
       ilike(col, val) { filters.push(['ilike', col, val]); return api },
+      in(col, values) { filters.push(['in', col, values]); return api },
       order(col, o = {}) { order = { col, ascending: o.ascending !== false }; return api },
       limit(n) { limit = n; return api },
       maybeSingle() { const r = run(); return Promise.resolve({ data: r.data?.[0] ?? null, error: r.error }) },

@@ -8,13 +8,31 @@
 // "@/" alias and fail.
 import type { Property, Client, ClientReq } from '@/lib/data'
 
+/**
+ * The app spells it Apartment. It used to spell it the French way,
+ * "Appartement", and every listing and client saved before that change still
+ * holds the old word in its JSON blob.
+ *
+ * Matching compares the type as an exact string, so without this a client
+ * wanting an Apartment would match none of the agency's existing apartments —
+ * the whole inventory would go quiet the day the rename shipped. Migration 031
+ * rewrites the stored rows; this makes the app right in the meantime, and stays
+ * as the safety net for any row written by an older client or restored from an
+ * older backup.
+ */
+export function propertyType(value: unknown): Property['type'] {
+  const s = String(value ?? '').trim()
+  if (!s) return 'Apartment'
+  return /^appartements?$/i.test(s) ? 'Apartment' : (s as Property['type'])
+}
+
 export function dbRowToProperty(row: Record<string, unknown>, idx: number): Property {
   let extras: Record<string, unknown> = {}
   try { extras = JSON.parse(row.Amenities as string || '{}') } catch {}
   return {
     id: (row.id as number) ?? idx,
     title: (row.Title as string) ?? '',
-    type: (extras.type as Property['type']) ?? 'Appartement',
+    type: propertyType(extras.type),
     // Normalise to the app's transaction enum so 'sale'/'rent' (e.g. imported
     // rows) are recognised, not just the exact 'For Sale'/'For Rent'.
     transaction: (/rent/i.test(String(extras.transaction ?? '')) ? 'For Rent' : 'For Sale') as Property['transaction'],
@@ -62,11 +80,14 @@ export function dbRowToClient(row: Record<string, unknown>, idx: number): Client
   let extras: Record<string, unknown> = {}
   try { extras = JSON.parse(row.notes as string || '{}') } catch {}
   const reqExtras = (extras.req as Record<string, unknown>) ?? {}
-  // req.type must be a PROPERTY type (Appartement/Villa/…). Older imports wrongly
+  // req.type must be a PROPERTY type (Apartment/Villa/…). Older imports wrongly
   // stored a transaction ("For Sale"/"For Rent") here, which then hard-excluded
   // every match on the type filter — so ignore anything that isn't a real type.
-  const VALID_REQ_TYPES = new Set(['Appartement', 'Duplex', 'Studio', 'Villa', 'Chalet', 'Standalone', 'Building', 'Land', 'Shop', 'Office', 'Showroom', 'Restaurant', 'Garage', 'Warehouse'])
-  const reqType = VALID_REQ_TYPES.has(String(reqExtras.type)) ? (reqExtras.type as ClientReq['type']) : ''
+  const VALID_REQ_TYPES = new Set(['Apartment', 'Duplex', 'Studio', 'Villa', 'Chalet', 'Standalone', 'Building', 'Land', 'Shop', 'Office', 'Showroom', 'Restaurant', 'Garage', 'Warehouse'])
+  // Read through the same spelling fix as a listing's, so a client asking for
+  // an "Appartement" saved last month still matches today's apartments.
+  const asked = reqExtras.type ? propertyType(reqExtras.type) : ''
+  const reqType = VALID_REQ_TYPES.has(asked) ? (asked as ClientReq['type']) : ''
   const reqLocations = Array.isArray(reqExtras.locations)
     ? (reqExtras.locations as string[]).filter(l => typeof l === 'string' && l.trim())
     : []

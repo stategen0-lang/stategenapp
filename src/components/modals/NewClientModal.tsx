@@ -405,7 +405,7 @@ export default function NewClientModal({ onClose, onSaved, onDeleted, matchThres
                   {wants('garden') && featureChip('Garden', req.garden, () => setR('garden', !req.garden))}
                   {wants('balcony') && featureChip('Balcony', req.balcony, () => setR('balcony', !req.balcony))}
                   {wants('terrace') && featureChip('Terrace', !!req.terrace, () => setR('terrace', !req.terrace))}
-                  {amenitiesFor((req.type || 'Appartement') as PropertyType).map(a => featureChip(a, (req.amenities ?? []).includes(a), () => toggleFeature('amenities', a)))}
+                  {amenitiesFor((req.type || 'Apartment') as PropertyType).map(a => featureChip(a, (req.amenities ?? []).includes(a), () => toggleFeature('amenities', a)))}
                 </div>
               </div>
               {wants('buildingFeatures') && (

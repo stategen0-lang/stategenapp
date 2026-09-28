@@ -14,7 +14,7 @@ const row = () => ({
   Title: 'Sea view apartment',
   Amenities: JSON.stringify({
     agentId: 'NH-1',
-    type: 'Appartement',
+    type: 'Apartment',
     amenities: ['Pool'],
     publicNotes: 'New kitchen, quiet street',
     notes: 'Owner is desperate, will take 15% less',
@@ -54,7 +54,7 @@ test('a manager receives all of them, whoever listed it', () => {
 test('stripping takes nothing else with it', () => {
   // The shared inventory is still shared: everything that is not private stays.
   const ex = extras(stripPrivateFields(row(), session('agent', 'SM-2')))
-  assert.equal(ex.type, 'Appartement')
+  assert.equal(ex.type, 'Apartment')
   assert.deepEqual(ex.amenities, ['Pool'])
   assert.equal(ex.agentId, 'NH-1')                       // who owns it is not a secret
   assert.equal(ex.publicNotes, 'New kitchen, quiet street')   // written for clients

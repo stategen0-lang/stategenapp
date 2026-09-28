@@ -18,18 +18,18 @@ import { sortListingFeatures, extractFeaturesFromNotes, mergeFeatureFields } fro
 /**
  * Property type, tolerant of how people actually write it.
  *
- * The app stores the French spelling "Appartement" throughout. An agent who
+ * The app stores the French spelling "Apartment" throughout. An agent who
  * typed the obvious English "Apartment" was told "I didn't recognise that type"
  * and had to guess the app's internal spelling — which happened on the first
  * real listing anyone tried to add over WhatsApp.
  */
 // Only maps words that AREN'T themselves listing types. Studio, Duplex and
-// Showroom used to live here (→ Appartement/Villa/Shop) but are now real types
+// Showroom used to live here (→ Apartment/Villa/Shop) but are now real types
 // of their own, so they're matched exactly instead (exact match runs first in
 // coerceType) — leaving them here would wrongly rewrite "duplex in Achrafieh".
 const TYPE_SYNONYMS: Record<string, string> = {
-  apartment: 'Appartement', appartment: 'Appartement', apt: 'Appartement',
-  flat: 'Appartement', condo: 'Appartement',
+  apartment: 'Apartment', appartment: 'Apartment', apt: 'Apartment',
+  flat: 'Apartment', condo: 'Apartment',
   house: 'Villa', home: 'Villa',
   store: 'Shop', retail: 'Shop',
   plot: 'Land', terrain: 'Land',

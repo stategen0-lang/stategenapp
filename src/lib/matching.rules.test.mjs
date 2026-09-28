@@ -15,7 +15,7 @@ import { loadAreas } from './lebanon/areas.ts'
 const areas = await loadAreas()
 
 const prop = (o = {}) => ({
-  id: 1, title: 'L', type: 'Appartement', transaction: 'For Sale', price: 500000, rent: 0,
+  id: 1, title: 'L', type: 'Apartment', transaction: 'For Sale', price: 500000, rent: 0,
   district: '', city: 'Achrafieh', beds: 3, baths: 2, size: 150, parkings: 0,
   garden: false, balcony: false, view: '', status: 'Available', agentId: 'a1', photos: [],
   amenities: [], buildingFeatures: [], ...o,
@@ -24,7 +24,7 @@ const client = (o = {}) => ({
   id: 1, name: 'C', type: o.type ?? 'Buyer', email: '', phone: '',
   budget: o.budget ?? 500000, agentId: 'a2', status: 'Searching', leadScore: 0, agentRating: 3,
   req: {
-    transaction: 'For Sale', type: 'Appartement', location: 'Achrafieh',
+    transaction: 'For Sale', type: 'Apartment', location: 'Achrafieh',
     priceMin: 0, priceMax: 0, beds: 3, baths: 0, size: 0, garden: false, balcony: false, notes: '',
     ...(o.req ?? {}),
   },

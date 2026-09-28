@@ -49,7 +49,7 @@ const UTILITY: ListingField[] = [
 ]
 
 const BY_TYPE: Record<string, ListingField[]> = {
-  Appartement: HOME, Duplex: HOME, Studio: HOME, Villa: HOME, Chalet: HOME, Standalone: HOME,
+  Apartment: HOME, Duplex: HOME, Studio: HOME, Villa: HOME, Chalet: HOME, Standalone: HOME,
   Building: BUILDING,
   Land: LAND,
   Shop: COMMERCIAL, Office: COMMERCIAL, Showroom: COMMERCIAL, Restaurant: COMMERCIAL,

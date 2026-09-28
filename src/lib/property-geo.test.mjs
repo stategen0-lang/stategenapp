@@ -10,7 +10,7 @@ import { PACKED_AREAS, GOVERNORATES, CAZAS } from './lebanon/areas.data.ts'
 const ix = buildIndex(PACKED_AREAS, GOVERNORATES, CAZAS)
 
 const prop = (o = {}) => ({
-  id: o.id ?? 1, title: o.title ?? 'Listing', type: 'Appartement', transaction: 'For Sale',
+  id: o.id ?? 1, title: o.title ?? 'Listing', type: 'Apartment', transaction: 'For Sale',
   price: 300000, rent: 0, district: o.district ?? '', city: o.city ?? 'Achrafieh',
   size: 120, beds: 2, baths: 1, status: o.status ?? 'Available', agentId: 'a1', photos: [],
 })

@@ -16,7 +16,7 @@ const areas = await loadAreas()
 
 /** What NewClientModal's reqWithLocations() produces for three chips. */
 const formReq = {
-  transaction: 'For Sale', type: 'Appartement',
+  transaction: 'For Sale', type: 'Apartment',
   location: 'Achrafieh, Jounieh, Batroun',
   locations: ['Achrafieh', 'Jounieh', 'Batroun'],
   priceMin: 500000, priceMax: 500000, beds: 3, baths: 0, size: 0,
@@ -38,7 +38,7 @@ const storedRow = (req) => ({
 })
 
 const prop = (city, o = {}) => ({
-  id: 1, title: 'L', type: 'Appartement', transaction: 'For Sale', price: 500000, rent: 0,
+  id: 1, title: 'L', type: 'Apartment', transaction: 'For Sale', price: 500000, rent: 0,
   district: '', city, beds: 3, baths: 2, size: 150, parkings: 0, garden: false, balcony: false,
   view: '', status: 'Available', agentId: 'a1', photos: [], amenities: [], buildingFeatures: [], ...o,
 })

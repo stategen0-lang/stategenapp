@@ -31,7 +31,7 @@ test('nextQuestion: asks a natural question, prefixes the ack', () => {
 })
 
 test('nextQuestion: empty when nothing mandatory is missing', () => {
-  const full = { name: 'Joe', phone: '03 1', clientType: 'Buyer', propertyType: 'Appartement', location: 'Metn', budget: 500000 }
+  const full = { name: 'Joe', phone: '03 1', clientType: 'Buyer', propertyType: 'Apartment', location: 'Metn', budget: 500000 }
   assert.equal(nextQuestion(full, CREATE_CLIENT_STEPS), '')
 })
 
@@ -40,14 +40,14 @@ const parseProp = (t, base) => parseForm(t, CREATE_PROPERTY_STEPS, base)
 const missingProp = (ctx) => missingMandatory(ctx, CREATE_PROPERTY_STEPS)
 
 const fullProp = {
-  type: 'Appartement', transaction: 'For Sale', location: 'Beirut',
+  type: 'Apartment', transaction: 'For Sale', location: 'Beirut',
   neighborhood: 'Hamra', price: 450000, ownerName: 'Mr Khoury', ownerContact: '03111222',
 }
 
 // ── coerceType ──────────────────────────────────────────────────────────────
 test('coerceType: English spellings, common words, canonical, nonsense', () => {
-  assert.equal(coerceType('Apartment'), 'Appartement')
-  assert.equal(coerceType('flat'), 'Appartement')
+  assert.equal(coerceType('Apartment'), 'Apartment')
+  assert.equal(coerceType('flat'), 'Apartment')
   assert.equal(coerceType('house'), 'Villa')
   assert.equal(coerceType('villa'), 'Villa')
   assert.equal(coerceType('spaceship'), null)
@@ -97,7 +97,7 @@ test('parseForm (listing): reads every labelled line', () => {
     'Parking spaces (optional): 1', 'Owner name (required): Mr Khoury', 'Owner phone (required): 03111222',
   ].join('\n'))
   assert.deepEqual(invalid, [])
-  assert.equal(context.type, 'Appartement')
+  assert.equal(context.type, 'Apartment')
   assert.equal(context.transaction, 'For Sale')
   assert.equal(context.location, 'Achrafieh')
   assert.equal(context.price, 450000)
@@ -213,7 +213,7 @@ const missingClient = (ctx) => missingMandatory(ctx, CREATE_CLIENT_STEPS)
 
 const fullClient = {
   name: 'Ahmed Khoury', phone: '03111222', clientType: 'Buyer',
-  propertyType: 'Appartement', location: 'Achrafieh', budget: 400000,
+  propertyType: 'Apartment', location: 'Achrafieh', budget: 400000,
 }
 
 test('client form: lists the client fields with tags (no email)', () => {
@@ -242,7 +242,7 @@ test('parseForm (client): reads and coerces the fields', () => {
   assert.deepEqual(invalid, [])
   assert.equal(context.name, 'Ahmed Khoury')
   assert.equal(context.clientType, 'Buyer')          // "buyer" → Buyer
-  assert.equal(context.propertyType, 'Appartement')  // "apartment" → Appartement
+  assert.equal(context.propertyType, 'Apartment')  // "apartment" → Apartment
   assert.equal(context.location, 'Achrafieh')
   assert.equal(context.budget, 400000)
   assert.equal(context.beds, 3)
@@ -273,7 +273,7 @@ test('seedForm (client): a full forwarded enquiry leaves nothing mandatory missi
     { name: 'Joe Khoury', clientType: 'buyer', propertyType: 'apartment', location: 'Achrafieh', budget: 250000, beds: 2, phone: '03 123456' },
     CREATE_CLIENT_STEPS,
   )
-  assert.equal(ctx.propertyType, 'Appartement')   // "apartment" → canonical spelling
+  assert.equal(ctx.propertyType, 'Apartment')   // "apartment" → canonical spelling
   assert.equal(ctx.clientType, 'Buyer')
   assert.equal(ctx.beds, 2)
   assert.deepEqual(missingClient(ctx), [])
@@ -292,8 +292,8 @@ test('isStartListing / isStartClient recognise their own commands', () => {
   assert.equal(isStartClient('info on Ahmed'), false)
 })
 test('derivedTitle: readable listing title', () => {
-  assert.equal(derivedTitle(fullProp), 'Appartement in Hamra')
-  assert.equal(derivedTitle({ ...fullProp, beds: 3 }), '3 bed Appartement in Hamra')
+  assert.equal(derivedTitle(fullProp), 'Apartment in Hamra')
+  assert.equal(derivedTitle({ ...fullProp, beds: 3 }), '3 bed Apartment in Hamra')
 })
 
 // ── The client brief template agents are given ───────────────────────────────
@@ -332,7 +332,7 @@ test('CLIENT_TEMPLATE: every line maps to a field when filled in', () => {
   assert.equal(context.name, 'Dana Tohme')
   assert.equal(context.phone, '03 111 222')
   assert.equal(context.clientType, 'Renter')
-  assert.equal(context.propertyType, 'Appartement')
+  assert.equal(context.propertyType, 'Apartment')
   assert.deepEqual(context.locations, ['Zouk', 'Kaslik', 'Aintoura'])
   assert.equal(context.location, 'Zouk, Kaslik, Aintoura')   // derived, never asked
   assert.equal(context.budget, 450)                          // range → the top end

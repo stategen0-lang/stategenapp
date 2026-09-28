@@ -13,7 +13,7 @@ import { propertyPayload } from './property-payload.ts'
 // empty. Keep this in step with the form's useState — that is the whole job.
 const FORM = {
   title: 'Sea view apartment',
-  type: 'Appartement',
+  type: 'Apartment',
   transaction: 'For Sale',
   price: '450000',
   rent: '0',

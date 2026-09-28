@@ -57,7 +57,7 @@ test('malformed tokens never throw, just return null', () => {
 
 // ── The public allowlist ──────────────────────────────────────────────────
 const fullProperty = {
-  id: 5, title: 'Raouché Apartment', type: 'Appartement', transaction: 'For Sale',
+  id: 5, title: 'Raouché Apartment', type: 'Apartment', transaction: 'For Sale',
   price: 480000, rent: 0, district: 'Raouché', city: 'Beirut', size: 145,
   beds: 3, baths: 2, garden: false, balcony: true, view: 'Sea', parkings: 1,
   buildingAge: 8, needsRenovation: true, status: 'Available', agentId: 'a2',
@@ -124,7 +124,7 @@ test('publicListing: blank public notes are left out entirely', () => {
 
 test('publicListing: publishes the Arabic description, still nothing private', () => {
   const p = {
-    title: 'T', type: 'Appartement', transaction: 'For Sale', price: 1, rent: 0,
+    title: 'T', type: 'Apartment', transaction: 'For Sale', price: 1, rent: 0,
     district: 'Achrafieh', city: '', size: 10, beds: 1, baths: 1,
     garden: false, balcony: false, terrace: false, amenities: [], buildingFeatures: [],
     view: '', status: 'Available', photos: [],

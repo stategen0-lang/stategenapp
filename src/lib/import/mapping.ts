@@ -137,7 +137,7 @@ const TYPE_RULES: [RegExp, string][] = [
   [/studio|ستوديو/i, 'Studio'],
   [/villa|فيلا/i, 'Villa'],
   [/chalet|شاليه/i, 'Chalet'],
-  [/apartment|appartement|apt\b|flat|penthouse|شقة/i, 'Appartement'],
+  [/apartment|appartement|apt\b|flat|penthouse|شقة/i, 'Apartment'],
   [/\bland\b|\bplot\b|terrain|أرض|ارض/i, 'Land'],
   [/office|مكتب/i, 'Office'],
   [/showroom|معرض/i, 'Showroom'],
@@ -150,14 +150,14 @@ const TYPE_RULES: [RegExp, string][] = [
 ]
 
 /** The app's property type from free text — a type column first, then the
- *  title. Falls back to Appartement, the most common listing. */
+ *  title. Falls back to Apartment, the most common listing. */
 export function guessPropertyType(...texts: (string | undefined)[]): string {
   for (const t of texts) {
     if (!t) continue
     const hit = TYPE_RULES.find(([re]) => re.test(t))
     if (hit) return hit[1]
   }
-  return 'Appartement'
+  return 'Apartment'
 }
 
 const PROPERTY_STATUSES = ['Available', 'Pending', 'Sold', 'Rented', 'Reserved', 'Under Construction']

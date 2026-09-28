@@ -41,7 +41,7 @@ test('a whole building has no single floor and nobody furnishes it', () => {
 })
 
 test('homes keep everything, and an unknown type is treated as one', () => {
-  for (const type of ['Appartement', 'Duplex', 'Studio', 'Villa', 'Chalet', 'Standalone']) {
+  for (const type of ['Apartment', 'Duplex', 'Studio', 'Villa', 'Chalet', 'Standalone']) {
     for (const f of ['beds', 'baths', 'balcony', 'garden', 'furnishing', 'floor']) {
       assert.equal(hasField(type, f), true, `${type} should have ${f}`)
     }
@@ -82,7 +82,7 @@ test('changing type reports nothing when there is nothing to clear', () => {
   assert.deepEqual(clearedByTypeChange('Land', { beds: 0, baths: '0' }), {})
   assert.deepEqual(clearedByTypeChange('Land', {}), {})
   // Going the other way adds fields back; it never has anything to clear.
-  assert.deepEqual(clearedByTypeChange('Appartement', { beds: '3', garden: true }), {})
+  assert.deepEqual(clearedByTypeChange('Apartment', { beds: '3', garden: true }), {})
 })
 
 test('amenities follow the type too', () => {
@@ -97,7 +97,7 @@ test('amenities follow the type too', () => {
   assert.equal(shop.includes("Helper's Room"), false)
   assert.equal(shop.includes('Pool'), false)
 
-  assert.ok(amenitiesFor('Appartement').includes('Pool'))
+  assert.ok(amenitiesFor('Apartment').includes('Pool'))
   assert.equal(amenitiesFor('Garage').includes('Air Conditioning'), false)
 })
 

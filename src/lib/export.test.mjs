@@ -10,7 +10,7 @@ import { CLIENT_COLUMNS, PROPERTY_COLUMNS } from './export-columns.ts'
 import { FIELDS } from './import/mapping.ts'
 
 const property = {
-  id: 7, title: 'Sea view apartment', type: 'Appartement', transaction: 'For Sale',
+  id: 7, title: 'Sea view apartment', type: 'Apartment', transaction: 'For Sale',
   price: 450000, rent: 0, district: 'Kaslik', city: 'Jounieh', size: 180, beds: 3, baths: 2,
   parkings: 2, buildingAge: 5, floor: 'Mid floor', furnishing: 'Furnished', view: 'Sea',
   garden: false, balcony: true, terrace: true, needsRenovation: false,
@@ -27,7 +27,7 @@ const client = {
   status: 'Searching', budget: 500000, agentId: 'NH-1', leadScore: 72, agentRating: 4,
   tags: ['VIP', 'cash buyer'], referredByName: 'Partner Realty',
   req: {
-    transaction: 'For Sale', type: 'Appartement',
+    transaction: 'For Sale', type: 'Apartment',
     location: 'Achrafieh, Hamra', locations: ['Achrafieh', 'Hamra'],
     beds: 3, baths: 2, size: 150, parkings: 1, buildingAge: 10,
     floor: 'Mid floor', furnishing: 'Furnished', view: 'Sea',
@@ -59,7 +59,7 @@ test('property export carries every field the form fills in', () => {
 test('client export carries every area, not just the first', () => {
   const r = row(CLIENT_COLUMNS, client)
   assert.equal(r['Wants'], 'Achrafieh, Hamra')
-  assert.equal(r['Property Type'], 'Appartement')
+  assert.equal(r['Property Type'], 'Apartment')
   assert.equal(r['Bathrooms'], '2')
   assert.equal(r['Min Size (m²)'], '150')
   assert.equal(r['Floor'], 'Mid floor')

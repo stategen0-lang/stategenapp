@@ -56,7 +56,7 @@ test('toText: trims, drops blanks, caps length', () => {
   assert.equal(toText('x'.repeat(900)).length, 500)
 })
 test('toPlace: capitalises a name typed in lower case', () => {
-  // From a real session: "zekrit" became the listing title "3 bed Appartement
+  // From a real session: "zekrit" became the listing title "3 bed Apartment
   // in zekrit", which then showed that way throughout the app.
   assert.equal(toPlace('zekrit'), 'Zekrit')
   assert.equal(toPlace('  beirut  '), 'Beirut')

@@ -4,7 +4,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { propertyStamp, DEFAULT_STAMP } from './listing-stamp.ts'
 
-const flat = (o = {}) => ({ type: 'Appartement', ...o })
+const flat = (o = {}) => ({ type: 'Apartment', ...o })
 const land = (o = {}) => ({ type: 'Land', ...o })
 
 test('stamp: furnished and payment facilities outrank everything else', () => {

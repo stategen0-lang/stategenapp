@@ -14,7 +14,7 @@ const daysAgo = (n) => new Date(NOW.getTime() - n * 86_400_000).toISOString()
 
 const client = (o = {}) => ({
   id: 1, name: 'Ahmed Khoury', status: 'Searching', budget: 400_000,
-  propertyType: 'Appartement', location: 'Hamra',
+  propertyType: 'Apartment', location: 'Hamra',
   lastContactAt: daysAgo(7), createdAt: daysAgo(30),
   ...o,
 })
@@ -119,7 +119,7 @@ test('reminderText: follows the spec wording', () => {
   const t = reminderText(client({ lastContactAt: daysAgo(5) }), NOW)
   assert.match(t, /Reminder: Call Ahmed Khoury today\./)
   assert.match(t, /Last contact: 5 days ago\./)
-  assert.match(t, /Interest: Appartement · \$400,000 · Hamra\./)
+  assert.match(t, /Interest: Apartment · \$400,000 · Hamra\./)
   assert.match(t, /Reply: done, snooze 3d, or not interested/)
 })
 test('reminderText: singular and same-day phrasing', () => {

@@ -77,7 +77,7 @@ test('CLIENT_COLUMNS: pulls the fields a manager expects', () => {
   const client = {
     id: 7, name: 'Ahmed Khoury', type: 'Buyer', phone: '03111222', email: 'a@x.com',
     status: 'Searching', budget: 400000, agentId: 'a2', leadScore: 62, agentRating: 4,
-    req: { location: 'Hamra', type: 'Appartement', beds: 3, transaction: 'For Sale' },
+    req: { location: 'Hamra', type: 'Apartment', beds: 3, transaction: 'For Sale' },
   }
   const row = CLIENT_COLUMNS.map(c => c.value(client))
   assert.equal(row[CLIENT_COLUMNS.findIndex(c => c.header === 'Name')], 'Ahmed Khoury')
@@ -87,7 +87,7 @@ test('CLIENT_COLUMNS: pulls the fields a manager expects', () => {
 })
 test('PROPERTY_COLUMNS: booleans render as Yes/No', () => {
   const prop = {
-    id: 1, title: 'Flat', type: 'Appartement', transaction: 'For Sale', price: 450000,
+    id: 1, title: 'Flat', type: 'Apartment', transaction: 'For Sale', price: 450000,
     rent: 0, city: 'Beirut', district: 'Hamra', size: 140, beds: 3, baths: 2,
     garden: false, balcony: true, view: 'Sea', status: 'Available', agentId: 'a1',
   }

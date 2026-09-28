@@ -18,7 +18,7 @@ export const AGENTS: Agent[] = [
 ]
 
 export type PropertyType =
-  | 'Appartement' | 'Duplex' | 'Studio' | 'Villa' | 'Chalet' | 'Standalone'
+  | 'Apartment' | 'Duplex' | 'Studio' | 'Villa' | 'Chalet' | 'Standalone'
   | 'Building' | 'Land' | 'Shop' | 'Office' | 'Showroom' | 'Restaurant'
   | 'Garage' | 'Warehouse'
 export type Transaction = 'For Sale' | 'For Rent'
@@ -74,7 +74,7 @@ export const BUILDING_FEATURES = [
 // whatsapp/writes.ts is a separate, self-contained pure module — keep it in sync
 // by hand when this changes.)
 export const PROPERTY_TYPES: PropertyType[] = [
-  'Appartement', 'Duplex', 'Studio', 'Villa', 'Chalet', 'Standalone',
+  'Apartment', 'Duplex', 'Studio', 'Villa', 'Chalet', 'Standalone',
   'Building', 'Land', 'Shop', 'Office', 'Showroom', 'Restaurant',
   'Garage', 'Warehouse',
 ]
@@ -144,23 +144,23 @@ export interface Property {
 }
 
 export const PROPERTIES: Property[] = [
-  { id: 1,  title: 'Raouché Appartement',   type: 'Appartement', transaction: 'For Sale', price: 480000,  rent: 0,    district: 'Raouché',    city: 'Beirut',   size: 145, beds: 3, baths: 2, garden: false, balcony: true,  view: 'Sea',       status: 'Available', agentId: 'a1',
+  { id: 1,  title: 'Raouché Apartment',   type: 'Apartment', transaction: 'For Sale', price: 480000,  rent: 0,    district: 'Raouché',    city: 'Beirut',   size: 145, beds: 3, baths: 2, garden: false, balcony: true,  view: 'Sea',       status: 'Available', agentId: 'a1',
     photos: ['https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800&q=80','https://images.unsplash.com/photo-1484154218962-a197022b5858?w=800&q=80','https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&q=80'] },
   { id: 2,  title: 'Dbayeh Villa',           type: 'Villa',       transaction: 'For Sale', price: 1200000, rent: 0,    district: 'Dbayeh',     city: 'Metn',     size: 450, beds: 5, baths: 4, garden: true,  balcony: true,  view: 'Mountain',  status: 'Pending',   agentId: 'a2',
     photos: ['https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=800&q=80','https://images.unsplash.com/photo-1613490493576-4d0d8a06e657?w=800&q=80','https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&q=80'] },
-  { id: 3,  title: 'Achrafieh Penthouse',   type: 'Appartement', transaction: 'For Sale', price: 980000,  rent: 0,    district: 'Achrafieh',  city: 'Beirut',   size: 220, beds: 4, baths: 3, garden: false, balcony: true,  view: 'City',      status: 'Available', agentId: 'a1',
+  { id: 3,  title: 'Achrafieh Penthouse',   type: 'Apartment', transaction: 'For Sale', price: 980000,  rent: 0,    district: 'Achrafieh',  city: 'Beirut',   size: 220, beds: 4, baths: 3, garden: false, balcony: true,  view: 'City',      status: 'Available', agentId: 'a1',
     photos: ['https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&q=80','https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&q=80','https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800&q=80'] },
   { id: 4,  title: 'Biyada Building',        type: 'Building',    transaction: 'For Sale', price: 790000,  rent: 0,    district: 'Biyada',     city: 'Metn',     size: 320, beds: 4, baths: 3, garden: true,  balcony: true,  view: 'Open',      status: 'Available', agentId: 'a3',
     photos: ['https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=800&q=80','https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=800&q=80','https://images.unsplash.com/photo-1583608205776-bfd35f0d9f83?w=800&q=80'] },
   { id: 5,  title: 'Broumana Villa',         type: 'Villa',       transaction: 'For Sale', price: 2100000, rent: 0,    district: 'Broumana',   city: 'Metn',     size: 650, beds: 6, baths: 5, garden: true,  balcony: true,  view: 'Valley',    status: 'Available', agentId: 'a2',
     photos: ['https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80','https://images.unsplash.com/photo-1600047508788-786f3865b87e?w=800&q=80','https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?w=800&q=80'] },
-  { id: 6,  title: 'Jounieh Studio',         type: 'Appartement', transaction: 'For Rent', price: 0,       rent: 900,  district: 'Jounieh',    city: 'Keserwan', size: 65,  beds: 1, baths: 1, garden: false, balcony: true,  view: 'Sea',       status: 'Available', agentId: 'a4', advancedPayment: '3 months',
+  { id: 6,  title: 'Jounieh Studio',         type: 'Apartment', transaction: 'For Rent', price: 0,       rent: 900,  district: 'Jounieh',    city: 'Keserwan', size: 65,  beds: 1, baths: 1, garden: false, balcony: true,  view: 'Sea',       status: 'Available', agentId: 'a4', advancedPayment: '3 months',
     photos: ['https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=800&q=80','https://images.unsplash.com/photo-1536376072261-38c75010e6c9?w=800&q=80'] },
   { id: 7,  title: 'Hamra Office',           type: 'Office',      transaction: 'For Rent', price: 0,       rent: 2400, district: 'Hamra',      city: 'Beirut',   size: 180, beds: 0, baths: 2, garden: false, balcony: false, view: 'Street',    status: 'Reserved',  agentId: 'a1', advancedPayment: '6 months',
     photos: ['https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&q=80','https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800&q=80','https://images.unsplash.com/photo-1497366811353-6870744d04b2?w=800&q=80'] },
   { id: 8,  title: 'Mansourieh Building',    type: 'Building',    transaction: 'For Sale', price: 650000,  rent: 0,    district: 'Mansourieh', city: 'Metn',     size: 280, beds: 4, baths: 3, garden: true,  balcony: true,  view: 'Mountain',  status: 'Available', agentId: 'a3',
     photos: ['https://images.unsplash.com/photo-1600210492493-0946911123ea?w=800&q=80','https://images.unsplash.com/photo-1598228723793-52759bba239c?w=800&q=80'] },
-  { id: 9,  title: 'Gemmayzeh Flat',         type: 'Appartement', transaction: 'For Rent', price: 0,       rent: 1500, district: 'Gemmayzeh',  city: 'Beirut',   size: 110, beds: 2, baths: 1, garden: false, balcony: true,  view: 'City',      status: 'Available', agentId: 'a4',
+  { id: 9,  title: 'Gemmayzeh Flat',         type: 'Apartment', transaction: 'For Rent', price: 0,       rent: 1500, district: 'Gemmayzeh',  city: 'Beirut',   size: 110, beds: 2, baths: 1, garden: false, balcony: true,  view: 'City',      status: 'Available', agentId: 'a4',
     photos: ['https://images.unsplash.com/photo-1507089947368-19c1da9775ae?w=800&q=80','https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800&q=80'] },
   { id: 10, title: 'Antelias Showroom',      type: 'Showroom',    transaction: 'For Sale', price: 520000,  rent: 0,    district: 'Antelias',   city: 'Metn',     size: 240, beds: 0, baths: 2, garden: false, balcony: false, view: 'Open',      status: 'Sold',      agentId: 'a2',
     photos: ['https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=800&q=80','https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=800&q=80'] },
@@ -268,11 +268,11 @@ export function tagStyle(tag: string): { bg: string; color: string } {
 export const CLIENTS: Client[] = [
   {
     id: 1, name: 'Michel Tanios', type: 'Buyer', email: 'michel.tanios@email.com', phone: '+961 3 221 904', budget: 700000, agentId: 'a1', status: 'Searching',
-    req: { transaction: 'For Sale', type: 'Appartement', location: 'Metn', priceMin: 500000, priceMax: 700000, beds: 3, baths: 2, size: 130, garden: false, balcony: true, notes: 'Wants a sea or open view, move-in ready.' },
+    req: { transaction: 'For Sale', type: 'Apartment', location: 'Metn', priceMin: 500000, priceMax: 700000, beds: 3, baths: 2, size: 130, garden: false, balcony: true, notes: 'Wants a sea or open view, move-in ready.' },
   },
   {
     id: 4, name: 'Sara Stephan', type: 'Renter', email: 'sara.stephan@email.com', phone: '+961 71 309 887', budget: 1300, agentId: 'a3', status: 'Signed',
-    req: { transaction: 'For Rent', type: 'Appartement', location: 'Beirut', priceMin: 900, priceMax: 1300, beds: 1, baths: 1, size: 60, garden: false, balcony: false, advancedPayment: true, notes: 'Young professional, prefers furnished, close to Hamra.' },
+    req: { transaction: 'For Rent', type: 'Apartment', location: 'Beirut', priceMin: 900, priceMax: 1300, beds: 1, baths: 1, size: 60, garden: false, balcony: false, advancedPayment: true, notes: 'Young professional, prefers furnished, close to Hamra.' },
   },
   {
     id: 5, name: 'Joseph Rizk', type: 'Buyer', email: 'joseph.rizk@email.com', phone: '+961 3 612 470', budget: 900000, agentId: 'a2', status: 'Searching',
@@ -280,7 +280,7 @@ export const CLIENTS: Client[] = [
   },
   {
     id: 6, name: 'Maya Fares', type: 'Buyer', email: 'maya.fares@email.com', phone: '+961 76 884 213', budget: 560000, agentId: 'a4', status: 'Viewing',
-    req: { transaction: 'For Sale', type: 'Appartement', location: 'Beirut', priceMin: 400000, priceMax: 560000, beds: 2, baths: 1, size: 100, garden: false, balcony: true, notes: 'First-time buyer, prefers Achrafieh or Gemmayzeh.' },
+    req: { transaction: 'For Sale', type: 'Apartment', location: 'Beirut', priceMin: 400000, priceMax: 560000, beds: 2, baths: 1, size: 100, garden: false, balcony: true, notes: 'First-time buyer, prefers Achrafieh or Gemmayzeh.' },
   },
   {
     id: 7, name: 'Tony Abi Hanna', type: 'Buyer', email: 'tony.abihanna@email.com', phone: '+961 3 445 009', budget: 1800000, agentId: 'a4', status: 'Searching',
@@ -304,30 +304,30 @@ export interface Deal {
 export const DEALS: Deal[] = [
   // ── 2026 ─────────────────────────────────────────────────────────────────────
   { id:  1, propTitle: 'Hamra Office Suite',        type: 'Office',      transaction: 'Sale', location: 'Hamra, Beirut',        agentId: 'a1', value: 610000,  days: 32, date: '2026-05-18', clientName: 'Michel Tanios'    },
-  { id:  2, propTitle: 'Naccache Appartement',      type: 'Appartement', transaction: 'Sale', location: 'Naccache, Metn',       agentId: 'a2', value: 395000,  days: 41, date: '2026-05-04', clientName: 'Joelle Karam'     },
+  { id:  2, propTitle: 'Naccache Apartment',      type: 'Apartment', transaction: 'Sale', location: 'Naccache, Metn',       agentId: 'a2', value: 395000,  days: 41, date: '2026-05-04', clientName: 'Joelle Karam'     },
   { id:  3, propTitle: 'Broumana Villa',             type: 'Villa',       transaction: 'Sale', location: 'Broumana, Metn',       agentId: 'a2', value: 2050000, days: 28, date: '2026-04-22', clientName: 'George Nassar'    },
-  { id:  4, propTitle: 'Gemmayzeh Duplex',           type: 'Appartement', transaction: 'Sale', location: 'Gemmayzeh, Beirut',    agentId: 'a3', value: 740000,  days: 55, date: '2026-04-10', clientName: 'Rania Khoury'     },
+  { id:  4, propTitle: 'Gemmayzeh Duplex',           type: 'Apartment', transaction: 'Sale', location: 'Gemmayzeh, Beirut',    agentId: 'a3', value: 740000,  days: 55, date: '2026-04-10', clientName: 'Rania Khoury'     },
   { id:  5, propTitle: 'Keserwan Building',          type: 'Building',    transaction: 'Sale', location: 'Ghazir, Keserwan',     agentId: 'a4', value: 680000,  days: 38, date: '2026-03-28', clientName: 'Fadi Abi Nader'   },
-  { id:  6, propTitle: 'Raouché Sea View Flat',      type: 'Appartement', transaction: 'Rent', location: 'Raouché, Beirut',      agentId: 'a1', value: 28800,   days: 14, date: '2026-03-10', clientName: 'Carla Sfeir'      },
-  { id:  7, propTitle: 'Ashrafieh Studio',           type: 'Appartement', transaction: 'Rent', location: 'Ashrafieh, Beirut',    agentId: 'a1', value: 14400,   days: 9,  date: '2026-01-22', clientName: 'Tony Rizk'        },
+  { id:  6, propTitle: 'Raouché Sea View Flat',      type: 'Apartment', transaction: 'Rent', location: 'Raouché, Beirut',      agentId: 'a1', value: 28800,   days: 14, date: '2026-03-10', clientName: 'Carla Sfeir'      },
+  { id:  7, propTitle: 'Ashrafieh Studio',           type: 'Apartment', transaction: 'Rent', location: 'Ashrafieh, Beirut',    agentId: 'a1', value: 14400,   days: 9,  date: '2026-01-22', clientName: 'Tony Rizk'        },
   // ── 2025 ─────────────────────────────────────────────────────────────────────
-  { id:  8, propTitle: 'Verdun Appartement',         type: 'Appartement', transaction: 'Sale', location: 'Verdun, Beirut',       agentId: 'a1', value: 520000,  days: 44, date: '2025-11-03', clientName: 'Mariam Haddad'    },
+  { id:  8, propTitle: 'Verdun Apartment',         type: 'Apartment', transaction: 'Sale', location: 'Verdun, Beirut',       agentId: 'a1', value: 520000,  days: 44, date: '2025-11-03', clientName: 'Mariam Haddad'    },
   { id:  9, propTitle: 'Jounieh Sea Villa',          type: 'Villa',       transaction: 'Sale', location: 'Jounieh, Keserwan',    agentId: 'a1', value: 1450000, days: 60, date: '2025-09-17', clientName: 'Elie Gemayel'     },
-  { id: 10, propTitle: 'Mar Mikhael Loft',           type: 'Appartement', transaction: 'Rent', location: 'Mar Mikhael, Beirut',  agentId: 'a1', value: 18000,   days: 7,  date: '2025-08-05', clientName: 'Nadia Karam'      },
+  { id: 10, propTitle: 'Mar Mikhael Loft',           type: 'Apartment', transaction: 'Rent', location: 'Mar Mikhael, Beirut',  agentId: 'a1', value: 18000,   days: 7,  date: '2025-08-05', clientName: 'Nadia Karam'      },
   { id: 11, propTitle: 'Kaslik Office Floor',        type: 'Office',      transaction: 'Sale', location: 'Kaslik, Keserwan',     agentId: 'a1', value: 890000,  days: 51, date: '2025-06-14', clientName: 'Bassam Khalil'    },
   { id: 12, propTitle: 'Mtayleb Villa',              type: 'Villa',       transaction: 'Rent', location: 'Mtayleb, Metn',        agentId: 'a1', value: 36000,   days: 22, date: '2025-04-28', clientName: 'Dina Assaf'       },
-  { id: 13, propTitle: 'Hamra Corner Appartement',   type: 'Appartement', transaction: 'Sale', location: 'Hamra, Beirut',        agentId: 'a2', value: 310000,  days: 35, date: '2025-03-11', clientName: 'Samir Toufic'     },
+  { id: 13, propTitle: 'Hamra Corner Apartment',   type: 'Apartment', transaction: 'Sale', location: 'Hamra, Beirut',        agentId: 'a2', value: 310000,  days: 35, date: '2025-03-11', clientName: 'Samir Toufic'     },
   // ── 2024 ─────────────────────────────────────────────────────────────────────
-  { id: 14, propTitle: 'Dbayeh Waterfront Apt',      type: 'Appartement', transaction: 'Sale', location: 'Dbayeh, Metn',         agentId: 'a1', value: 680000,  days: 38, date: '2024-12-08', clientName: 'Roy Abi Nader'    },
+  { id: 14, propTitle: 'Dbayeh Waterfront Apt',      type: 'Apartment', transaction: 'Sale', location: 'Dbayeh, Metn',         agentId: 'a1', value: 680000,  days: 38, date: '2024-12-08', clientName: 'Roy Abi Nader'    },
   { id: 15, propTitle: 'Beit Mery Chalet',           type: 'Villa',       transaction: 'Sale', location: 'Beit Mery, Metn',      agentId: 'a1', value: 950000,  days: 72, date: '2024-09-25', clientName: 'Lina Frem'        },
-  { id: 16, propTitle: 'Raouché Penthouse',          type: 'Appartement', transaction: 'Rent', location: 'Raouché, Beirut',      agentId: 'a1', value: 48000,   days: 18, date: '2024-08-14', clientName: 'Ali Mounzer'      },
+  { id: 16, propTitle: 'Raouché Penthouse',          type: 'Apartment', transaction: 'Rent', location: 'Raouché, Beirut',      agentId: 'a1', value: 48000,   days: 18, date: '2024-08-14', clientName: 'Ali Mounzer'      },
   { id: 17, propTitle: 'Jal el Dib Office',          type: 'Office',      transaction: 'Sale', location: 'Jal el Dib, Metn',     agentId: 'a1', value: 430000,  days: 29, date: '2024-05-30', clientName: 'Claude Najjar'    },
   { id: 18, propTitle: 'Antelias Showroom',          type: 'Showroom',    transaction: 'Rent', location: 'Antelias, Metn',       agentId: 'a1', value: 16800,   days: 11, date: '2024-02-19', clientName: 'Petra Khoury'     },
   // ── 2023 ─────────────────────────────────────────────────────────────────────
-  { id: 19, propTitle: 'Achrafieh Heritage Apt',     type: 'Appartement', transaction: 'Sale', location: 'Ashrafieh, Beirut',    agentId: 'a1', value: 490000,  days: 48, date: '2023-10-22', clientName: 'Rima Saade'       },
+  { id: 19, propTitle: 'Achrafieh Heritage Apt',     type: 'Apartment', transaction: 'Sale', location: 'Ashrafieh, Beirut',    agentId: 'a1', value: 490000,  days: 48, date: '2023-10-22', clientName: 'Rima Saade'       },
   { id: 20, propTitle: 'Baabda Panoramic Building',  type: 'Building',    transaction: 'Sale', location: 'Baabda, Beirut',       agentId: 'a1', value: 760000,  days: 65, date: '2023-07-04', clientName: 'Chadi Bou Merhi'  },
-  { id: 21, propTitle: 'Monot Appartement',          type: 'Appartement', transaction: 'Rent', location: 'Monot, Beirut',        agentId: 'a1', value: 21600,   days: 13, date: '2023-04-17', clientName: 'Sandra Rizk'      },
-  { id: 22, propTitle: 'Zalka Modern Flat',          type: 'Appartement', transaction: 'Sale', location: 'Zalka, Metn',          agentId: 'a1', value: 320000,  days: 33, date: '2023-02-09', clientName: 'Nour Geagea'      },
+  { id: 21, propTitle: 'Monot Apartment',          type: 'Apartment', transaction: 'Rent', location: 'Monot, Beirut',        agentId: 'a1', value: 21600,   days: 13, date: '2023-04-17', clientName: 'Sandra Rizk'      },
+  { id: 22, propTitle: 'Zalka Modern Flat',          type: 'Apartment', transaction: 'Sale', location: 'Zalka, Metn',          agentId: 'a1', value: 320000,  days: 33, date: '2023-02-09', clientName: 'Nour Geagea'      },
 ]
 
 // Matching algorithm lives in src/lib/matching.ts (shared by the UI + tests).
@@ -362,7 +362,7 @@ export function propertyLocation(p: { district?: string; city?: string }): strin
 }
 
 export const TYPE_GRADIENTS: Record<PropertyType, string> = {
-  Appartement: 'linear-gradient(135deg,#16294A,#2E5288)',
+  Apartment: 'linear-gradient(135deg,#16294A,#2E5288)',
   Duplex:      'linear-gradient(135deg,#1B2E52,#3A62A8)',
   Studio:      'linear-gradient(135deg,#123B3A,#1E7A78)',
   Villa:       'linear-gradient(135deg,#13403A,#1F8A5B)',
@@ -380,7 +380,7 @@ export const TYPE_GRADIENTS: Record<PropertyType, string> = {
 
 export function typeStyle(type: PropertyType): { bg: string; color: string } {
   const map: Record<PropertyType, { bg: string; color: string }> = {
-    Appartement: { bg: '#EAF0FA', color: '#2E5288' },
+    Apartment: { bg: '#EAF0FA', color: '#2E5288' },
     Duplex:      { bg: '#E7EEFB', color: '#345FA0' },
     Studio:      { bg: '#E0F3F2', color: '#1C6E6C' },
     Villa:       { bg: '#E3F4EA', color: '#1F7A4D' },

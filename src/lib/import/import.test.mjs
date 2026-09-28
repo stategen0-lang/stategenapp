@@ -117,10 +117,10 @@ test('guessPropertyType: title keywords, Arabic, type column first, apartment de
   assert.equal(guessPropertyType(undefined, 'Office Jounieh'), 'Office')
   assert.equal(guessPropertyType(undefined, 'Land Zahle'), 'Land')
   assert.equal(guessPropertyType(undefined, 'Studio Hamra'), 'Studio')
-  assert.equal(guessPropertyType(undefined, 'Apartment in a building'), 'Appartement')
-  assert.equal(guessPropertyType(undefined, 'شقة في الأشرفية'), 'Appartement')
+  assert.equal(guessPropertyType(undefined, 'Apartment in a building'), 'Apartment')
+  assert.equal(guessPropertyType(undefined, 'شقة في الأشرفية'), 'Apartment')
   assert.equal(guessPropertyType('Duplex', 'Sea view, Raouche'), 'Duplex')
-  assert.equal(guessPropertyType(undefined, 'Sea view, Raouche'), 'Appartement')
+  assert.equal(guessPropertyType(undefined, 'Sea view, Raouche'), 'Apartment')
 })
 
 test('normPropertyStatus: only the app statuses come out', () => {
@@ -202,7 +202,7 @@ test('import: a client open to several areas keeps all of them', () => {
   assert.deepEqual(c.locations, ['Achrafieh', 'Hamra', 'Verdun'])
   assert.equal(c.location, 'Achrafieh, Hamra, Verdun')
   assert.deepEqual(c.tags, ['VIP', 'cash buyer'])
-  assert.equal(c.propertyType, 'Appartement')
+  assert.equal(c.propertyType, 'Apartment')
   assert.deepEqual(c.amenities.sort(), ['Pool'])
   assert.deepEqual(c.buildingFeatures, ['Elevator'])
 })

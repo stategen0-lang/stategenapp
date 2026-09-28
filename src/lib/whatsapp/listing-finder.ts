@@ -44,7 +44,7 @@ export function queryFromIntent(intent: IntentResult): ListingQuery {
 
 function canonicalType(t: string): string | undefined {
   const s = t.trim().toLowerCase()
-  const map: Record<string, string> = { apartment: 'Appartement', appartment: 'Appartement', flat: 'Appartement', apt: 'Appartement', house: 'Villa', store: 'Shop' }
+  const map: Record<string, string> = { apartment: 'Apartment', appartment: 'Apartment', flat: 'Apartment', apt: 'Apartment', house: 'Villa', store: 'Shop' }
   if (map[s]) return map[s]
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : undefined
 }

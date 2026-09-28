@@ -9,7 +9,7 @@ import { buildAlerts, alertHeadline, ALERT_THRESHOLD } from './alerts.ts'
 
 // A 3-bed Beirut apartment for sale at 480k.
 const property = {
-  id: 5, title: 'Raouché Apartment', type: 'Appartement', transaction: 'For Sale',
+  id: 5, title: 'Raouché Apartment', type: 'Apartment', transaction: 'For Sale',
   price: 480000, rent: 0, district: 'Raouché', city: 'Beirut', size: 145,
   beds: 3, baths: 2, garden: false, balcony: true, view: 'Sea', status: 'Available',
   agentId: 'a1', photos: [],
@@ -20,7 +20,7 @@ const client = (o = {}) => ({
   email: '', phone: '', budget: o.budget ?? 480000, agentId: o.agentId ?? 'a2',
   status: 'Searching', leadScore: 0, agentRating: 3,
   req: {
-    transaction: o.transaction ?? 'For Sale', type: o.reqType ?? 'Appartement',
+    transaction: o.transaction ?? 'For Sale', type: o.reqType ?? 'Apartment',
     location: o.location ?? 'Beirut', priceMin: 0, priceMax: o.budget ?? 480000,
     beds: o.beds ?? 3, baths: 0, size: 0, garden: false, balcony: false, notes: '',
   },

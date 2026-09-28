@@ -32,7 +32,7 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
   const { session } = useSession()
   const [form, setForm] = useState({
     title: initial?.title ?? '',
-    type: (initial?.type ?? 'Appartement') as PropertyType,
+    type: (initial?.type ?? 'Apartment') as PropertyType,
     transaction: (initial?.transaction ?? 'For Sale') as Transaction,
     price: initial?.price ? String(initial.price) : '',
     rent: initial?.rent ? String(initial.rent) : '',
@@ -431,7 +431,7 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
               // Emptying the box hands the title back to the agency's pattern,
               // so there is a way back without offering a button for it.
               onChange={e => { setTitleEdited(e.target.value.trim() !== ''); set('title', e.target.value) }}
-              placeholder="e.g. Raouché Appartement"
+              placeholder="e.g. Raouché Apartment"
             />
             {/* The pattern is simply applied — the agent is told, not asked. */}
             <p className="text-[11px] mt-1" style={{ color: '#9AA3B2' }}>
@@ -464,7 +464,7 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
           </div>
 
           {/* The type is the first thing matching filters on, and the form
-              starts every listing as an Appartement — so a plot saved without
+              starts every listing as an Apartment — so a plot saved without
               touching this dropdown reaches nobody looking for land. Warned
               about, never blocked. */}
           {typeWarning && (

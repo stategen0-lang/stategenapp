@@ -89,7 +89,7 @@ async function finishProperty(admin: SupabaseClient, profile: Profile, context: 
 
   // Title: the agency's pattern (Settings → Listing title pattern), so a listing
   // added here is named exactly like one added on the web. Falls back to the old
-  // "3 bed Appartement in Zouk" shape if the pattern yields nothing.
+  // "3 bed Apartment in Zouk" shape if the pattern yields nothing.
   if (!columns.Title) {
     const { data: company } = await admin.from('Companies').select('*').eq('id', profile.company_id).maybeSingle()
     const tpl = (company as Record<string, unknown> | null)?.title_template as string | null | undefined

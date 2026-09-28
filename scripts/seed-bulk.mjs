@@ -51,12 +51,12 @@ const LAST = ['Khoury', 'Haddad', 'Saad', 'Aoun', 'Gemayel', 'Nassar', 'Fares', 
 
 const AGENTS = ['a1', 'a2', 'a3', 'a4']
 const VIEWS = ['Sea', 'Mountain', 'City', 'Open', 'Valley', 'Street', '']
-const TYPE_LABEL = { Appartement: 'Apartment', Villa: 'Villa', Office: 'Office', Shop: 'Shop', Building: 'Building', Showroom: 'Showroom', Land: 'Plot', Restaurant: 'Restaurant' }
-const RESIDENTIAL = new Set(['Appartement', 'Villa'])
+const TYPE_LABEL = { Apartment: 'Apartment', Villa: 'Villa', Office: 'Office', Shop: 'Shop', Building: 'Building', Showroom: 'Showroom', Land: 'Plot', Restaurant: 'Restaurant' }
+const RESIDENTIAL = new Set(['Apartment', 'Villa'])
 
 function weightedType() {
   const r = Math.random() * 100
-  if (r < 45) return 'Appartement'
+  if (r < 45) return 'Apartment'
   if (r < 60) return 'Villa'
   if (r < 72) return 'Office'
   if (r < 82) return 'Shop'
@@ -75,7 +75,7 @@ function salePrice(type) {
     case 'Showroom':   return round(rand(250, 900) * 1000, 10000)
     case 'Shop':       return round(rand(120, 700) * 1000, 5000)
     case 'Restaurant': return round(rand(200, 800) * 1000, 10000)
-    default:           return round(rand(150, 1200) * 1000, 5000) // Appartement
+    default:           return round(rand(150, 1200) * 1000, 5000) // Apartment
   }
 }
 function monthlyRent(type) {
@@ -83,7 +83,7 @@ function monthlyRent(type) {
     case 'Villa':   return round(rand(2500, 8000), 100)
     case 'Office':  return round(rand(1200, 5000), 100)
     case 'Shop':    return round(rand(800, 4000), 100)
-    default:        return round(rand(600, 3500), 50) // Appartement
+    default:        return round(rand(600, 3500), 50) // Apartment
   }
 }
 
@@ -133,7 +133,7 @@ const clients = Array.from({ length: 50 }, () => {
   const isRenter = chance(0.25)
   const [nb, city] = pick(AREAS)
   const prefLoc = chance(0.6) ? nb : city
-  const wantType = (() => { const r = Math.random(); return r < 0.25 ? '' : r < 0.6 ? 'Appartement' : r < 0.75 ? 'Villa' : r < 0.87 ? 'Office' : 'Shop' })()
+  const wantType = (() => { const r = Math.random(); return r < 0.25 ? '' : r < 0.6 ? 'Apartment' : r < 0.75 ? 'Villa' : r < 0.87 ? 'Office' : 'Shop' })()
   const beds = (wantType === 'Office' || wantType === 'Shop') ? rand(0, 2) : rand(1, 5)
 
   // Single budget: monthly rent figure for renters, sale price for buyers.

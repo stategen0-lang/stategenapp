@@ -6,7 +6,7 @@ import { searchTerms, phoneQuery, phoneRegex, rankCandidates, hitLine, describeQ
 
 const row = (id, title, area, ex = {}, extra = {}) => ({
   id, Title: title, Location: area, Neighborhood: null, Price: 300000, Bedrooms: 3, Status: 'Available',
-  Amenities: JSON.stringify({ agentId: 'a1', transaction: 'For Sale', type: 'Appartement', ...ex }), ...extra,
+  Amenities: JSON.stringify({ agentId: 'a1', transaction: 'For Sale', type: 'Apartment', ...ex }), ...extra,
 })
 const everyone = () => true
 const onlyOwn = code => (_r, ex) => ex.agentId === code
@@ -84,7 +84,7 @@ test('hitLine / describeQuery / hasCriteria', () => {
 test('searchTerms: a listing-type word still searches (villa → type)', () => {
   const rows = [
     { id: 1, Title: 'Sea view home', Location: 'Kaslik', Amenities: JSON.stringify({ type: 'Villa' }) },
-    { id: 2, Title: 'Flat', Location: 'Kaslik', Amenities: JSON.stringify({ type: 'Appartement' }) },
+    { id: 2, Title: 'Flat', Location: 'Kaslik', Amenities: JSON.stringify({ type: 'Apartment' }) },
   ]
   assert.deepEqual(rankCandidates(rows, { text: 'villa in kaslik' }, () => true).map(h => h.id), [1])
 })
