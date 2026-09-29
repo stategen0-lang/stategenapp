@@ -21,9 +21,20 @@ interface Props {
   agentWhatsApp?: string | null
   /** True when the viewer is the listing's own agent — no "contact yourself". */
   isOwnListing?: boolean
+  /**
+   * True when the viewer may see the owner's details, the exact pin, the
+   * document and the internal notes: this listing's own agent, or a manager.
+   *
+   * The server already strips those fields for everyone else, so the sheet
+   * could tell by their absence — but absence cannot distinguish "hidden from
+   * you" from "nobody filled it in", and an agent looking at their OWN listing
+   * with an empty owner field was shown no section at all. Which reads exactly
+   * like the app hiding their own client's number from them.
+   */
+  canSeePrivate?: boolean
 }
 
-export default function PropertyDetailModal({ property: p, agent, onClose, onEdit, agentWhatsApp, isOwnListing }: Props) {
+export default function PropertyDetailModal({ property: p, agent, onClose, onEdit, agentWhatsApp, isOwnListing, canSeePrivate }: Props) {
   useLockBodyScroll()
   // Pull down at the top of the sheet to go back to the list — the mobile
   // gesture equivalent of tapping ✕.
@@ -283,12 +294,19 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
               </div>
             )}
 
-            {/* Private — only reaches the owning agent + managers (the server
-                strips these fields for everyone else, so their mere presence
-                means the viewer is allowed to see them). */}
-            {(p.ownerName || p.ownerContact || p.documentPath || p.mapUrl || p.notes?.trim()) && (
+            {/* Private — the listing's own agent and managers.
+                Shown to them ALWAYS, even with nothing in it, so an empty owner
+                field reads as "nobody has filled this in" rather than as the app
+                keeping their own client's number from them. Everyone else gets
+                no section, and the server strips the fields besides. */}
+            {(canSeePrivate || p.ownerName || p.ownerContact || p.documentPath || p.mapUrl || p.notes?.trim()) && (
               <div className="rounded-xl p-3" style={{ background: '#FBF6EE', border: '1px solid #EFE2CC' }}>
-                <p className="text-[11px] font-bold mb-1.5" style={{ color: '#8A5A24' }}>🔒 Private — you & managers</p>
+                <p className="text-[11px] font-bold mb-1.5" style={{ color: '#8A5A24' }}>🔒 Private — you &amp; managers</p>
+                {!(p.ownerName || p.ownerContact || p.documentPath || p.mapUrl || p.notes?.trim()) && (
+                  <p className="text-xs" style={{ color: '#8A5A24' }}>
+                    No owner details, pin or notes on this listing yet — add them with Edit.
+                  </p>
+                )}
                 {(p.ownerName || p.ownerContact) && (
                   <div className="flex items-center justify-between">
                     <div className="min-w-0">

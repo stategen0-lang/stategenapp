@@ -273,6 +273,7 @@ function PropertiesPageInner() {
           agent={detailAgent}
           agentWhatsApp={agents[detailProp.agentId]?.whatsapp ?? null}
           isOwnListing={session?.agentCode != null && detailProp.agentId === session.agentCode}
+          canSeePrivate={isManager(session?.role) || (session?.agentCode != null && detailProp.agentId === session.agentCode)}
           onClose={() => setDetailId(null)}
           onEdit={p => { setDetailId(null); setEditProp(p) }}
         />

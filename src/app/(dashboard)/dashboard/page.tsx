@@ -539,6 +539,7 @@ export default function DashboardPage() {
         <PropertyDetailModal
           property={detailProp}
           agent={agentFor(detailProp.agentId)}
+          canSeePrivate={isManager(session?.role) || (session?.agentCode != null && detailProp.agentId === session.agentCode)}
           onClose={() => setDetailProp(null)}
           onEdit={p => { setDetailProp(null); setEditProp(p) }}
         />

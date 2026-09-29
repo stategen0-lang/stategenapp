@@ -9,6 +9,8 @@ import { useLockBodyScroll } from '@/hooks/use-lock-body-scroll'
 import { usePullToClose } from '@/hooks/use-pull-to-close'
 import MatchCards from '@/components/matching/MatchCards'
 import PropertyDetailModal from './PropertyDetailModal'
+import { useSession } from '@/hooks/use-session'
+import { isManager } from '@/lib/permissions'
 
 const CLIENT_STATUSES: ClientStatus[] = ['Searching', 'Viewing', 'Negotiation', 'Signed']
 
@@ -24,6 +26,9 @@ interface Props {
 
 export default function ClientDetailModal({ client: c, agent, onClose, onStatusChange, onEdit, onReferred }: Props) {
   useLockBodyScroll()
+  // Who is looking — a matched listing opened from here shows its owner's
+  // details only to that listing's own agent, or to a manager.
+  const { session } = useSession()
   // Pull down at the top of the sheet to go back to the list — the mobile
   // gesture equivalent of tapping ✕.
   const { scrollRef: pullScrollRef, panelRef: pullPanelRef, pulling, progress } = usePullToClose(onClose)
@@ -558,6 +563,7 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
       {stackedProperty && (
         <PropertyDetailModal
           property={stackedProperty}
+          canSeePrivate={isManager(session?.role) || (session?.agentCode != null && stackedProperty.agentId === session.agentCode)}
           agent={getAgent(stackedProperty.agentId) ?? { id: stackedProperty.agentId as Agent['id'], name: stackedProperty.agentId, initials: stackedProperty.agentId.slice(0,2).toUpperCase(), color: '#9AA3B2', shortName: stackedProperty.agentId }}
           onClose={() => setStackedProperty(null)}
         />
