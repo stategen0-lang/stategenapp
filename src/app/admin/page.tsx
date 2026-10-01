@@ -117,7 +117,7 @@ export default function AdminPage() {
   async function openInvoices(company: Company) {
     setInvoicesFor(company); setInvoices([]); setInvErr('')
     const plan = PLANS.find(p => p.id === company.Plan) ?? PLANS[0]
-    setInvForm({ planId: plan.id, subtotal: String(plan.price), discountPct: '', months: '1', method: '', note: '' })
+    setInvForm({ planId: plan.id, subtotal: plan.price != null ? String(plan.price) : '', discountPct: '', months: '1', method: '', note: '' })
     setInvLoading(true)
     const r = await fetch(`/api/admin/invoices?companyId=${company.id}`).then(x => x.ok ? x.json() : null).catch(() => null)
     setInvoices(r?.invoices ?? [])
@@ -667,7 +667,7 @@ export default function AdminPage() {
                   className="w-full mt-1 px-3 py-2 rounded-xl text-sm outline-none"
                   style={{ border: '1.5px solid #EEF0F4', color: '#1A2B4A', background: '#fff' }}
                 >
-                  {PLANS.map(p => <option key={p.id} value={p.id}>{p.name} — ${p.price}/mo</option>)}
+                  {PLANS.map(p => <option key={p.id} value={p.id}>{p.name}{p.price != null ? ` — $${p.price}/mo` : ' — custom'}</option>)}
                 </select>
               </div>
               <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: '#1A2B4A' }}>
@@ -707,8 +707,8 @@ export default function AdminPage() {
               <p className="text-xs font-bold mb-2" style={{ color: '#1A2B4A' }}>New invoice</p>
               <div className="grid grid-cols-2 gap-2">
                 <label className="text-xs" style={{ color: '#6A7488' }}>Plan
-                  <select value={invForm.planId} onChange={e => { const p = PLANS.find(x => x.id === e.target.value) ?? PLANS[0]; setInvForm(f => ({ ...f, planId: p.id, subtotal: String(p.price) })) }} className="mt-1 w-full rounded-lg px-2 py-1.5 text-sm" style={{ border: '1.5px solid #D7DCE5', color: '#1A2B4A' }}>
-                    {PLANS.map(p => <option key={p.id} value={p.id}>{p.name} (${p.price})</option>)}
+                  <select value={invForm.planId} onChange={e => { const p = PLANS.find(x => x.id === e.target.value) ?? PLANS[0]; setInvForm(f => ({ ...f, planId: p.id, subtotal: p.price != null ? String(p.price) : '' })) }} className="mt-1 w-full rounded-lg px-2 py-1.5 text-sm" style={{ border: '1.5px solid #D7DCE5', color: '#1A2B4A' }}>
+                    {PLANS.map(p => <option key={p.id} value={p.id}>{p.name}{p.price != null ? ` ($${p.price})` : ' (custom)'}</option>)}
                   </select>
                 </label>
                 <label className="text-xs" style={{ color: '#6A7488' }}>Months
