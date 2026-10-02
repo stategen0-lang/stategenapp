@@ -151,7 +151,7 @@ export default function DashboardPage() {
     { key: 'deals',    label: 'Open deals',       value: openDeals.length,      sub: `${deals.length} total`,   subColor: SUB, icon: Clock,     iconBg: '#FBE7E7', iconFg: '#A23434' },
   ] as const
 
-  const recentProps = props.filter(p => p.status !== 'Sold').slice(0, 5)
+  const recentProps = props.filter(p => p.status !== 'Sold' && p.status !== 'Rented').slice(0, 5)
 
   function DealRow({ d }: { d: DealView }) {
     const comm = Math.round((d.value || 0) * COMMISSION_RATE / 100)

@@ -531,6 +531,7 @@ export function explainMatch(
   const score = computeScore(prop, client, ix)
 
   if (prop.status === 'Sold') reasons.push({ kind: 'sold', weight: 5, text: 'Already sold' })
+  else if (prop.status === 'Rented') reasons.push({ kind: 'sold', weight: 5, text: 'Already rented' })
 
   if (client.req.type && prop.type !== client.req.type) {
     reasons.push({ kind: 'type', weight: 4, text: `It's ${a(prop.type.toLowerCase())} — they want ${client.req.type.toLowerCase()}` })

@@ -169,7 +169,7 @@ export async function handleQueryProperty(
 
   // No budget and no area → just the most recent listings.
   if (!intent.budget && !intent.location) {
-    const available = properties.filter(p => p.status !== 'Sold').slice(0, 5)
+    const available = properties.filter(p => p.status !== 'Sold' && p.status !== 'Rented').slice(0, 5)
     return [
       `${properties.length} listings. Most recent:`,
       ...available.map(p => `• #${p.id} ${p.title} — ${price(p)}`),
@@ -189,7 +189,7 @@ export async function handleQueryProperty(
 
   // Location only (no budget) → list what's there, no fuzzy matching.
   if (!intent.budget) {
-    const available = pool.filter(p => p.status !== 'Sold').slice(0, 8)
+    const available = pool.filter(p => p.status !== 'Sold' && p.status !== 'Rented').slice(0, 8)
     return [
       `${available.length} listing${available.length === 1 ? '' : 's'} in ${intent.location}:`,
       ...available.map(p => `• #${p.id} ${p.title} — ${price(p)} · ${p.city || p.district}`),

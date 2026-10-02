@@ -32,7 +32,7 @@ function sanitizeTags(raw: unknown): string[] {
 // references (label/path/name/uploadedAt). Storage paths are opaque strings
 // already scoped to the company by /api/upload/document — we just cap the
 // list size and shape here so a bad payload can't bloat the row.
-function sanitizeClosing(raw: unknown): { downPayment?: number; downPaymentWaived?: boolean; documents: unknown[] } {
+function sanitizeClosing(raw: unknown, companyId: number): { downPayment?: number; downPaymentWaived?: boolean; documents: unknown[] } {
   const r = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {}
   const downPaymentWaived = r.downPaymentWaived === true
   // Waived and an amount are mutually exclusive — waived wins if somehow both are sent.
@@ -47,7 +47,10 @@ function sanitizeClosing(raw: unknown): { downPayment?: number; downPaymentWaive
       name: typeof doc.name === 'string' ? doc.name.slice(0, 200) : 'file',
       uploadedAt: typeof doc.uploadedAt === 'string' ? doc.uploadedAt.slice(0, 40) : new Date().toISOString(),
     }
-  }).filter(d => d.path)
+  // Only files in THIS agency's own storage folder (uploads go to
+  // company-<id>/): a path pointing at another agency's files, or climbing out
+  // with "..", is dropped instead of being signed for download later.
+  }).filter(d => d.path.startsWith(`company-${companyId}/`) && !d.path.includes('..'))
   return { ...(downPayment !== undefined ? { downPayment } : {}), ...(downPaymentWaived ? { downPaymentWaived } : {}), documents }
 }
 
@@ -137,7 +140,7 @@ export async function PATCH(req: NextRequest) {
         ...(body.agentId !== undefined ? { agentId: body.agentId } : {}),
         ...(body.req !== undefined ? { req: body.req } : {}),
         ...(body.tags !== undefined ? { tags: sanitizeTags(body.tags) } : {}),
-        ...(body.closing !== undefined ? { closing: sanitizeClosing(body.closing) } : {}),
+        ...(body.closing !== undefined ? { closing: sanitizeClosing(body.closing, session.companyId) } : {}),
       }
       update.notes = JSON.stringify(merged)
 

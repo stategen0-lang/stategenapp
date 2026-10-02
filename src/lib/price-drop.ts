@@ -66,7 +66,7 @@ export function priceDropAlerts(
   oldPrice: number,
   opts: { threshold?: number; max?: number; ix?: AreaIndex | null } = {},
 ): AlertDraft[] {
-  if (property.status === 'Sold') return []
+  if (property.status === 'Sold' || property.status === 'Rented') return []
   const newPrice = askingPrice(property)
   if (!isMeaningfulDrop(oldPrice, newPrice)) return []
 
