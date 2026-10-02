@@ -229,7 +229,7 @@ export default function AppSidebar({ profile, user }: AppSidebarProps) {
       </aside>
 
       {/* ── Mobile top bar ── */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 py-3" style={{ background: '#0E1F3D', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 py-3" style={{ background: '#0E1F3D', borderBottomLeftRadius: 20, borderBottomRightRadius: 20, boxShadow: '0 4px 18px rgba(14,31,61,0.22)' }}>
         <Logo variant="white" size={26} withWordmark priority />
         <div className="flex items-center gap-2">
           <Link href="/settings" className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: '#2E5288', color: '#fff' }}>
@@ -244,7 +244,7 @@ export default function AppSidebar({ profile, user }: AppSidebarProps) {
       {/* ── Mobile bottom tab bar ── */}
       {/* Five core tabs + a "More" tab that houses the rest (Reports, Profile,
           Alerts, and the manager sections) so the bar never gets crowded. */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 flex" style={{ background: '#0E1F3D', borderTop: '1px solid rgba(255,255,255,0.10)' }}>
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 flex" style={{ background: '#0E1F3D', borderTopLeftRadius: 20, borderTopRightRadius: 20, boxShadow: '0 -4px 18px rgba(14,31,61,0.22)' }}>
         {navItems.slice(0, 5).map(({ href, label, icon: Icon }) => {
           const active = tappedHref ? tappedHref === href : isActive(href)
           return (
