@@ -52,6 +52,7 @@ export async function recordSuccess(identifier: string): Promise<void> {
  *  threshold is crossed. `subject`/`describe` shape the notification email. */
 export async function recordFailure(
   identifier: string, ip: string, subject: string, describe: (identifier: string, ip: string) => string,
+  threshold: number = THRESHOLD,
 ): Promise<GuardResult> {
   const admin = createAdminClient()
   const { data } = await admin.from('login_attempts').select('*').eq('identifier', identifier).maybeSingle()
@@ -72,7 +73,7 @@ export async function recordFailure(
   const update: Partial<Row> = { fail_count: failCount, window_start: newWindowStart }
   let result: GuardResult = { blocked: false }
 
-  if (failCount >= THRESHOLD) {
+  if (failCount >= threshold) {
     update.locked_until = new Date(now + LOCK_MS).toISOString()
     result = { blocked: true, retryAfterSeconds: Math.ceil(LOCK_MS / 1000) }
 
