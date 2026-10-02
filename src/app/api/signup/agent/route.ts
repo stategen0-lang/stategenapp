@@ -4,6 +4,7 @@ import { agentLimitFor } from '@/lib/stripe-plans'
 import { seatsUsed } from '@/lib/seats'
 import { createAgentAccount } from '@/lib/agent-account'
 import { normalizeDomain } from '@/lib/domain'
+import { rateLimit, tooManyRequests } from '@/lib/login-guard'
 
 // Agent signup — server-authoritative.
 //
@@ -15,6 +16,7 @@ import { normalizeDomain } from '@/lib/domain'
 //      never confirm and never sign in.
 
 export async function POST(req: NextRequest) {
+  if ((await rateLimit('signup-agent', req, 8)).blocked) return tooManyRequests()
   try {
     const body = await req.json()
     const domain = normalizeDomain(body.domain)

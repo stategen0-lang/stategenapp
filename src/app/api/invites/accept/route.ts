@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createAgentAccount } from '@/lib/agent-account'
+import { rateLimit, tooManyRequests } from '@/lib/login-guard'
 
 // Public: validate + consume a single-use agent invite.
 //
@@ -39,6 +40,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // Also stops someone guessing invite tokens.
+  if ((await rateLimit('invite-accept', req, 10)).blocked) return tooManyRequests()
   const body = await req.json().catch(() => ({})) as { token?: string; fullName?: string; password?: string }
   const token = String(body.token ?? '')
   const fullName = String(body.fullName ?? '').trim()

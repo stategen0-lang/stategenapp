@@ -5,7 +5,8 @@ import { recalculateScores } from '@/lib/score-engine'
 import { getSession, companyAccessBlocked } from '@/lib/session'
 import { loadClients } from '@/lib/api-loaders'
 import { canEditClient, isManager } from '@/lib/permissions'
-import { CLOSING_DOC_PRESETS } from '@/lib/data'
+import { closingProgress } from '@/lib/pipeline'
+import { DOC_BUCKET } from '@/lib/upload'
 import { notifyAgentNewClient } from '@/lib/whatsapp/notify'
 import { ensureManagerAgentCode } from '@/lib/ensure-manager-code'
 
@@ -32,7 +33,10 @@ function sanitizeTags(raw: unknown): string[] {
 // references (label/path/name/uploadedAt). Storage paths are opaque strings
 // already scoped to the company by /api/upload/document — we just cap the
 // list size and shape here so a bad payload can't bloat the row.
-function sanitizeClosing(raw: unknown, companyId: number): { downPayment?: number; downPaymentWaived?: boolean; documents: unknown[] } {
+interface ClosingDoc { label: string; part?: string; path: string; name: string; uploadedAt: string }
+interface ClosingData { downPayment?: number; downPaymentWaived?: boolean; documents: ClosingDoc[] }
+
+function sanitizeClosing(raw: unknown, companyId: number): ClosingData {
   const r = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {}
   const downPaymentWaived = r.downPaymentWaived === true
   // Waived and an amount are mutually exclusive — waived wins if somehow both are sent.
@@ -52,6 +56,45 @@ function sanitizeClosing(raw: unknown, companyId: number): { downPayment?: numbe
   // with "..", is dropped instead of being signed for download later.
   }).filter(d => d.path.startsWith(`company-${companyId}/`) && !d.path.includes('..'))
   return { ...(downPayment !== undefined ? { downPayment } : {}), ...(downPaymentWaived ? { downPaymentWaived } : {}), documents }
+}
+
+// Is a stored/received closing record a complete set (ID + contract, down
+// payment proof unless waived, and the down payment itself unless waived)?
+function closingComplete(c: unknown): boolean {
+  const o = (c && typeof c === 'object') ? c as Record<string, unknown> : null
+  if (!o) return false
+  const docs = Array.isArray(o.documents) ? o.documents as { label?: unknown }[] : []
+  return closingProgress({
+    downPayment: typeof o.downPayment === 'number' ? o.downPayment : undefined,
+    downPaymentWaived: o.downPaymentWaived === true,
+    docLabels: docs.map(d => d.label).filter((l): l is string => typeof l === 'string'),
+  }).complete
+}
+
+function closingPathsOf(c: unknown): string[] {
+  const docs = (c && typeof c === 'object' && Array.isArray((c as Record<string, unknown>).documents))
+    ? (c as { documents: { path?: unknown }[] }).documents : []
+  return docs.map(d => d.path).filter((x): x is string => typeof x === 'string')
+}
+
+// A document entry only counts if its file is really in storage. Without this a
+// caller could attach made-up paths inside their own folder and "complete" a
+// checklist (which closes the deal). Only paths not already on the record are
+// looked up, so a normal save costs one lookup per newly added file. A storage
+// hiccup keeps the entry rather than throwing away a real upload.
+async function dropMissingFiles(docs: ClosingDoc[], known: Set<string>): Promise<ClosingDoc[]> {
+  const fresh = docs.filter(d => !known.has(d.path))
+  if (!fresh.length) return docs
+  const admin = createAdminClient()
+  const missing = new Set<string>()
+  await Promise.all(fresh.map(async d => {
+    const slash = d.path.lastIndexOf('/')
+    const folder = d.path.slice(0, slash)
+    const file = d.path.slice(slash + 1)
+    const { data, error } = await admin.storage.from(DOC_BUCKET).list(folder, { limit: 5, search: file })
+    if (!error && !(data ?? []).some(o => o.name === file)) missing.add(d.path)
+  }))
+  return docs.filter(d => !missing.has(d.path))
 }
 
 // A client change is a scoring signal — refresh that client's lead score.
@@ -133,6 +176,11 @@ export async function PATCH(req: NextRequest) {
       // never wipes email / agentId / req that weren't resent.
       let prev: Record<string, unknown> = {}
       try { prev = JSON.parse((existing.notes as string) || '{}') } catch { /* start fresh */ }
+      let closing: ClosingData | undefined
+      if (body.closing !== undefined) {
+        closing = sanitizeClosing(body.closing, session.companyId)
+        closing.documents = await dropMissingFiles(closing.documents, new Set(closingPathsOf(prev.closing)))
+      }
       const merged = {
         ...prev,
         ...(body.email !== undefined ? { email: body.email } : {}),
@@ -140,21 +188,15 @@ export async function PATCH(req: NextRequest) {
         ...(body.agentId !== undefined ? { agentId: body.agentId } : {}),
         ...(body.req !== undefined ? { req: body.req } : {}),
         ...(body.tags !== undefined ? { tags: sanitizeTags(body.tags) } : {}),
-        ...(body.closing !== undefined ? { closing: sanitizeClosing(body.closing, session.companyId) } : {}),
+        ...(closing ? { closing } : {}),
       }
       update.notes = JSON.stringify(merged)
 
-      if (body.closing !== undefined) {
-        const closing = merged.closing as { downPayment?: number; downPaymentWaived?: boolean; documents: { label: string }[] } | undefined
-        const labels = new Set((closing?.documents ?? []).map(d => d.label))
-        // A down payment isn't universal — rentals and some sellers skip it
-        // entirely, so a waived down payment counts the same as a set amount.
-        const downPaymentDone = closing?.downPaymentWaived === true || closing?.downPayment != null
-        const requiredDocs = closing?.downPaymentWaived === true
-          ? CLOSING_DOC_PRESETS.filter(p => p !== 'Down Payment Proof')
-          : CLOSING_DOC_PRESETS
-        closingJustCompleted = downPaymentDone && requiredDocs.every(p => labels.has(p))
-      }
+      // Cascade (deal -> Closed/Won, client -> Signed, property -> Sold/Rented)
+      // only on the save that COMPLETES the checklist. Later saves of an already
+      // complete one (adding a page, editing the amount) must not re-close a deal
+      // a manager has since reopened.
+      if (closing) closingJustCompleted = closingComplete(closing) && !closingComplete(prev.closing)
     }
 
     if (Object.keys(update).length === 0) {

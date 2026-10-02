@@ -53,6 +53,7 @@ export async function recordSuccess(identifier: string): Promise<void> {
 export async function recordFailure(
   identifier: string, ip: string, subject: string, describe: (identifier: string, ip: string) => string,
   threshold: number = THRESHOLD,
+  sendEmail: boolean = true,
 ): Promise<GuardResult> {
   const admin = createAdminClient()
   const { data } = await admin.from('login_attempts').select('*').eq('identifier', identifier).maybeSingle()
@@ -78,7 +79,7 @@ export async function recordFailure(
     result = { blocked: true, retryAfterSeconds: Math.ceil(LOCK_MS / 1000) }
 
     const lastNotified = row?.notified_at ? new Date(row.notified_at).getTime() : 0
-    if (now - lastNotified > LOCK_MS) {
+    if (sendEmail && now - lastNotified > LOCK_MS) {
       update.notified_at = new Date(now).toISOString()
       await notify(subject, describe(identifier, ip))
     }
@@ -87,3 +88,28 @@ export async function recordFailure(
   await admin.from('login_attempts').upsert({ identifier, ...update })
   return result
 }
+
+/**
+ * Flood protection for the public, no-login endpoints (lead form, signup,
+ * invites): every request from an IP counts, and once `max` have been made in
+ * the window the next ones get a 429 until the lock expires. No email — a bot
+ * rotating IPs would otherwise mean one per IP.
+ *
+ * Fails OPEN: if the IP can't be read or the database errors, the request goes
+ * through, so a hiccup here can never take signup or the lead form down.
+ */
+export async function rateLimit(scope: string, req: Request, max: number): Promise<GuardResult> {
+  const ip = requestIp(req)
+  if (ip === 'unknown') return { blocked: false }   // nothing to key on; don't lump everyone together
+  const key = `rl:${scope}:${ip}`
+  try {
+    const pre = await checkGuard(key)
+    if (pre.blocked) return pre
+    return await recordFailure(key, ip, '', () => '', max + 1, false)
+  } catch {
+    return { blocked: false }
+  }
+}
+
+export const tooManyRequests = () =>
+  Response.json({ error: 'Too many requests. Please wait a few minutes and try again.' }, { status: 429 })

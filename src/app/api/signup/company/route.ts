@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { planFor } from '@/lib/stripe-plans'
 import { generateAgentCode } from '@/lib/agent-code'
 import { normalizeDomain } from '@/lib/domain'
+import { rateLimit, tooManyRequests } from '@/lib/login-guard'
 
 // Company signup — manual billing (no Stripe).
 //
@@ -11,6 +12,8 @@ import { normalizeDomain } from '@/lib/domain'
 // get no app access until a StateGen operator activates them in /admin after an
 // offline payment.
 export async function POST(req: NextRequest) {
+  // Creates a company, an owner account and sends mail — a handful per IP is plenty.
+  if ((await rateLimit('signup-company', req, 5)).blocked) return tooManyRequests()
   try {
     const body = await req.json()
     const companyName = String(body.companyName ?? '').trim()

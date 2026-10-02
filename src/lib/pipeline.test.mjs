@@ -5,7 +5,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   isStage, STAGE_IDS, daysInStage, staleFlag,
-  dealsInStage, totalValue, sortForBoard,
+  dealsInStage, totalValue, sortForBoard, closingProgress,
 } from './pipeline.ts'
 
 const deal = (o = {}) => ({
@@ -72,4 +72,40 @@ test('sortForBoard: lead score first, value breaks ties, input not mutated', () 
   const sorted = sortForBoard(ds)
   assert.deepEqual(sorted.map(d => d.id), ['hot-big', 'hot-small', 'cold-big'])
   assert.deepEqual(ds.map(d => d.id), ['cold-big', 'hot-small', 'hot-big']) // original untouched
+})
+
+// ── closingProgress: when a deal's paperwork counts as complete ──────────────
+const ALL = ['ID Copy', 'Down Payment Proof', 'Signed Contract']
+
+test('closingProgress: nothing yet', () => {
+  assert.deepEqual(closingProgress(null), { have: 0, total: 3, complete: false })
+  assert.equal(closingProgress({ docLabels: [] }).complete, false)
+})
+
+test('closingProgress: all three documents AND a down payment is complete', () => {
+  const p = closingProgress({ downPayment: 50000, docLabels: ALL })
+  assert.deepEqual(p, { have: 3, total: 3, complete: true })
+})
+
+test('closingProgress: all documents but no down payment and not waived is NOT complete', () => {
+  assert.equal(closingProgress({ docLabels: ALL }).complete, false)
+})
+
+test('closingProgress: a waived down payment needs only ID + contract', () => {
+  const p = closingProgress({ downPaymentWaived: true, docLabels: ['ID Copy', 'Signed Contract'] })
+  assert.deepEqual(p, { have: 2, total: 2, complete: true })
+})
+
+test('closingProgress: waived but the contract is missing is NOT complete', () => {
+  assert.equal(closingProgress({ downPaymentWaived: true, docLabels: ['ID Copy'] }).complete, false)
+})
+
+test('closingProgress: front and back of an ID count as one document', () => {
+  const p = closingProgress({ downPayment: 1, docLabels: ['ID Copy', 'ID Copy', 'Down Payment Proof', 'Signed Contract'] })
+  assert.equal(p.have, 3)
+  assert.equal(p.complete, true)
+})
+
+test('closingProgress: labels outside the checklist are ignored', () => {
+  assert.equal(closingProgress({ downPayment: 1, docLabels: ['Passport', 'Note'] }).have, 0)
 })

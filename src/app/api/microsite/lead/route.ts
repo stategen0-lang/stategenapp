@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { rateLimit, tooManyRequests } from '@/lib/login-guard'
 
 // Public: a lead submitted from an agency microsite → a new (unassigned) client
 // in that agency's CRM, tagged source 'website'. No auth (the agency is keyed by
 // the microsite slug); a honeypot + required-field checks blunt bot spam.
 export async function POST(req: NextRequest) {
+  // Each lead becomes a client in an agency's CRM — cap how many one IP can send.
+  if ((await rateLimit('lead', req, 8)).blocked) return tooManyRequests()
   const b = await req.json().catch(() => ({})) as Record<string, string>
 
   // Honeypot: real users never fill the hidden "company" field. Pretend success.
