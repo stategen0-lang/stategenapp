@@ -9,6 +9,7 @@ import { isManager } from '@/lib/permissions'
 import { DescriptionTemplate, DEFAULT_TEMPLATES, loadTemplates, cacheTemplates, sanitizeTemplates } from '@/lib/templates'
 import { EXPORTS, EXPORT_LABELS, type ExportKind } from '@/lib/export-columns'
 import { refreshMarketingConfig } from '@/components/marketing/SendToMarketing'
+import PlanCard from '@/components/settings/PlanCard'
 import { renderTitle, unknownTokens, DEFAULT_TITLE_TEMPLATE, TITLE_FIELDS, sizeUnitOf, setSizeUnit, type SizeUnit } from '@/lib/title-template'
 
 const COMMISSION_RATE = 2.5
@@ -335,6 +336,9 @@ export default function ProfilePage() {
           <p className="text-sm mt-0.5" style={{ color: SUB }}>{roleLabel}</p>
         </div>
       </div>
+
+      {/* Plan, users and renewal — managers only, read-only */}
+      {manager && <PlanCard />}
 
       {/* Change password */}
       <div className="rounded-2xl bg-white overflow-hidden" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #EEF0F4' }}>
