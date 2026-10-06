@@ -81,7 +81,7 @@ export default function ResetPasswordPage() {
   return (
     <div className="min-h-screen flex items-center justify-center px-6" style={{ background: '#faf9f5' }}>
       <div className="w-full max-w-sm">
-        <div className="flex justify-center mb-8"><Logo size={40} withWordmark /></div>
+        <div className="flex justify-center mb-8"><Logo variant="navy" size={40} withWordmark /></div>
 
         {done ? (
           <div className="text-center">

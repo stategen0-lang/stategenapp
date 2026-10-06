@@ -20,7 +20,7 @@ export default function PendingPage() {
     <div className="min-h-screen flex items-center justify-center px-6" style={{ background: '#faf9f5' }}>
       <div className="w-full max-w-sm text-center">
         <div className="flex justify-center mb-8">
-          <Logo size={34} withWordmark />
+          <Logo variant="navy" size={34} withWordmark />
         </div>
         <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-5" style={{ background: '#FBEFD6' }}>
           <Clock className="h-7 w-7" style={{ color: '#9A6516' }} />

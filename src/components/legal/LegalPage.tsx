@@ -17,7 +17,7 @@ export default function LegalPage({
     <div className="min-h-screen" style={{ background: '#faf9f5' }}>
       <div className="max-w-3xl mx-auto px-6 py-10">
         <div className="flex items-center justify-between mb-8">
-          <Logo size={30} withWordmark />
+          <Logo variant="navy" size={30} withWordmark />
           <Link href="/login" className="flex items-center gap-1 text-sm font-semibold" style={{ color: '#5E8FD6' }}>
             <ChevronLeft className="h-4 w-4" /> Back to sign in
           </Link>

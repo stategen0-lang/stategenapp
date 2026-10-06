@@ -1,11 +1,13 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Clock } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useSession } from '@/hooks/use-session'
 import { isManager } from '@/lib/permissions'
-import { accessMessage } from '@/lib/billing'
+import { accessMessage, companyHasAccess } from '@/lib/billing'
+import { renewalInfo } from '@/lib/plan-card'
 import Logo from '@/components/brand/Logo'
 
 const CONTACT = 'stategen0@gmail.com'
@@ -18,6 +20,26 @@ export default function RenewPage() {
   const { session } = useSession()
   const manager = isManager(session?.role)
 
+  // An agency marked "active" whose paid-through date has passed is locked out
+  // just like an expired one — say so, instead of "not active yet".
+  const status = session?.companyAccessStatus
+  const until = session?.companyAccessUntil
+  const ended = status === 'expired' || (status === 'active' && !companyHasAccess(status, until))
+  const ending = renewalInfo(status, until)
+
+  // The manager's own plan and price, so they can see what they're activating
+  // or renewing. Hidden if it can't load (agents never get it).
+  const [plan, setPlan] = useState<{ planName: string | null; price: number | null; usersLabel: string | null } | null>(null)
+  useEffect(() => {
+    if (!manager) return
+    let live = true
+    fetch('/api/company/plan')
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => { if (live && j) setPlan(j) })
+      .catch(() => {})
+    return () => { live = false }
+  }, [manager])
+
   async function signOut() {
     await supabase.auth.signOut()
     router.push('/login')
@@ -26,16 +48,36 @@ export default function RenewPage() {
   return (
     <div className="min-h-screen flex items-center justify-center px-6" style={{ background: '#faf9f5' }}>
       <div className="w-full max-w-md text-center">
-        <div className="flex justify-center mb-8"><Logo size={34} withWordmark /></div>
+        <div className="flex justify-center mb-8"><Logo variant="navy" size={34} withWordmark /></div>
         <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-5" style={{ background: '#FBEFD6' }}>
           <Clock className="h-7 w-7" style={{ color: '#9A6516' }} />
         </div>
         <h2 className="text-xl font-bold mb-2" style={{ color: '#1A2B4A' }}>
-          {session?.companyAccessStatus === 'expired' ? 'Subscription ended' : 'Account not active yet'}
+          {ended ? 'Subscription ended' : 'Account not active yet'}
         </h2>
         <p className="text-sm mb-6" style={{ color: '#7A8499' }}>
-          {accessMessage(session?.companyAccessStatus)}
+          {accessMessage(ended ? 'expired' : status)}
         </p>
+
+        {manager && plan?.planName && (
+          <div className="rounded-2xl p-5 text-left mb-4" style={{ background: '#fff', border: '1px solid #EEF0F4' }}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold tracking-wide" style={{ color: '#7A8499' }}>YOUR PLAN</p>
+                <p className="text-lg font-extrabold mt-0.5" style={{ color: '#1A2B4A' }}>{plan.planName}</p>
+                <p className="text-xs mt-0.5" style={{ color: '#7A8499' }}>
+                  {plan.usersLabel ? `${plan.usersLabel} · ` : ''}Full access to every feature
+                </p>
+              </div>
+              <p className="text-sm font-bold tabular-nums shrink-0" style={{ color: '#1A2B4A' }}>
+                {plan.price != null ? <>${plan.price}<span className="font-medium" style={{ color: '#7A8499' }}> / month</span></> : 'Custom pricing'}
+              </p>
+            </div>
+            {ended && ending.text.startsWith('Ended') && (
+              <p className="text-xs mt-3 pt-3 font-semibold" style={{ borderTop: '1px solid #EEF0F4', color: '#A23434' }}>{ending.text}</p>
+            )}
+          </div>
+        )}
 
         <div className="rounded-2xl p-5 text-left mb-6" style={{ background: '#fff', border: '1px solid #EEF0F4' }}>
           {manager ? (
