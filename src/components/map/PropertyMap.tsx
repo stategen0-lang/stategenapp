@@ -17,8 +17,8 @@
 // only "somewhere in this area" are drawn hollow, so the map never implies a
 // precision it does not have.
 
-import { useEffect, useRef, useState } from 'react'
-import type { Map as LeafletMap, Marker } from 'leaflet'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { Map as LeafletMap, LayerGroup } from 'leaflet'
 import type { Property } from '@/lib/data'
 import { loadCompanyAreas, type AreaIndex } from '@/lib/lebanon/areas'
 import { propertyPoint, clusterPoints, boundsOf, statusColor, type PointCluster } from '@/lib/property-geo'
@@ -83,7 +83,7 @@ function popupHtml(c: PointCluster): string {
 export default function PropertyMap({ properties, onSelect }: Props) {
   const holder = useRef<HTMLDivElement>(null)
   const map = useRef<LeafletMap | null>(null)
-  const markers = useRef<Marker[]>([])
+  const layer = useRef<LayerGroup | null>(null)
   const [ix, setIx] = useState<AreaIndex | null>(null)
   const [failed, setFailed] = useState(false)
   // State, not just the ref: the map is created asynchronously, and if the
@@ -142,7 +142,31 @@ export default function PropertyMap({ properties, onSelect }: Props) {
     }
   }, [])
 
-  // Redraw whenever the filtered list or the gazetteer changes.
+  /**
+   * What the map is actually drawing, worked out only when it changes.
+   *
+   * `properties` is a fresh array on every render of the page above — it is the
+   * result of filtering — so keying the redraw on it rebuilt every marker on
+   * every keystroke in the search box: hundreds of DOM nodes destroyed and
+   * recreated, hundreds of popup strings built, and the map re-fitted, for a
+   * list that had not changed. That was the lag.
+   *
+   * The signature covers every field the map draws with, so a real edit still
+   * redraws and a re-render alone does not.
+   */
+  const signature = properties
+    .map(p => `${p.id}|${p.city}|${p.district}|${p.mapUrl ?? ''}|${p.status}|${p.title}|${p.type}|${p.price}|${p.rent}|${p.transaction}`)
+    .join(';')
+
+  const { clusters, points } = useMemo(() => {
+    const pts = properties
+      .map(p => propertyPoint(p, ix))
+      .filter((p): p is NonNullable<typeof p> => p !== null)
+    return { clusters: clusterPoints(pts), points: pts }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signature, ix])
+
+  // Redraw only when the drawing itself changed.
   useEffect(() => {
     if (!ready || !map.current) return
     let live = true
@@ -151,13 +175,10 @@ export default function PropertyMap({ properties, onSelect }: Props) {
       const L = (await import('leaflet')).default
       if (!live || !map.current) return
 
-      markers.current.forEach(mk => mk.remove())
-      markers.current = []
-
-      const points = properties
-        .map(p => propertyPoint(p, ix))
-        .filter((p): p is NonNullable<typeof p> => p !== null)
-      const clusters = clusterPoints(points)
+      // One layer group: clearing it is a single operation instead of removing
+      // each marker from the map one at a time.
+      if (!layer.current) layer.current = L.layerGroup().addTo(map.current)
+      layer.current.clearLayers()
 
       for (const c of clusters) {
         const marker = L.marker([c.lat, c.lng], {
@@ -167,12 +188,14 @@ export default function PropertyMap({ properties, onSelect }: Props) {
             iconSize: c.properties.length > 1 ? [30, 30] : [20, 20],
             iconAnchor: c.properties.length > 1 ? [15, 15] : [10, 10],
           }),
-        }).addTo(map.current)
+        })
 
-        marker.bindPopup(popupHtml(c), { closeButton: true, autoPan: true })
+        // Built when the marker is opened, not when it is drawn: most pins are
+        // never clicked, and the listing HTML for all of them is real work.
+        marker.bindPopup(() => popupHtml(c), { closeButton: true, autoPan: true })
         // A single listing opens straight away; a cluster shows its list first.
         marker.on('click', () => { if (c.properties.length === 1) select.current(c.properties[0].id) })
-        markers.current.push(marker)
+        layer.current.addLayer(marker)
       }
 
       const box = boundsOf(points)
@@ -182,7 +205,7 @@ export default function PropertyMap({ properties, onSelect }: Props) {
     })()
 
     return () => { live = false }
-  }, [properties, ix, ready])
+  }, [clusters, points, ready])
 
   // The popup's rows are plain HTML, so one delegated listener opens the sheet.
   useEffect(() => {
@@ -197,8 +220,9 @@ export default function PropertyMap({ properties, onSelect }: Props) {
     return () => el.removeEventListener('click', onClick)
   }, [])
 
-  const placed = ix ? properties.filter(p => propertyPoint(p, ix)).length : 0
-  const missing = properties.length - placed
+  // From the same memo the markers come from — this used to resolve every
+  // listing through the gazetteer a second time, on every single render.
+  const missing = properties.length - points.length
 
   if (failed) {
     return (

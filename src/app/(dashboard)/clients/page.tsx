@@ -78,6 +78,9 @@ function ClientsPageInner() {
   const [q, setQ] = useState('')
   const [fType, setFType] = useState('')
   const [fStatus, setFStatus] = useState('')
+  // Managers only — an agent's own answer to "whose clients" is the
+  // Mine / All switch in the header.
+  const [fAgent, setFAgent] = useState('')
 
   async function reloadClients() {
     const r = await fetch('/api/clients')
@@ -119,9 +122,9 @@ function ClientsPageInner() {
   const scoped = scope === 'me'
     ? list.filter(c => session?.agentCode != null && c.agentId === session.agentCode)
     : sortOwnFirst(list, session?.agentCode)
-  const searched = filterClients(scoped, { q, type: fType, status: fStatus })
+  const searched = filterClients(scoped, { q, type: fType, status: fStatus, agent: fAgent })
   const filtered = tagFilter ? searched.filter(c => (c.tags ?? []).includes(tagFilter)) : searched
-  const activeFilters = !!(q || fType || fStatus)
+  const activeFilters = !!(q || fType || fStatus || fAgent)
 
   // Every tag currently in use, for the filter bar. Cleared automatically if the
   // active filter no longer applies to any visible client.
@@ -210,9 +213,24 @@ function ClientsPageInner() {
           <option value="">Any status</option>
           {['Searching', 'Viewing', 'Negotiation', 'Signed'].map(s => <option key={s} value={s}>{s}</option>)}
         </select>
+        {/* Whose clients. Only a manager sees it: an agent's own answer to
+            this question is the Mine / All switch in the header above. */}
+        {isManager(session?.role) && Object.keys(agents).length > 0 && (
+          <select
+            value={fAgent}
+            onChange={e => setFAgent(e.target.value)}
+            className="flex-1 md:flex-none rounded-xl px-2.5 py-2 text-sm outline-none"
+            style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: fAgent ? '#14223F' : '#6A7488' }}
+          >
+            <option value="">Any agent</option>
+            {Object.entries(agents)
+              .sort(([, a], [, b]) => a.name.localeCompare(b.name))
+              .map(([code, a]) => <option key={code} value={code}>{a.name}</option>)}
+          </select>
+        )}
         {activeFilters && (
           <button
-            onClick={() => { setQ(''); setFType(''); setFStatus('') }}
+            onClick={() => { setQ(''); setFType(''); setFStatus(''); setFAgent('') }}
             className="flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-semibold"
             style={{ border: '1.5px solid #EEF0F4', background: '#F7F8FB', color: '#6A7488' }}
           >

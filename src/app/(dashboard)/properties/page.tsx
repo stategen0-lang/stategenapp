@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense, lazy } from 'react'
+import { useState, useEffect, useMemo, Suspense, lazy } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Search, X, Map as MapIcon, LayoutGrid } from 'lucide-react'
 import { getAgent, AGENTS, Property, Agent, PROPERTY_TYPES, propertyTypeLabel } from '@/lib/data'
@@ -99,6 +99,9 @@ function PropertiesPageInner() {
   const [fType, setFType] = useState('')
   const [fTxn, setFTxn] = useState('')
   const [fStatus, setFStatus] = useState('')
+  // Managers only — an agent's own answer to "whose listings" is the
+  // Mine / All switch in the header.
+  const [fAgent, setFAgent] = useState('')
 
   async function reloadProperties() {
     const r = await fetch('/api/properties')
@@ -124,11 +127,15 @@ function PropertiesPageInner() {
   }
 
   // "Mine" means the signed-in agent's own listings (was hardcoded to 'a1').
-  const scoped = scope === 'me'
-    ? list.filter(p => session?.agentCode != null && p.agentId === session.agentCode)
-    : list
-  const filtered = filterProperties(scoped, { q, type: fType, transaction: fTxn, status: fStatus })
-  const activeFilters = !!(q || fType || fTxn || fStatus)
+  // Memoised: this is a new array on every render otherwise, and the map keys
+  // its redraw on it — so a keystroke in the search box rebuilt every marker.
+  const filtered = useMemo(() => {
+    const scoped = scope === 'me'
+      ? list.filter(p => session?.agentCode != null && p.agentId === session.agentCode)
+      : list
+    return filterProperties(scoped, { q, type: fType, transaction: fTxn, status: fStatus, agent: fAgent })
+  }, [list, scope, session?.agentCode, q, fType, fTxn, fStatus, fAgent])
+  const activeFilters = !!(q || fType || fTxn || fStatus || fAgent)
 
   const detailProp = detailId != null ? list.find(p => p.id === detailId) ?? null : null
   const detailAgent = detailProp ? agentFor(detailProp.agentId) : null
@@ -203,9 +210,24 @@ function PropertiesPageInner() {
           <option value="">Any status</option>
           {['Available', 'Pending', 'Reserved', 'Sold', 'Rented', 'Under Construction'].map(s => <option key={s} value={s}>{s}</option>)}
         </select>
+        {/* Whose listings. Only a manager sees it: an agent's own answer to
+            this question is the Mine / All switch in the header above. */}
+        {isManager(session?.role) && Object.keys(agents).length > 0 && (
+          <select
+            value={fAgent}
+            onChange={e => setFAgent(e.target.value)}
+            className="flex-1 md:flex-none rounded-xl px-2.5 py-2 text-sm outline-none"
+            style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: fAgent ? '#14223F' : '#6A7488' }}
+          >
+            <option value="">Any agent</option>
+            {Object.entries(agents)
+              .sort(([, a], [, b]) => a.name.localeCompare(b.name))
+              .map(([code, a]) => <option key={code} value={code}>{a.name}</option>)}
+          </select>
+        )}
         {activeFilters && (
           <button
-            onClick={() => { setQ(''); setFType(''); setFTxn(''); setFStatus('') }}
+            onClick={() => { setQ(''); setFType(''); setFTxn(''); setFStatus(''); setFAgent('') }}
             className="flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-semibold"
             style={{ border: '1.5px solid #EEF0F4', background: '#F7F8FB', color: '#6A7488' }}
           >
