@@ -79,17 +79,13 @@ test('scoreLocation: exact area requested → 100', () => {
   assert.equal(scoreLocation('Hamra, Beirut', 'Beirut'), 100)
   assert.equal(scoreLocation('Hamra, Beirut', 'Hamra'), 100)
 })
-test('scoreLocation: a different district is graded by distance — next door 85, surrounding 75', () => {
-  // wants Hamra: Verdun is next door (inside 2 km) → 85; Achrafieh is 3.6 km
-  // away (inside 4 km) → 75. Neither is 100, which is only for the same place.
-  assert.equal(scoreLocation('Hamra, Beirut', 'Verdun'), 85)
-  assert.equal(scoreLocation('Achrafieh, Beirut', 'Hamra'), 75)
-})
-test('scoreLocation: a different caza is no longer "surrounding" just for being nearby', () => {
-  // The old zone table scored all of Metn as 75 against Beirut. Distance decides
-  // now (same rule as the Dbayeh/Achrafieh case in the graded-by-distance test).
-  assert.equal(scoreLocation('Dbayeh, Metn', 'Hamra'), LOCATION_EXCLUDE)
-  assert.equal(scoreLocation('Hamra, Beirut', 'Metn'), LOCATION_EXCLUDE) // region name recognised; Hamra is too far from it
+test('scoreLocation: without the gazetteer, the zone table is all there is', () => {
+  // These two run ABOVE the `await loadAreas()` below, so they exercise the
+  // fallback deliberately — which can only ever answer 75 for two places it
+  // believes share a zone. The distance-based versions of the same questions
+  // are further down, where the gazetteer is loaded and passed in.
+  assert.equal(scoreLocation('Hamra, Beirut', 'Verdun'), 75)
+  assert.equal(scoreLocation('Dbayeh, Metn', 'Hamra'), 75)
 })
 test('scoreLocation: far apart → LOCATION_EXCLUDE', () => {
   assert.equal(scoreLocation('Tripoli', 'Zahle'), LOCATION_EXCLUDE)
@@ -291,6 +287,19 @@ test('scoreLocation: graded by real distance', () => {
   assert.equal(scoreLocation('Dbayeh', 'Achrafieh', areas), LOCATION_EXCLUDE)      // 9.6 km
   assert.equal(scoreLocation('Tripoli', 'Achrafieh', areas), LOCATION_EXCLUDE)
   assert.equal(scoreLocation('Saida', 'Jounieh', areas), LOCATION_EXCLUDE)
+})
+
+test('scoreLocation: a listing stored as "area, city" is graded by its area', () => {
+  // The same two questions the fallback section asks above, but with the
+  // gazetteer: Verdun is 1.3 km from Hamra, and Dbayeh is nowhere near it.
+  assert.equal(scoreLocation('Hamra, Beirut', 'Verdun', areas), 85)
+  assert.equal(scoreLocation('Achrafieh, Beirut', 'Hamra', areas), 75)
+  assert.equal(scoreLocation('Dbayeh, Metn', 'Hamra', areas), LOCATION_EXCLUDE)
+})
+
+test('scoreLocation: a different caza is not "surrounding" just for being nearby', () => {
+  // The old zone table scored all of Metn as 75 against Beirut.
+  assert.equal(scoreLocation('Hamra, Beirut', 'Metn', areas), LOCATION_EXCLUDE)
 })
 
 test('scoreLocation: a place up the mountain is no longer "surrounding"', () => {
