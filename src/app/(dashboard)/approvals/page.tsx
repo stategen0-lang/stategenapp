@@ -473,10 +473,17 @@ export default function TeamPage() {
             <p className="text-base font-bold mb-1" style={{ color: H }}>Reset password</p>
             {resetDone ? (
               <>
-                <p className="text-sm mb-3" style={{ color: SUB }}>Done. Give <span className="font-semibold" style={{ color: H }}>{resetFor.Full_name || 'the agent'}</span> their new password:</p>
-                <div className="rounded-xl p-3 flex items-center justify-between gap-2" style={{ background: '#F0F4FA', border: '1px solid #D8E2F0' }}>
-                  <span className="text-sm font-mono font-bold" style={{ color: H }}>{resetDone}</span>
-                  <button onClick={() => copy(resetDone)} className="text-xs font-bold px-2.5 py-1.5 rounded-lg" style={{ border: '1.5px solid #D7DCE5', color: H }}>{copied === resetDone ? 'Copied' : 'Copy'}</button>
+                <p className="text-sm mb-3" style={{ color: SUB }}>Done. Give <span className="font-semibold" style={{ color: H }}>{resetFor.Full_name || 'the agent'}</span> both of these:</p>
+                <div className="rounded-xl p-3 space-y-2" style={{ background: '#F0F4FA', border: '1px solid #D8E2F0' }}>
+                  {([['Agent ID', resetFor.agent_code || '—'], ['New password', resetDone]] as const).map(([k, v]) => (
+                    <div key={k} className="flex items-center justify-between gap-2">
+                      <span className="text-xs" style={{ color: SUB }}>{k}</span>
+                      <span className="flex items-center gap-2">
+                        <span className="text-sm font-mono font-bold" style={{ color: H }}>{v}</span>
+                        <button onClick={() => copy(String(v))} className="text-xs font-bold px-2 py-1 rounded-lg" style={{ border: '1.5px solid #D7DCE5', color: H }}>{copied === v ? 'Copied' : 'Copy'}</button>
+                      </span>
+                    </div>
+                  ))}
                 </div>
                 <div className="flex justify-end mt-4">
                   <button onClick={() => setResetFor(null)} className="px-4 py-2 rounded-xl text-sm font-bold text-white" style={{ background: '#0E1F3D' }}>Done</button>

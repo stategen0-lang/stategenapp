@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { sanitizeAgentCode } from '@/lib/agent-code'
-import { normalizeDomain } from '@/lib/domain'
+import { resolveLoginEmail, GENERIC_LOGIN_ERROR } from '@/lib/agent-login'
 import { checkGuard, recordFailure, recordSuccess, requestIp, LOCK_MS, THRESHOLD } from '@/lib/login-guard'
 
 // Sign-in, done on the server. The browser used to call Supabase Auth itself and
@@ -22,7 +21,7 @@ import { checkGuard, recordFailure, recordSuccess, requestIp, LOCK_MS, THRESHOLD
 
 const ACCOUNT_THRESHOLD = THRESHOLD   // wrong attempts on one account
 const IP_THRESHOLD = 25               // wrong attempts from one IP across accounts
-const GENERIC = 'Invalid Agent ID, email or password.'
+const GENERIC = GENERIC_LOGIN_ERROR
 
 function describeAccount(identifier: string, ip: string): string {
   return `${ACCOUNT_THRESHOLD}+ failed login attempts for "${identifier}" from IP ${ip}.\n\nThe account is temporarily locked out (${LOCK_MS / 60_000} minutes). This may be someone guessing a password — no action is needed unless it keeps happening.`
@@ -35,24 +34,6 @@ const locked = (seconds?: number) => NextResponse.json(
   { error: 'Too many failed attempts.', blocked: true, retryAfterSeconds: seconds },
   { status: 429 },
 )
-
-// An Agent ID (no "@") is the local part of the agent's synthetic login email,
-// <code>@<agency domain>. Returns null when it can't be resolved to one account.
-async function emailForAgentId(raw: string): Promise<{ email: string } | { error: string }> {
-  const code = sanitizeAgentCode(raw)
-  if (!code) return { error: GENERIC }
-  const admin = createAdminClient()
-  const { data: profs } = await admin.from('Profiles').select('agent_code, company_id').ilike('agent_code', code)
-  const matches = (profs ?? []).filter(p => String(p.agent_code ?? '').toUpperCase() === code)
-  if (matches.length === 0) return { error: GENERIC }
-  // Codes are unique per agency but can repeat across agencies — then we can't
-  // tell which one is meant, so ask for the full login email.
-  if (matches.length > 1) return { error: 'That ID is used at more than one agency. Sign in with your full login email (id@youragency).' }
-  const { data: company } = await admin.from('Companies').select('domain').eq('id', matches[0].company_id).maybeSingle()
-  const domain = normalizeDomain(company?.domain as string)
-  if (!domain) return { error: GENERIC }
-  return { email: `${code.toLowerCase()}@${domain}` }
-}
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
@@ -76,12 +57,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 401 })
   }
 
-  let loginEmail = typed
-  if (!typed.includes('@')) {
-    const r = await emailForAgentId(typed)
-    if ('error' in r) return fail(r.error)
-    loginEmail = r.email
-  }
+  // An Agent ID resolves to that account's real login email; see agent-login.ts.
+  const resolved = await resolveLoginEmail(createAdminClient(), typed)
+  if ('error' in resolved) return fail(resolved.error)
+  const loginEmail = resolved.email
 
   const supabase = await createClient()
   const { data, error } = await supabase.auth.signInWithPassword({ email: loginEmail, password })
