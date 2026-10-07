@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { CheckCircle2, Mail, Lock, Eye, EyeOff } from 'lucide-react'
 import Logo from '@/components/brand/Logo'
 import { LAST_EMAIL_KEY } from '@/lib/last-login'
+import { rememberAccount } from '@/lib/saved-accounts'
 
 // Supabase sometimes hands back an empty or object-shaped error; never surface a
 // bare "{}" — fall back to a human message.
@@ -100,6 +101,7 @@ export default function LoginPage() {
       }
 
       try { localStorage.setItem(LAST_EMAIL_KEY, email.trim()) } catch { /* private mode */ }
+      rememberAccount({ id: email.trim(), name: typeof j.name === 'string' ? j.name : undefined })
 
       router.push('/dashboard')
       router.refresh()

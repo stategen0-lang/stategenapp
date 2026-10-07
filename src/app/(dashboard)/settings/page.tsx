@@ -13,6 +13,8 @@ import { refreshMarketingConfig } from '@/components/marketing/SendToMarketing'
 import PlanCard from '@/components/settings/PlanCard'
 import { clearDeviceCache } from '@/lib/device-cache'
 import { LAST_EMAIL_KEY } from '@/lib/last-login'
+import SwitchAccountModal from '@/components/settings/SwitchAccountModal'
+import { loadSaved, saveSaved, rememberAccount, removeAccount, isSameAccount, type SavedAccount } from '@/lib/saved-accounts'
 import { renderTitle, unknownTokens, DEFAULT_TITLE_TEMPLATE, TITLE_FIELDS, sizeUnitOf, setSizeUnit, type SizeUnit } from '@/lib/title-template'
 import { isSubscribed, enablePush, disablePush } from '@/lib/push-client'
 
@@ -70,15 +72,47 @@ export default function ProfilePage() {
   const supabase = createClient()
 
   // Log out / switch account. Same steps as the sidebar's sign-out: wipe the
-  // on-device copy of client data first, then end the session. "Switch account"
-  // also forgets the remembered Agent ID / email, so the next person starts with
-  // an empty sign-in form instead of this account's name.
+  // on-device copy of client data first, then end the session.
+  //   logout → sign-in form keeps this account's Agent ID / email pre-filled
+  //   pick   → pre-filled with the saved account that was chosen
+  //   add    → empty form, so a different account can be entered
+  // Only names and Agent IDs / emails are ever kept on the device, never a
+  // password or session — the person always types the password.
   const router = useRouter()
   const [leaving, setLeaving] = useState<'logout' | 'switch' | null>(null)
-  async function leave(kind: 'logout' | 'switch') {
-    setLeaving(kind)
+  const [switchOpen, setSwitchOpen] = useState(false)
+  const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>([])
+
+  // The ids this account can have been saved under: managers sign in with their
+  // email, agents with their Agent ID (or the full login email).
+  const myIds = [session?.email, session?.agentCode].filter((x): x is string => !!x)
+  const isMine = (a: SavedAccount) => myIds.some(id => isSameAccount(a.id, id))
+
+  function openSwitch() {
+    let list = loadSaved()
+    // Make sure the account you are in right now is listed, even if it was
+    // signed in before this window existed.
+    if (!list.some(isMine)) {
+      const id = (manager ? session?.email : session?.agentCode) ?? session?.email
+      if (id) list = rememberAccount({ id, name: session?.fullName })
+    }
+    setSavedAccounts(list)
+    setSwitchOpen(true)
+  }
+
+  function forgetAccount(a: SavedAccount) {
+    const next = removeAccount(savedAccounts, a.id)
+    saveSaved(next)
+    setSavedAccounts(next)
+  }
+
+  async function leave(kind: 'logout' | 'pick' | 'add', prefillId?: string) {
+    setLeaving(kind === 'logout' ? 'logout' : 'switch')
     clearDeviceCache()
-    if (kind === 'switch') { try { localStorage.removeItem(LAST_EMAIL_KEY) } catch { /* private mode */ } }
+    try {
+      if (kind === 'pick' && prefillId) localStorage.setItem(LAST_EMAIL_KEY, prefillId)
+      if (kind === 'add') localStorage.removeItem(LAST_EMAIL_KEY)
+    } catch { /* private mode */ }
     await supabase.auth.signOut()
     router.push('/login')
     router.refresh()
@@ -430,7 +464,7 @@ export default function ProfilePage() {
             {leaving === 'logout' ? 'Logging out…' : 'Log out'}
           </button>
           <button
-            onClick={() => leave('switch')} disabled={leaving !== null}
+            onClick={openSwitch} disabled={leaving !== null}
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold disabled:opacity-60"
             style={{ border: '1.5px solid #D7DCE5', color: H, background: '#fff' }}
           >
@@ -439,6 +473,18 @@ export default function ProfilePage() {
           </button>
         </div>
       </div>
+
+      {switchOpen && (
+        <SwitchAccountModal
+          accounts={savedAccounts}
+          isCurrent={isMine}
+          busy={leaving !== null}
+          onPick={a => leave('pick', a.id)}
+          onAdd={() => leave('add')}
+          onRemove={forgetAccount}
+          onClose={() => setSwitchOpen(false)}
+        />
+      )}
 
       {/* Commission rate strip */}
       <div className="rounded-2xl p-5 bg-white flex items-center justify-between" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #EEF0F4' }}>

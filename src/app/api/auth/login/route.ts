@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
   await recordSuccess(account)
 
   // An agency whose subscription isn't active yet can't sign in.
-  const { data: profile } = await supabase.from('Profiles').select('company_id').eq('id', data.user.id).maybeSingle()
+  const { data: profile } = await supabase.from('Profiles').select('company_id, Full_name').eq('id', data.user.id).maybeSingle()
   if (profile?.company_id) {
     const { data: company } = await supabase.from('Companies').select('"is active"').eq('id', profile.company_id).maybeSingle()
     if (company && !company['is active']) {
@@ -81,5 +81,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true })
+  // The name lets the "Switch account" window show who this device has signed in as.
+  return NextResponse.json({ ok: true, name: (profile?.Full_name as string | null) ?? null })
 }
