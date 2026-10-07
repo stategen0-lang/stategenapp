@@ -84,8 +84,11 @@ test('scoreLocation: without the gazetteer, the zone table is all there is', () 
   // fallback deliberately — which can only ever answer 75 for two places it
   // believes share a zone. The distance-based versions of the same questions
   // are further down, where the gazetteer is loaded and passed in.
-  assert.equal(scoreLocation('Hamra, Beirut', 'Verdun'), 75)
-  assert.equal(scoreLocation('Dbayeh, Metn', 'Hamra'), 75)
+  // `null` switches the gazetteer off explicitly: the `await loadAreas()` at the
+  // top of this file runs before any test body, so without it these would get
+  // the distance-based answers (85 and excluded), not the fallback's 75.
+  assert.equal(scoreLocation('Hamra, Beirut', 'Verdun', null), 75)
+  assert.equal(scoreLocation('Dbayeh, Metn', 'Hamra', null), 75)
 })
 test('scoreLocation: far apart → LOCATION_EXCLUDE', () => {
   assert.equal(scoreLocation('Tripoli', 'Zahle'), LOCATION_EXCLUDE)

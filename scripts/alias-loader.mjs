@@ -10,7 +10,7 @@
 // Registered by scripts/test-setup.mjs, which package.json's test script
 // --imports. Test files themselves need no change.
 
-import { existsSync } from 'node:fs'
+import { existsSync, statSync } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { dirname, join, resolve as resolvePath } from 'node:path'
 
@@ -29,8 +29,10 @@ export async function resolve(specifier, context, nextResolve) {
   }
   if (specifier.startsWith('@/')) {
     const base = join(ROOT, 'src', specifier.slice(2))
-    // An explicit extension is honoured as written.
-    if (existsSync(base)) return { url: pathToFileURL(base).href, shortCircuit: true }
+    // An explicit extension is honoured as written — but only for a real FILE.
+    // A folder that shares a module's name ("matching/" beside "matching.ts")
+    // must not win, or Node tries to read the folder and dies with EISDIR.
+    if (existsSync(base) && statSync(base).isFile()) return { url: pathToFileURL(base).href, shortCircuit: true }
     for (const ext of CANDIDATES) {
       const file = base + ext
       if (existsSync(file)) return { url: pathToFileURL(file).href, shortCircuit: true }
