@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ChevronRight, Plus, Trash2, Check, Download, MessageCircle, ExternalLink, KeyRound, Palette, Megaphone } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { ChevronRight, Plus, Trash2, Check, Download, MessageCircle, ExternalLink, KeyRound, Palette, Megaphone, LogOut, ArrowLeftRight } from 'lucide-react'
 import { AGENTS } from '@/lib/data'
 import { createClient } from '@/lib/supabase/client'
 import { useSession } from '@/hooks/use-session'
@@ -10,6 +11,8 @@ import { DescriptionTemplate, DEFAULT_TEMPLATES, loadTemplates, cacheTemplates, 
 import { EXPORTS, EXPORT_LABELS, type ExportKind } from '@/lib/export-columns'
 import { refreshMarketingConfig } from '@/components/marketing/SendToMarketing'
 import PlanCard from '@/components/settings/PlanCard'
+import { clearDeviceCache } from '@/lib/device-cache'
+import { LAST_EMAIL_KEY } from '@/lib/last-login'
 import { renderTitle, unknownTokens, DEFAULT_TITLE_TEMPLATE, TITLE_FIELDS, sizeUnitOf, setSizeUnit, type SizeUnit } from '@/lib/title-template'
 
 const COMMISSION_RATE = 2.5
@@ -64,6 +67,21 @@ export default function ProfilePage() {
 
   // Change password (Supabase updates the logged-in user's password — no email).
   const supabase = createClient()
+
+  // Log out / switch account. Same steps as the sidebar's sign-out: wipe the
+  // on-device copy of client data first, then end the session. "Switch account"
+  // also forgets the remembered Agent ID / email, so the next person starts with
+  // an empty sign-in form instead of this account's name.
+  const router = useRouter()
+  const [leaving, setLeaving] = useState<'logout' | 'switch' | null>(null)
+  async function leave(kind: 'logout' | 'switch') {
+    setLeaving(kind)
+    clearDeviceCache()
+    if (kind === 'switch') { try { localStorage.removeItem(LAST_EMAIL_KEY) } catch { /* private mode */ } }
+    await supabase.auth.signOut()
+    router.push('/login')
+    router.refresh()
+  }
   const [pw, setPw] = useState('')
   const [pwConfirm, setPwConfirm] = useState('')
   const [pwSaving, setPwSaving] = useState(false)
@@ -367,6 +385,35 @@ export default function ProfilePage() {
             style={{ background: '#0E1F3D' }}
           >
             {pwSaving ? 'Updating…' : 'Update password'}
+          </button>
+        </div>
+      </div>
+
+      {/* Log out / switch account — everyone, agents included */}
+      <div className="rounded-2xl bg-white overflow-hidden" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #EEF0F4' }}>
+        <div className="px-5 py-4 flex items-center gap-2.5" style={{ borderBottom: '1px solid #EEF0F4' }}>
+          <LogOut className="h-5 w-5" style={{ color: '#2E5288' }} />
+          <div>
+            <p className="text-sm font-bold" style={{ color: H }}>Account</p>
+            <p className="text-xs mt-0.5" style={{ color: SUB }}>Signed in as {displayName}.</p>
+          </div>
+        </div>
+        <div className="p-4 flex flex-col sm:flex-row gap-2.5">
+          <button
+            onClick={() => leave('logout')} disabled={leaving !== null}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-60"
+            style={{ background: '#0E1F3D' }}
+          >
+            <LogOut className="h-4 w-4" />
+            {leaving === 'logout' ? 'Logging out…' : 'Log out'}
+          </button>
+          <button
+            onClick={() => leave('switch')} disabled={leaving !== null}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold disabled:opacity-60"
+            style={{ border: '1.5px solid #D7DCE5', color: H, background: '#fff' }}
+          >
+            <ArrowLeftRight className="h-4 w-4" />
+            {leaving === 'switch' ? 'Switching…' : 'Switch account'}
           </button>
         </div>
       </div>

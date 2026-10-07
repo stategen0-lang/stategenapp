@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { CheckCircle2, Mail, Lock, Eye, EyeOff } from 'lucide-react'
 import Logo from '@/components/brand/Logo'
+import { LAST_EMAIL_KEY } from '@/lib/last-login'
 
 // Supabase sometimes hands back an empty or object-shaped error; never surface a
 // bare "{}" — fall back to a human message.
@@ -15,7 +16,6 @@ function cleanMsg(m: unknown, fallback: string): string {
   return s
 }
 
-const LAST_EMAIL_KEY = 'stategen_last_login_email'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
