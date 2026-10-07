@@ -44,6 +44,8 @@ export function fakeDb(tables = {}, opts = {}) {
     let op = 'select'
     let values = null
     let limit = Infinity
+    let conflict = null
+    let ignoreDuplicates = false
     let order = null
 
     const rows = () => {
@@ -78,8 +80,17 @@ export function fakeDb(tables = {}, opts = {}) {
       if (op === 'select') return { data: rows(), error: null }
       writes.push({ table, op, values, filters: filters.map(([, c, v]) => [c, v]) })
       if (op === 'insert') {
-        const added = (Array.isArray(values) ? values : [values]).map((v, i) => ({ id: data[table].length + i + 1, ...v }))
-        data[table].push(...added)
+        const incoming = Array.isArray(values) ? values : [values]
+        const added = []
+        for (const v of incoming) {
+          // A conflicting row already there: skip it (ignoreDuplicates) or
+          // merge into it, which is what upsert means.
+          const clash = conflict && data[table].find(r => conflict.every(c => norm(r[c]) === norm(v[c])))
+          if (clash) { if (!ignoreDuplicates) Object.assign(clash, v); continue }
+          const row = { id: data[table].length + added.length + 1, ...v }
+          data[table].push(row)
+          added.push(row)
+        }
         return { data: added, error: null }
       }
       if (op === 'update') {
@@ -103,7 +114,16 @@ export function fakeDb(tables = {}, opts = {}) {
       },
       insert(v) { op = 'insert'; values = v; return api },
       update(v) { op = 'update'; values = v; return api },
-      upsert(v) { op = 'insert'; values = v; return api },
+      upsert(v, o = {}) {
+        op = 'insert'
+        values = v
+        // onConflict + ignoreDuplicates is a real guarantee the app leans on —
+        // "one alert per (listing, client)" is enforced by it — so a fake that
+        // silently inserted twice would hide the bug it exists to catch.
+        conflict = o.onConflict ? String(o.onConflict).split(',').map(c => c.trim()) : null
+        ignoreDuplicates = !!o.ignoreDuplicates
+        return api
+      },
       delete() { op = 'delete'; return api },
       eq(col, val) { filters.push(['eq', col, val]); return api },
       ilike(col, val) { filters.push(['ilike', col, val]); return api },

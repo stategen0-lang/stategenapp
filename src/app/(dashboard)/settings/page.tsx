@@ -14,6 +14,7 @@ import PlanCard from '@/components/settings/PlanCard'
 import { clearDeviceCache } from '@/lib/device-cache'
 import { LAST_EMAIL_KEY } from '@/lib/last-login'
 import { renderTitle, unknownTokens, DEFAULT_TITLE_TEMPLATE, TITLE_FIELDS, sizeUnitOf, setSizeUnit, type SizeUnit } from '@/lib/title-template'
+import { isSubscribed, enablePush, disablePush } from '@/lib/push-client'
 
 const COMMISSION_RATE = 2.5
 const H   = '#1A2B4A'
@@ -134,6 +135,27 @@ export default function ProfilePage() {
     })
       .then(async r => { if (!r.ok) setTemplatesMsg((await r.json().catch(() => ({})))?.error ?? 'Could not save for the team — please try again.') })
       .catch(() => setTemplatesMsg('Could not reach the server — saved on this device only.'))
+  }
+
+  // ── Phone notifications (per device) ────────────────────────────────────
+  const [pushOn, setPushOn] = useState(false)
+  const [pushBusy, setPushBusy] = useState(false)
+  const [pushMsg, setPushMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  useEffect(() => { isSubscribed().then(setPushOn).catch(() => {}) }, [])
+
+  async function togglePush() {
+    setPushBusy(true); setPushMsg(null)
+    if (pushOn) {
+      await disablePush()
+      setPushOn(false)
+      setPushMsg({ ok: true, text: 'Notifications are off on this device.' })
+    } else {
+      const error = await enablePush()
+      if (error) setPushMsg({ ok: false, text: error })
+      else { setPushOn(true); setPushMsg({ ok: true, text: 'Notifications are on for this device.' }) }
+    }
+    setPushBusy(false)
   }
 
   // ── Listing title pattern (one per agency) ──────────────────────────────
@@ -700,6 +722,45 @@ export default function ProfilePage() {
               </button>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Phone notifications — per device, which is what the browser permission
+          is too. Everyone gets this card, not just managers. */}
+      <div className="rounded-2xl bg-white overflow-hidden" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #EEF0F4' }}>
+        <div className="px-5 py-4" style={{ borderBottom: '1px solid #EEF0F4' }}>
+          <p className="text-sm font-bold" style={{ color: H }}>Notifications</p>
+          <p className="text-xs mt-0.5" style={{ color: SUB }}>
+            A notification on this phone when a colleague adds a listing or a client that matches one of yours
+          </p>
+        </div>
+        <div className="p-5 space-y-3">
+          {pushMsg && (
+            <p className="text-xs px-3 py-2 rounded-lg" style={pushMsg.ok ? { background: '#E3F4EA', color: '#1F7A4D' } : { background: '#FBE7E7', color: '#A23434' }}>{pushMsg.text}</p>
+          )}
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold" style={{ color: H }}>Notifications on this device</p>
+              <p className="text-xs mt-0.5" style={{ color: SUB }}>
+                {pushOn
+                  ? 'On. Turning it off here only affects this device.'
+                  : 'Off. Each phone or computer is turned on separately.'}
+              </p>
+            </div>
+            <button
+              onClick={togglePush}
+              disabled={pushBusy}
+              aria-pressed={pushOn}
+              className="shrink-0 rounded-full transition-colors disabled:opacity-50"
+              style={{ width: 52, height: 30, background: pushOn ? '#1F7A4D' : '#D8DEE8', position: 'relative' }}
+            >
+              <span style={{
+                position: 'absolute', top: 3, left: pushOn ? 25 : 3,
+                width: 24, height: 24, borderRadius: 999, background: '#fff',
+                transition: 'left .15s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+              }} />
+            </button>
+          </div>
         </div>
       </div>
 

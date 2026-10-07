@@ -6,7 +6,7 @@
 // assets (icons, images, fonts) are cached. Its real jobs are (1) making the app
 // installable and (2) showing a friendly offline page when there's no network.
 
-const CACHE = 'stategen-static-v3'
+const CACHE = 'stategen-static-v4'
 const OFFLINE_URL = '/offline.html'
 
 self.addEventListener('install', (event) => {
@@ -20,6 +20,49 @@ self.addEventListener('activate', (event) => {
     caches.keys()
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
+  )
+})
+
+// ── Phone notifications ──────────────────────────────────────────────────────
+// A push arrives whether or not the app is open, which is the whole point: an
+// agent learns that a colleague's new listing fits their client without having
+// to remember to look.
+self.addEventListener('push', (event) => {
+  let payload = {}
+  try { payload = event.data ? event.data.json() : {} } catch { payload = {} }
+
+  const title = payload.title || 'StateGen'
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: payload.body || '',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      // Same tag replaces rather than stacks: three price drops on one listing
+      // should be one line on the lock screen, not three.
+      tag: payload.tag || 'stategen',
+      renotify: true,
+      data: { url: payload.url || '/' },
+    }),
+  )
+})
+
+// Tapping it opens the record it is about — and focuses the tab that is already
+// open rather than launching a second copy of the app.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const url = (event.notification.data && event.notification.data.url) || '/'
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+      for (const client of windows) {
+        if (client.url.includes(new URL(url, self.location.origin).pathname) && 'focus' in client) {
+          return client.focus()
+        }
+      }
+      if (windows.length && 'navigate' in windows[0]) {
+        return windows[0].focus().then((c) => c.navigate(url))
+      }
+      return self.clients.openWindow(url)
+    }),
   )
 })
 

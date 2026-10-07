@@ -6,6 +6,7 @@ import { getSession, companyAccessBlocked } from '@/lib/session'
 import { loadClients } from '@/lib/api-loaders'
 import { canEditClient, isManager } from '@/lib/permissions'
 import { closingProgress } from '@/lib/pipeline'
+import { createClientAlerts } from '@/lib/alerts-server'
 import { DOC_BUCKET } from '@/lib/upload'
 import { notifyAgentNewClient } from '@/lib/whatsapp/notify'
 import { ensureManagerAgentCode } from '@/lib/ensure-manager-code'
@@ -310,6 +311,18 @@ export async function POST(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     if (data?.id) refreshScoreAfter(Number(data.id), session.companyId)
+
+    // Tell the agents whose listings this client fits. The other direction of
+    // the same question a new listing asks — deferred so the save returns
+    // instantly, and non-fatal either way.
+    if (data?.id) {
+      const companyId = session.companyId
+      const saved = data as Record<string, unknown>
+      after(async () => {
+        try { await createClientAlerts(createAdminClient(), companyId, saved) }
+        catch { /* already logged inside */ }
+      })
+    }
 
     // Ping the responsible agent on WhatsApp to reach out — but only when the
     // client was assigned to someone OTHER than the person adding it (a manager

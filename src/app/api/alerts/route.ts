@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/session'
-import { isManager } from '@/lib/permissions'
+import { isManager, canSeeClientPII, maskClientName } from '@/lib/permissions'
 import type { AlertView } from '@/lib/alerts'
 
 // New-listing match alerts. An agent sees alerts for their own clients; a
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     // migration 029, and naming a column that isn't there yet fails the whole
     // query — the alerts page would go blank instead of simply not knowing why
     // an alert was raised.
-    .select('*, Properties(Title, Location, Neighborhood, Amenities, Price), client_requests("Client Name", "client phone")')
+    .select('*, Properties(Title, Location, Neighborhood, Amenities, Price), client_requests("Client Name", "client phone", notes)')
     .eq('company_id', session.companyId)
     .order('created_at', { ascending: false })
     .limit(200)
@@ -56,6 +56,9 @@ export async function GET(req: NextRequest) {
     const row = r as Row
     const prop = propertyLabel(row.Properties as Row | null)
     const client = row.client_requests as Row | null
+    // Whose client it is — stored in their notes blob, as everywhere else.
+    let clientAgent: string | null = null
+    try { clientAgent = (JSON.parse((client?.notes as string) || '{}') as Row).agentId as string ?? null } catch { clientAgent = null }
     // Before migration 029 there is no reason column; every existing row is a
     // new-listing alert, which is what the default says too.
     const reason = row.reason === 'price_drop' ? 'price_drop' as const : 'new' as const
@@ -72,8 +75,15 @@ export async function GET(req: NextRequest) {
       propertyTitle: prop.title,
       propertyLabel: prop.label,
       clientId: (row.client_id as number) ?? null,
-      clientName: (client?.['Client Name'] as string) ?? 'Client',
-      clientPhone: (client?.['client phone'] as string | null) ?? null,
+      // Every alert used to be aimed at the client's OWN agent, so the name was
+      // always theirs to see. A 'new_client' alert is aimed at the agent whose
+      // LISTING matched, and that client belongs to a colleague — so the same
+      // rule the rest of the app uses applies here too, and the name is masked
+      // for anyone but its agent and the managers.
+      clientName: canSeeClientPII(session, clientAgent)
+        ? ((client?.['Client Name'] as string) ?? 'Client')
+        : maskClientName(Number(row.client_id)),
+      clientPhone: canSeeClientPII(session, clientAgent) ? ((client?.['client phone'] as string | null) ?? null) : null,
       agentName: isManager(session.role) ? nameOf.get(row.agent_code as string) : undefined,
     }
   })
