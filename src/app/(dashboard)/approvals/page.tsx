@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { UserCheck, Check, X, Clock, Users, Trash2, Shield, ShieldCheck, ShieldOff, Link2, Copy, Plus, KeyRound, Pencil, MoreHorizontal } from 'lucide-react'
 import { useSession } from '@/hooks/use-session'
 import { isManager } from '@/lib/permissions'
+import { agentBadge } from '@/lib/agent-roster'
 
 type Agent = { id: string; Full_name: string | null; agent_code: string | null; role?: string; created_at: string }
 type ActionKind = 'remove' | 'promote' | 'demote'
@@ -11,9 +12,9 @@ type ActionKind = 'remove' | 'promote' | 'demote'
 const H = '#1A2B4A'
 const SUB = '#7A8499'
 
-function initials(name: string | null) {
-  return (name ?? '?').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
-}
+// The same badge the listing and client cards show, so one person reads the
+// same everywhere. Managers without a code fall back to their initials.
+const initials = (a: Agent) => agentBadge(a.agent_code, a.Full_name ?? '?')
 
 export default function TeamPage() {
   const { session } = useSession()
@@ -235,7 +236,7 @@ export default function TeamPage() {
               {managers.map(m => (
                 <div key={m.id} className="flex items-center justify-between gap-3 p-4">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0" style={{ background: '#1A2B4A' }}>{initials(m.Full_name)}</div>
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0" style={{ background: '#1A2B4A' }}>{initials(m)}</div>
                     <div className="min-w-0">
                       <p className="text-sm font-semibold truncate flex items-center gap-2" style={{ color: H }}>
                         {m.Full_name || 'Unnamed manager'}
@@ -274,7 +275,7 @@ export default function TeamPage() {
               {pending.map(a => (
                 <div key={a.id} className="flex items-center justify-between gap-3 p-4">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0" style={{ background: '#5E8FD6' }}>{initials(a.Full_name)}</div>
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0" style={{ background: '#5E8FD6' }}>{initials(a)}</div>
                     <div className="min-w-0">
                       <p className="text-sm font-semibold truncate" style={{ color: H }}>{a.Full_name || 'Unnamed agent'}</p>
                       <p className="text-xs flex items-center gap-1.5" style={{ color: SUB }}>
@@ -314,7 +315,7 @@ export default function TeamPage() {
               {active.map(a => (
                 <div key={a.id} className="flex items-center justify-between gap-3 p-4">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0" style={{ background: '#2E5288' }}>{initials(a.Full_name)}</div>
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0" style={{ background: '#2E5288' }}>{initials(a)}</div>
                     <div className="min-w-0">
                       <p className="text-sm font-semibold truncate" style={{ color: H }}>{a.Full_name || 'Unnamed agent'}</p>
                       {a.agent_code && (

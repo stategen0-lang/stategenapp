@@ -21,6 +21,7 @@ import {
 import { type User as SupabaseUser } from '@supabase/supabase-js'
 import Logo from '@/components/brand/Logo'
 import { clearDeviceCache } from '@/lib/device-cache'
+import { agentBadge } from '@/lib/agent-roster'
 
 const navItems = [
   { href: '/dashboard',   label: 'Dashboard',  icon: LayoutDashboard },
@@ -115,7 +116,7 @@ export default function AppSidebar({ profile, user }: AppSidebarProps) {
     return () => clearTimeout(t)
   }, [tappedHref])
   const companyName = isMgr ? 'Manager · StateGen' : (profile?.Companies?.Name ?? 'StateGen')
-  const initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
+  const initials = agentBadge(profile?.agent_code, displayName)
 
   function isActive(href: string) {
     return pathname === href || (href !== '/dashboard' && pathname.startsWith(href))

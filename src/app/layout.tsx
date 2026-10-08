@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import { Public_Sans } from "next/font/google";
 import "./globals.css";
 import ServiceWorkerRegister from "@/components/pwa/ServiceWorkerRegister";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/next";
 import CookieBanner from "@/components/CookieBanner";
 
@@ -68,7 +67,9 @@ export default function RootLayout({
         <ServiceWorkerRegister />
         {children}
         <CookieBanner />
-        <SpeedInsights />
+        {/* No Speed Insights: it is a paid add-on ($10/mo) measuring page timings
+            we were not acting on. Vercel Analytics below is the free one, and is
+            what the traffic numbers come from. */}
         <Analytics />
       </body>
     </html>

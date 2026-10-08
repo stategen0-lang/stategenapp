@@ -7,6 +7,7 @@ import { AGENTS } from '@/lib/data'
 import { createClient } from '@/lib/supabase/client'
 import { useSession } from '@/hooks/use-session'
 import { isManager } from '@/lib/permissions'
+import { agentBadge } from '@/lib/agent-roster'
 import { DescriptionTemplate, DEFAULT_TEMPLATES, loadTemplates, cacheTemplates, sanitizeTemplates } from '@/lib/templates'
 import { EXPORTS, EXPORT_LABELS, type ExportKind } from '@/lib/export-columns'
 import { refreshMarketingConfig } from '@/components/marketing/SendToMarketing'
@@ -39,9 +40,7 @@ function publicSiteUrl(domain: string | null | undefined): string {
   return onProd ? `https://${label}.stategen.app` : `${window.location.origin}/a/${domain}`
 }
 
-function initialsOf(name: string) {
-  return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2)
-}
+
 
 // Dark or light text over an accent colour, so the agency name stays legible.
 function readableOn(hex: string | null): string {
@@ -403,7 +402,7 @@ export default function ProfilePage() {
       {/* Header */}
       <div className="flex items-center gap-4">
         <div className="w-14 h-14 rounded-full flex items-center justify-center text-lg font-bold text-white" style={{ background: agentColor }}>
-          {initialsOf(displayName)}
+          {agentBadge(myAgentId, displayName)}
         </div>
         <div>
           <h1 className="text-2xl font-bold" style={{ color: H, letterSpacing: '-0.3px' }}>{displayName}</h1>

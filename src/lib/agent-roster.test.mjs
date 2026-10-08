@@ -4,7 +4,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  buildRoster, findAgent, unknownAgent, initialsOf, displayName, colorFor,
+  buildRoster, findAgent, unknownAgent, initialsOf, displayName, colorFor, agentBadge,
 } from './agent-roster.ts'
 
 const KNOWN = [
@@ -35,12 +35,52 @@ test('colorFor: stable across calls, varies by id', () => {
   assert.notEqual(colorFor('a1'), colorFor('a2'))
 })
 
+// ── The avatar badge ────────────────────────────────────────────────────────
+// Reported from the field: Edwin Haddad's listing cards showed a green "EH"
+// circle next to an "ID DH-585" chip, because a manager had changed his code
+// after it was first generated from his initials. The badge follows the code.
+test('agentBadge: the letters come from the code, not the name', () => {
+  assert.equal(agentBadge('DH-585', 'Edwin Haddad'), 'DH')
+  assert.equal(agentBadge('NH-779', 'Nadia Haddad'), 'NH')
+})
+test('agentBadge: a code with no hyphen is used as-is', () => {
+  assert.equal(agentBadge('a2', 'Rami Saad'), 'A2')
+  assert.equal(agentBadge('X-9', 'Someone Else'), 'X9')
+})
+test('agentBadge: managers stay distinguishable', () => {
+  // Caught on the Team page: MGR-1/2/3 all reduced to "MG", so three managers
+  // wore the same circle. A prefix longer than initials keeps its number.
+  assert.deepEqual(['MGR-1', 'MGR-2', 'MGR-3'].map(c => agentBadge(c, 'A Manager')), ['M1', 'M2', 'M3'])
+  assert.equal(agentBadge('JOHN-4', 'Someone Else'), 'J4')
+})
+test('agentBadge: a code with no digits, and one with no letters', () => {
+  assert.equal(agentBadge('ABC', 'Someone Else'), 'AB')
+  assert.equal(agentBadge('12-345', 'Someone Else'), '12')
+})
+test('agentBadge: no code falls back to the name', () => {
+  // Owners and managers who never held an agent code — there is nothing else
+  // to put in the circle.
+  assert.equal(agentBadge(null, 'Maya Mansour (Manager)'), 'MM')
+  assert.equal(agentBadge('', 'Cher'), 'CH')
+  assert.equal(agentBadge('   ', 'Maya Mansour'), 'MM')
+})
+test('agentBadge: never returns more than two characters', () => {
+  for (const code of ['DH-585', 'ABCDEF-1', 'a2', 'X-9', '12-345'])
+    assert.ok(agentBadge(code, 'Some Name').length <= 2, code)
+})
+
 // ── Building the roster ─────────────────────────────────────────────────────
 test('includes agents that have a profile', () => {
   const r = buildRoster([{ agent_code: 'a2', Full_name: 'Rami Saad (Agent)' }], [], KNOWN)
   assert.equal(r.length, 1)
   assert.equal(r[0].id, 'a2')
   assert.equal(r[0].name, 'Rami Saad')
+})
+test('a roster avatar follows the code too', () => {
+  // Nothing in KNOWN, so the derived path runs: the badge is DH, not EH.
+  const r = buildRoster([{ agent_code: 'DH-585', Full_name: 'Edwin Haddad (Agent)' }], [], KNOWN)
+  assert.equal(r[0].initials, 'DH')
+  assert.equal(r[0].name, 'Edwin Haddad')
 })
 test('includes agent codes that only appear on deals', () => {
   // The bug this guards: an agent with deals but no profile row was absent from
@@ -67,8 +107,10 @@ test('a known id keeps its shipped colour and initials', () => {
   assert.equal(r[0].initials, 'LK')
 })
 test('an unknown id gets usable initials and a palette colour', () => {
+  // Was 'NP', from the name. The badge now follows the code, so an agent whose
+  // code a manager changed stops disagreeing with their own ID chip.
   const r = buildRoster([{ agent_code: 'a9', Full_name: 'New Person' }], [], KNOWN)
-  assert.equal(r[0].initials, 'NP')
+  assert.equal(r[0].initials, 'A9')
   assert.ok(r[0].color.startsWith('#'))
 })
 test('no two agents in a roster share a colour', () => {

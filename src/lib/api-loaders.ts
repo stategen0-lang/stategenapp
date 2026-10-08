@@ -14,7 +14,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { isManager, canSeeDeal, canSeeClientPII, maskClientName, type Session } from '@/lib/permissions'
 import { stripPrivateFields } from './private-fields.ts'
-import { colorFor, type RosterAgent } from '@/lib/agent-roster'
+import { colorFor, agentBadge, type RosterAgent } from '@/lib/agent-roster'
 import { loadCompanyRoster } from '@/lib/agent-roster-server'
 
 type Row = Record<string, unknown>
@@ -166,10 +166,6 @@ export async function loadDeals(
 
 // ── The company's agents, for avatars and contact ────────────────────────────
 
-function initialsOf(name: string): string {
-  return name.split(/\s+/).filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?'
-}
-
 export type AgentMap = Record<string, { name: string; initials: string; color: string; whatsapp: string | null }>
 
 /** Takes an ADMIN client: Profiles is not readable through the user's own client. */
@@ -186,7 +182,9 @@ export async function loadAgentMap(admin: SupabaseClient, companyId: number): Pr
     const name = (p.Full_name as string) || code
     agents[code] = {
       name,
-      initials: initialsOf(name),
+      // Keyed off the code, so the avatar never disagrees with the ID chip
+      // beside it after a manager changes someone's code.
+      initials: agentBadge(code, name),
       color: colorFor(code),
       // Only surface a number an agent can actually be reached on.
       whatsapp: (p.whatsapp_enabled !== false && p.whatsapp_number) ? (p.whatsapp_number as string) : null,

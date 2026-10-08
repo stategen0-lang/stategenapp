@@ -43,6 +43,35 @@ export function initialsOf(name: string, fallbackId = '?'): string {
   return (words[0][0] + words[words.length - 1][0]).toUpperCase()
 }
 
+/**
+ * The letters on an agent's avatar — taken from their agent CODE, not their name.
+ *
+ * "DH-585" -> "DH". The code is what the rest of the app shows as the agent's
+ * identity (the ID chip, the ownership key on every listing and client), and a
+ * manager can change it: Edwin Haddad was issued EH-xxx from his initials and
+ * later moved to DH-585. Deriving the avatar from the name left a green "EH"
+ * circle sitting next to an "ID DH-585" chip on the same card — two different
+ * answers to "whose is this?".
+ *
+ * Falls back to initials for anyone with no code (owners and managers who never
+ * had one), since there is nothing else to show.
+ */
+export function agentBadge(code: string | null | undefined, name = ''): string {
+  const c = String(code ?? '').trim()
+  if (!c) return initialsOf(name)
+  const letters = (c.match(/^[A-Za-z]+/) ?? [''])[0]
+  const digits = (c.match(/\d+/) ?? [''])[0]
+  // One or two leading letters is an initials-shaped code, and those letters
+  // ARE the badge: "DH-585" -> "DH", "a2" -> "A2".
+  if (letters.length === 1 || letters.length === 2) return (letters + digits).toUpperCase().slice(0, 2)
+  // A longer prefix is a label rather than initials — the auto-issued manager
+  // codes are MGR-1, MGR-2, MGR-3, and taking two letters makes every manager
+  // in the agency an identical "MG". Keep one letter and the number that tells
+  // them apart.
+  if (letters && digits) return (letters[0] + digits[0]).toUpperCase()
+  return (letters || c).toUpperCase().slice(0, 2)
+}
+
 /** Strip a trailing role label so the filter reads "Rami Saad", not "Rami Saad (Agent)". */
 export function displayName(name: string): string {
   return (name ?? '').replace(/\s*\([^)]*\)\s*$/, '').trim()
@@ -72,7 +101,7 @@ export function buildRoster(
     byCode.set(p.agent_code, {
       id: p.agent_code,
       name,
-      initials: k?.initials ?? initialsOf(name, p.agent_code),
+      initials: k?.initials ?? agentBadge(p.agent_code, name),
       color: k?.color ?? colorFor(p.agent_code),
     })
   }
@@ -85,7 +114,7 @@ export function buildRoster(
     byCode.set(id, {
       id,
       name: k?.name ?? id,
-      initials: k?.initials ?? initialsOf(k?.name ?? '', id),
+      initials: k?.initials ?? agentBadge(id, k?.name ?? ''),
       color: k?.color ?? colorFor(id),
       orphan: !k,
     })
