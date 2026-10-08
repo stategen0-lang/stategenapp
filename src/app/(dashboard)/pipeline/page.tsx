@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { formatPrice } from '@/lib/data'
 import { findAgent, unknownAgent, type RosterAgent } from '@/lib/agent-roster'
+import { withReturn } from '@/lib/return-to'
 import {
   Deal, Stage, STAGES, dealsInStage, totalValue, sortForBoard,
   daysInStage, staleFlag, STALE_STYLE, isStage, closingProgress,
@@ -107,7 +108,7 @@ function DealCard({
         if (p.have === 0 && deal.closing?.downPayment == null) return null
         return (
           <Link
-            href={`/clients?open=${deal.client_id}`}
+            href={withReturn(`/clients?open=${deal.client_id}`, '/pipeline')}
             className="mt-1.5 flex items-center justify-between gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full w-fit"
             style={p.complete ? { background: '#E3F4EA', color: '#1F7A4D' } : { background: '#EAF0FA', color: '#2E5288' }}
             title="Open closing checklist"

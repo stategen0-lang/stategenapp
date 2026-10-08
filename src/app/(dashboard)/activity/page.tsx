@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { withReturn } from '@/lib/return-to'
 import { Activity as ActivityIcon, Search, X } from 'lucide-react'
 import { useSession } from '@/hooks/use-session'
 import { useCachedFetch } from '@/hooks/use-cached-fetch'
@@ -265,7 +266,10 @@ export default function ActivityPage() {
               <div className="rounded-2xl bg-white overflow-hidden" style={{ border: `1px solid ${LINE}`, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
                 <div className="divide-y" style={{ borderColor: LINE }}>
                   {group.items.map(it => {
-                    const href = activityHref(it.target)
+                    // Carry the feed along, so closing the listing or client
+                    // comes back here rather than dumping you on the list.
+                    const target = activityHref(it.target)
+                    const href = target ? withReturn(target, '/activity') : null
                     const row = (
                       <>
                         <div className="w-9 h-9 rounded-full flex items-center justify-center text-base shrink-0" style={{ background: KIND_BG[it.kind] }}>

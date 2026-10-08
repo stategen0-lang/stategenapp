@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
+import { returnTo } from '@/lib/return-to'
 import { Search, X } from 'lucide-react'
 import { getAgent, AGENTS, statusStyle, CLIENT_TYPE_STYLE, formatPrice, tagStyle, Client, Agent } from '@/lib/data'
 import { filterClients } from '@/lib/search'
@@ -63,6 +64,9 @@ function ClientsPageInner() {
     return fallback ?? { id: code as Agent['id'], name: code, initials: code.slice(0, 2).toUpperCase(), color: '#9AA3B2', shortName: code }
   }
   const searchParams = useSearchParams()
+  const router = useRouter()
+  // See the properties page: a deep link can say where closing should land.
+  const backTo = returnTo(searchParams.get('from'))
   const [detailId, setDetailId] = useState<number | null>(() => {
     const raw = searchParams.get('open')
     const n = raw ? Number(raw) : NaN
@@ -374,7 +378,7 @@ function ClientsPageInner() {
         <ClientDetailModal
           client={detailClient}
           agent={detailAgent}
-          onClose={() => setDetailId(null)}
+          onClose={() => { if (backTo) router.push(backTo); else setDetailId(null) }}
           onEdit={detailClient.masked ? undefined : c => { setDetailId(null); setEditClient(c) }}
           onStatusChange={(id, status) => setList(prev => prev.map(x => x.id === id ? { ...x, status } : x))}
           onReferred={() => { reloadClients(); showToast('Client referred') }}

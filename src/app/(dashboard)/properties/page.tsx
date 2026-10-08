@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useMemo, Suspense, lazy } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
+import { returnTo } from '@/lib/return-to'
 import { Search, X, Map as MapIcon, LayoutGrid } from 'lucide-react'
 import { getAgent, AGENTS, Property, Agent, PROPERTY_TYPES, propertyTypeLabel } from '@/lib/data'
 import { filterProperties } from '@/lib/search'
@@ -73,6 +74,11 @@ function PropertiesPageInner() {
   // ?open=<id> opens that listing straight away — the activity feed and the
   // pipeline board both link in this way.
   const searchParams = useSearchParams()
+  const router = useRouter()
+  // A deep link can name the page to go back to (the activity feed, the
+  // pipeline board). Without one — a phone notification, a pasted URL —
+  // closing just hides the modal and leaves you on the list.
+  const backTo = returnTo(searchParams.get('from'))
   const [detailId, setDetailId] = useState<number | null>(() => {
     const raw = searchParams.get('open')
     const n = raw ? Number(raw) : NaN
@@ -296,7 +302,7 @@ function PropertiesPageInner() {
           agentWhatsApp={agents[detailProp.agentId]?.whatsapp ?? null}
           isOwnListing={session?.agentCode != null && detailProp.agentId === session.agentCode}
           canSeePrivate={isManager(session?.role) || (session?.agentCode != null && detailProp.agentId === session.agentCode)}
-          onClose={() => setDetailId(null)}
+          onClose={() => { if (backTo) router.push(backTo); else setDetailId(null) }}
           onEdit={p => { setDetailId(null); setEditProp(p) }}
         />
       )}
