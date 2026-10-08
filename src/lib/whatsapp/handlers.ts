@@ -8,7 +8,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { canSeeClientPII, isManager, maskClientName } from '@/lib/permissions'
 import { dbRowToClient, dbRowToProperty } from '@/lib/db-mappers'
-import { matchProperties, MATCH_THRESHOLD } from '@/lib/matching'
+import { briefFromIntent, searchBrief, describeBrief, matchLines, listingLines, listingPrice } from './match-query.ts'
+import { hasBrief, isMatchable } from '@/lib/matching'
 import { companyAreaIndex } from '@/lib/lebanon/company-areas-server'
 import { formatPrice, propertyLocation, type Property } from '@/lib/data'
 import type { IntentResult } from '@/lib/whatsapp/intent'
@@ -142,6 +143,7 @@ export async function handleQueryProperty(
   admin: SupabaseClient,
   profile: Profile,
   intent: IntentResult,
+  origin = '',
 ): Promise<string> {
   const { data } = await admin
     .from('Properties')
@@ -158,73 +160,44 @@ export async function handleQueryProperty(
     return [
       `#${p.id} ${p.title}`,
       `${p.type} · ${p.transaction}`,
-      `${p.transaction === 'For Rent' ? `${formatPrice(p.rent)}/mo` : formatPrice(p.price)}`,
+      listingPrice(p),
       propertyLocation(p),
       p.beds ? `${p.beds} bed · ${p.baths} bath · ${p.size} m²` : `${p.size} m²`,
       `Status: ${p.status}`,
     ].join('\n')
   }
 
-  const price = (p: Property) => p.transaction === 'For Rent' ? `${formatPrice(p.rent)}/mo` : formatPrice(p.price)
+  // The brief the agent actually described — areas, type, rent or sale, beds,
+  // must-haves — not just a budget. See match-query.ts for why that matters.
+  const brief = briefFromIntent(intent)
+  const areas = await companyAreaIndex(admin, profile.company_id).catch(() => null)
 
-  // No budget and no area → just the most recent listings.
-  if (!intent.budget && !intent.location) {
-    const available = properties.filter(p => p.status !== 'Sold' && p.status !== 'Rented').slice(0, 5)
+  // Nothing to narrow by: the matcher would call every listing a 100% match, so
+  // show the newest instead and say what would help.
+  if (!hasBrief(brief)) {
+    const available = properties.filter(isMatchable).slice(0, 5)
     return [
       `${properties.length} listings. Most recent:`,
-      ...available.map(p => `• #${p.id} ${p.title} — ${price(p)}`),
+      ...available.map(p => listingLines(p, origin)),
       '',
-      'Add a budget or area to narrow it down, e.g. "what matches 500k in Beirut".',
+      'Tell me a budget, an area or a type to narrow it down — e.g. "2 bed apartment to rent in Jounieh under 800".',
     ].join('\n')
   }
 
-  // A location scopes the search STRICTLY to that area or city. "Listings in
-  // Achrafieh" means Achrafieh — not the matcher's neighbouring-area suggestions.
-  let pool = properties
-  if (intent.location) {
-    const loc = intent.location.toLowerCase()
-    pool = properties.filter(p => p.district.toLowerCase().includes(loc) || p.city.toLowerCase().includes(loc))
-    if (!pool.length) return `No listings in ${intent.location}.`
-  }
+  const matches = searchBrief(brief, properties, areas).slice(0, 5)
+  const wanted = describeBrief(brief)
 
-  // Location only (no budget) → list what's there, no fuzzy matching.
-  if (!intent.budget) {
-    const available = pool.filter(p => p.status !== 'Sold' && p.status !== 'Rented').slice(0, 8)
-    return [
-      `${available.length} listing${available.length === 1 ? '' : 's'} in ${intent.location}:`,
-      ...available.map(p => `• #${p.id} ${p.title} — ${price(p)} · ${p.city || p.district}`),
-    ].join('\n')
-  }
-
-  // Budget present → rank within the (location-scoped) pool with the real matcher.
-  const criteria = {
-    budget: intent.budget ?? 0,
-    type: 'Buyer' as const,
-    req: {
-      transaction: '' as const,
-      type: '' as const,
-      location: intent.location ?? '',
-      priceMin: 0,
-      priceMax: intent.budget ?? 0,
-      beds: 0, baths: 0, size: 0,
-      garden: false, balcony: false, notes: '',
-    },
-  }
-
-  // The agency's own places included, so a listing filed in an area an agent
-  // taught the app is findable from a chat too.
-  const areas = await companyAreaIndex(admin, profile.company_id).catch(() => null)
-  const matches = matchProperties(criteria, pool, MATCH_THRESHOLD, areas).slice(0, 5)
   if (!matches.length) {
-    const what = [intent.budget ? formatPrice(intent.budget) : null, intent.location].filter(Boolean).join(' in ')
-    return `Nothing matches ${what}.\n\nThe matcher only suggests listings within ±50% of budget${intent.location ? ` in ${intent.location}` : ''}.`
+    return [
+      `Nothing matches ${wanted}.`,
+      '',
+      'The matcher keeps to the right type and deal, within ±30% of budget and 4 km of the area. Widen one of those and I will look again.',
+    ].join('\n')
   }
 
-  const header = `${matches.length} match${matches.length > 1 ? 'es' : ''} for ${[intent.budget ? formatPrice(intent.budget) : null, intent.location].filter(Boolean).join(' in ')}:`
   return [
-    header,
-    ...matches.map(({ property: p, score }) =>
-      `• #${p.id} ${p.title} — ${price(p)} · ${p.city || p.district} · ${Math.round(score.total)}% match`),
+    `${matches.length} match${matches.length > 1 ? 'es' : ''} for ${wanted}:`,
+    ...matchLines(matches, origin),
   ].join('\n')
 }
 

@@ -218,7 +218,7 @@ async function route(
 
   switch (intent) {
     case 'query_client':   return { intent, answer: await handleQueryClient(admin, profile, result) }
-    case 'query_property': return { intent, answer: await handleQueryProperty(admin, profile, result) }
+    case 'query_property': return { intent, answer: await handleQueryProperty(admin, profile, result, origin) }
     case 'find_listing':   return { intent, answer: (await findListings(admin, profile, queryFromIntent(result))).reply }
     case 'share_listing':  return { intent, answer: await withListing(admin, profile, result, r => handleShareListing(admin, profile, r, origin)) }
     case 'describe_property': return { intent, answer: await withListing(admin, profile, result, r => stageDescribeProperty(admin, profile, r)) }

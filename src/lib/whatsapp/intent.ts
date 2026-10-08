@@ -10,6 +10,7 @@
 // runtime import here would make this whole module unloadable in tests.
 
 import { quickIntent } from './quick-intent.ts'
+import { budgetFromPhone } from './match-query.ts'
 
 export type Intent =
   | 'reminder_response'
@@ -52,6 +53,8 @@ export interface IntentResult {
   search?: string
   /** Location mentioned in a property query. */
   location?: string
+  /** Every area named, when the agent listed more than one. */
+  locations?: string[]
   /** Field → value pairs for update intents. */
   fields?: Record<string, string | number | boolean>
   /** Anything else worth keeping (notes, sentiment). */
@@ -88,6 +91,10 @@ export function parseIntentJson(raw: string | null | undefined): IntentResult {
   if (typeof parsed.clientName === 'string' && parsed.clientName.trim()) out.clientName = parsed.clientName.trim()
   if (typeof parsed.location === 'string' && parsed.location.trim()) out.location = parsed.location.trim()
   if (typeof parsed.search === 'string' && parsed.search.trim()) out.search = parsed.search.trim().slice(0, 120)
+  if (Array.isArray(parsed.locations)) {
+    const areas = parsed.locations.map(a => String(a ?? '').trim()).filter(Boolean).slice(0, 12)
+    if (areas.length) out.locations = areas
+  }
   if (typeof parsed.notes === 'string' && parsed.notes.trim()) out.notes = parsed.notes.trim()
 
   const pid = Number(parsed.propertyId)
@@ -104,6 +111,21 @@ export function parseIntentJson(raw: string | null | undefined): IntentResult {
   return out
 }
 
+/**
+ * Drop a budget that was lifted out of a phone number.
+ *
+ * Seen in the field: an agent forwarded "Maya bejjany / 81/370740 / looking for
+ * an apartment for rent … 600$ per month" and got back "5 matches for USD
+ * 370,740", a list of apartments for sale. Exported so the rule is testable on
+ * its own, without calling the model.
+ */
+export function withoutPhoneBudget(intent: IntentResult, message: string): IntentResult {
+  if (!intent.budget || !budgetFromPhone(message, intent.budget)) return intent
+  const next = { ...intent }
+  delete next.budget
+  return next
+}
+
 const SYSTEM = `You classify WhatsApp messages from real estate agents into one intent and extract any obvious entities.
 Reply with a single JSON object and nothing else.
 
@@ -116,7 +138,7 @@ best guess at a real intent is better than refusing a slightly misspelt message.
 
 Intents:
 - query_client: asking for information about a client ("send me info on Ahmed")
-- query_property: the AGENT searching existing listings, with NO specific person attached ("what matches a 500k budget in Beirut")
+- query_property: the AGENT searching existing listings, with NO specific person attached ("what matches a 500k budget in Beirut"). Extract EVERYTHING they narrowed by, not just the budget: "locations" (ARRAY of areas), and in fields: transaction ("For Sale"/"For Rent"), type, beds, baths, furnishing, features. A monthly figure means transaction "For Rent" and the budget is that monthly figure.
 - query_agents: asking how the team or a set of agents is PERFORMING — stats/numbers ("how is the team doing", "agent performance", "who is my top agent")
 - query_activity: asking what has HAPPENED recently — a feed of recent actions, not stats ("what's new", "recent activity", "what did the team do today", "any updates", "latest")
 - query_schedule: asking what is on their calendar ("what is on today", "my schedule tomorrow")
@@ -146,6 +168,11 @@ JSON shape (omit keys you cannot fill):
 
 Rules:
 - budget is a plain number in USD: "400k" -> 400000, "1.2m" -> 1200000
+- NEVER take a budget out of a phone number. Lebanese numbers are written many
+  ways — "81/370740", "03 123 456", "+961 71 998877", "70-123456" — and the
+  digits in them are not money. A number next to a name, or on its own line near
+  one, is a phone: put it in fields.phone. Only a figure the agent presents as a
+  price, budget or rent is a budget.
 - propertyId is the number in "#23"
 - Never invent a client name that is not in the message.
 
@@ -183,7 +210,8 @@ Examples (note the typos and varied phrasing):
 "chnge ahmeds budget 2 400k" -> {"intent":"update_client","clientName":"Ahmed","fields":{"budget":400000}}
 "who is sara" -> {"intent":"query_client","clientName":"Sara"}
 "pull up ahmed for me" -> {"intent":"query_client","clientName":"Ahmed"}
-"any flats under 500k in beirut" -> {"intent":"query_property","budget":500000,"location":"Beirut"}
+"any flats under 500k in beirut" -> {"intent":"query_property","budget":500000,"location":"Beirut","fields":{"type":"apartment","transaction":"For Sale"}}
+"what do we have to rent 2 bedrooms in jounieh or kaslik up to 800 a month" -> {"intent":"query_property","budget":800,"locations":["Jounieh","Kaslik"],"fields":{"transaction":"For Rent","beds":2}}
 "mark property #23 as sold" -> {"intent":"update_property","propertyId":23,"fields":{"status":"Sold"}}
 "send me the link for #23" -> {"intent":"share_listing","propertyId":23}
 "share property 23 with the client" -> {"intent":"share_listing","propertyId":23}
@@ -282,7 +310,10 @@ export async function classifyIntent(message: string): Promise<IntentResult> {
     if ((!raw || !raw.trim()) && elapsed < 2500) {
       raw = await withDeadline(chat(messages, { temperature: 0.1, max_tokens: 2000 }), GROK_DEADLINE_MS - elapsed)
     }
-    return parseIntentJson(raw)
+    // The prompt tells the model a phone number is not a budget; this makes
+    // sure of it. Getting this wrong is expensive and silent — the agent gets a
+    // confident answer to a question they never asked.
+    return withoutPhoneBudget(parseIntentJson(raw), message)
   } catch {
     return { intent: 'unknown' }
   }

@@ -4,7 +4,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseIntentJson } from './intent.ts'
+import { parseIntentJson, withoutPhoneBudget } from './intent.ts'
 
 test('parseIntentJson: clean JSON object', () => {
   const r = parseIntentJson('{"intent":"query_client","clientName":"Ahmed"}')
@@ -77,4 +77,37 @@ test('parseIntentJson: nested braces in a string value still parse', () => {
   const r = parseIntentJson('{"intent":"feedback","notes":"said {maybe} next week"}')
   assert.equal(r.intent, 'feedback')
   assert.equal(r.notes, 'said {maybe} next week')
+})
+
+// ── The model is not trusted with phone numbers ─────────────────────────────
+// It is told not to read a budget out of one, and it did anyway: a forwarded
+// enquiry whose client phone was "81/370740" came back as a search for listings
+// at USD 370,740. The guard runs on every classification.
+
+const FORWARDED = `Maya bejjany
+81/370740
+Looking for an apartment for rent
+2 bedrooms
+600$ per month`
+
+test('withoutPhoneBudget: a budget taken from the phone is dropped', () => {
+  const r = withoutPhoneBudget({ intent: 'query_property', budget: 370740 }, FORWARDED)
+  assert.equal('budget' in r, false)
+  assert.equal(r.intent, 'query_property')   // everything else survives
+})
+
+test('withoutPhoneBudget: the real budget is left alone', () => {
+  const r = withoutPhoneBudget({ intent: 'query_property', budget: 600 }, FORWARDED)
+  assert.equal(r.budget, 600)
+})
+
+test('withoutPhoneBudget: nothing to do without a budget', () => {
+  const intent = { intent: 'query_client', clientName: 'Maya' }
+  assert.deepEqual(withoutPhoneBudget(intent, FORWARDED), intent)
+})
+
+test('parseIntentJson: several areas come through', () => {
+  const r = parseIntentJson('{"intent":"query_property","locations":["Jounieh","Kaslik"," "],"budget":800}')
+  assert.deepEqual(r.locations, ['Jounieh', 'Kaslik'])
+  assert.equal(r.budget, 800)
 })
