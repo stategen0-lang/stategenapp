@@ -284,8 +284,12 @@ export async function classifyIntent(message: string): Promise<IntentResult> {
   // Formulaic messages are matched locally and never reach the model. This is a
   // latency requirement, not an optimisation: Twilio abandons the webhook at 15
   // seconds, and a slow classification costs the agent their reply entirely.
+  // The guard wraps BOTH paths. It was on the model's reply alone, and the
+  // message that prompted it never reached the model — the local fast path
+  // claimed it and pulled the budget out of the client's phone number. A rule
+  // about reading numbers has to hold wherever numbers are read.
   const quick = quickIntent(message)
-  if (quick) return quick
+  if (quick) return withoutPhoneBudget(quick, message)
 
   const messages = [
     { role: 'system' as const, content: SYSTEM },

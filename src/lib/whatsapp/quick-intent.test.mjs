@@ -323,3 +323,47 @@ test('quick intent: a reminder with a task beats the property search in it', () 
   // A plain search is still a search.
   assert.equal(quickIntent('show me apartments for rent in mazraat yachouh')?.intent, 'query_property')
 })
+
+// ── A forwarded client enquiry must not be claimed as a search ──────────────
+// The live failure, reproduced end to end. "81/370740" is a phone number, and
+// the fast path has always meant to step aside for a message carrying one — but
+// its pattern required a space or a dash between the groups, so a slash made the
+// number invisible. The message was taken as a property search, 370740 was read
+// out of the phone, and the agent was answered "5 matches for USD 370,740".
+
+const FORWARDED_ENQUIRY = `Maya bejjany
+81/370740
+Looking for an apartment for rent
+Location mazraat yachoub, ain aar, beit el chaar, dik el mehdy, aatchaneh
+2 bedrooms
+Unfurnished
+Well maintained building
+600$ per month`
+
+test('quickIntent: a forwarded enquiry with a slashed phone falls through to the classifier', () => {
+  // Falling through (undefined) is the point: Grok then reads it as create_client
+  // and registers Maya, which is what the agent wanted.
+  assert.equal(quickIntent(FORWARDED_ENQUIRY), null)
+})
+
+test('quickIntent: however the number is written', () => {
+  for (const phone of ['81/370740', '03 445 210', '70-123456', '+961 3 870 377', '71998877']) {
+    const msg = `Joe Khoury\n${phone}\nlooking for an apartment in Antelias`
+    assert.equal(quickIntent(msg), null, phone)
+  }
+})
+
+test('quickIntent: a genuine search is still answered fast', () => {
+  // The fast path exists because the webhook has seconds to reply. Stepping
+  // aside for phone numbers must not make it step aside for everything.
+  const r = quickIntent('any apartments under 500k in Achrafieh')
+  assert.equal(r?.intent, 'query_property')
+  assert.equal(r?.budget, 500000)
+  assert.equal(r?.location, 'Achrafieh')
+})
+
+test('quickIntent: a seven-digit asking price is not mistaken for a phone', () => {
+  const r = quickIntent('what listings match 1500000 in Achrafieh')
+  assert.equal(r?.intent, 'query_property')
+  assert.equal(r?.budget, 1500000)
+})

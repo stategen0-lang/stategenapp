@@ -27,14 +27,45 @@ import type { IntentResult } from './intent'
 export function budgetFromPhone(message: string, budget: number | undefined | null): boolean {
   const digits = String(Math.round(Number(budget) || 0))
   if (!Number(budget)) return false
-  // Digit groups joined by the separators people put inside phone numbers, and
-  // nothing else — letters break a run, so "2 bedrooms … 600$" stays two runs.
-  for (const m of String(message ?? '').matchAll(/\d[\d\s/\-().+]*\d/g)) {
-    const run = m[0].replace(/\D/g, '')
+  for (const run of digitRuns(message)) {
     // Lebanese numbers are 7–8 digits; shorter runs are prices, floors, sizes.
     if (run.length >= 7 && run !== digits && run.includes(digits)) return true
   }
   return false
+}
+
+/**
+ * Digit groups joined by the separators people put inside phone numbers.
+ *
+ * Letters break a run, so "2 bedrooms … 600$ per month" stays separate numbers,
+ * while "81/370740", "03 445 210" and "+961 3 870 377" each come back whole.
+ * The slash matters: it is how half of Lebanon writes a number, and leaving it
+ * out is what let a phone be read as a budget.
+ */
+export function digitRuns(text: string): string[] {
+  return [...String(text ?? '').matchAll(/\d[\d\s/\-().+]*\d/g)].map(m => m[0].replace(/\D/g, ''))
+}
+
+// A Lebanese number, checked against the digits alone so punctuation — or the
+// absence of it — makes no difference: an optional 00/961, then either a mobile
+// prefix (3, 7x, 80, 81, with or without the trunk 0) or a landline one (01–09,
+// which keeps its 0), then six digits.
+//
+// The trunk 0 on landlines is load-bearing. Allowing a bare leading digit would
+// make any seven-digit number a phone, and a $1,500,000 asking price is seven
+// digits.
+const LEBANESE = /^(?:00)?(?:961)?(?:0?(?:3|7\d|8[01])|0[1-9])\d{6}$/
+
+/**
+ * Does this message carry a phone number?
+ *
+ * Used to tell a forwarded client enquiry ("Maya bejjany / 81/370740 / looking
+ * for an apartment …") from an agent searching stock — a search never carries
+ * somebody's number. Getting it wrong sends a person who should be saved as a
+ * client into the listing matcher instead.
+ */
+export function containsPhoneNumber(text: string): boolean {
+  return digitRuns(text).some(run => LEBANESE.test(run))
 }
 
 const TYPE_ALIASES: Record<string, PropertyType> = {

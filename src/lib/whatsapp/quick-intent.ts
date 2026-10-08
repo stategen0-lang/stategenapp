@@ -16,6 +16,7 @@ import type { IntentResult } from '@/lib/whatsapp/intent'
 import { toMoney } from './writes.ts'
 import { coerceDealTarget, findStageInText, type DealTarget } from './deals.ts'
 import { parseWhen } from './when.ts'
+import { containsPhoneNumber } from './match-query.ts'
 
 /** Flatten a pipeline target into the intent's fields (only ever strings). */
 function dealFields(t: DealTarget): Record<string, string> {
@@ -54,13 +55,12 @@ function budgetAndLocation(text: string): { budget?: number; location?: string }
  * client's fields and classifies it create_client.
  */
 function looksLikeClientEnquiry(text: string): boolean {
-  // A Lebanese phone: +961…, a mobile/landline prefix + two 3-digit groups
-  // ("03 445 210", "71 998 877", "01 234 567"). Deliberately not a bare 6-digit
-  // run, so a plain budget like "350000" isn't mistaken for a number.
-  const hasPhone =
-    /\+?\b961\d{6,}/.test(text.replace(/[^\d+]/g, ''))
-    || /\b(0?3|0?[789]\d|0[1-9])[\s-]?\d{3}[\s-]?\d{3}\b/.test(text)
-  return hasPhone
+  // A Lebanese phone, however it was punctuated. This used to insist on a space
+  // or a dash between the groups, so "81/370740" — the way half of Lebanon
+  // writes a number — wasn't recognised. The forwarded enquiry was then claimed
+  // by the property-search fast path, which read 370740 out of the phone and
+  // answered "5 matches for USD 370,740".
+  return containsPhoneNumber(text)
     || /\bmy name is\b/i.test(text)
     || /\bi['’]?\s*a?m\s+looking\b/i.test(text)
     || /\blooking to (?:buy|rent|lease)\b/i.test(text)

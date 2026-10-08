@@ -20,7 +20,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   budgetFromPhone, canonicalPropertyType, transactionOf, briefLocations,
-  briefFromIntent, searchBrief, describeBrief, matchLines, listingLines,
+  briefFromIntent, searchBrief, describeBrief, matchLines, listingLines, containsPhoneNumber,
 } from './match-query.ts'
 import { loadAreas } from '../lebanon/areas.ts'
 
@@ -221,4 +221,30 @@ test('no origin configured still produces a usable line', () => {
   assert.match(line, /#7/)
   assert.equal(line.includes('http'), false)
   assert.equal(line.includes('undefined'), false)
+})
+
+// ── Recognising a phone number at all ───────────────────────────────────────
+// The second half of the live bug. A forwarded enquiry is meant to be excluded
+// from the property-search fast path by looksLikeClientEnquiry(), which keyed
+// on a phone — but its pattern demanded a space or a dash between the groups,
+// so "81/370740" was not a phone to it. The message was claimed as a search,
+// the budget came out of the phone, and the guard on the model's reply never
+// ran because the model was never called.
+
+test('a phone is a phone however it is punctuated', () => {
+  for (const t of [
+    '81/370740',
+    'Maya bejjany\n81/370740\nLooking for an apartment',
+    '03 445 210', '71 998 877', '01 234 567',
+    '71998877', '+961 3 870 377', '00961 3 870 377',
+    '70-123456', '(03) 445.210',
+  ]) assert.equal(containsPhoneNumber(t), true, t)
+})
+
+test('prices, sizes and years are not phone numbers', () => {
+  for (const t of [
+    '350000', 'budget 500k in Achrafieh', '2 bedrooms 150 m2',
+    '600$ per month', 'built in 2019', '#143', '',
+    'what matches 500000 in Beirut',
+  ]) assert.equal(containsPhoneNumber(t), false, t)
 })
