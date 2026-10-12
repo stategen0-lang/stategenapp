@@ -21,9 +21,22 @@ import { isStoredPhoto } from '@/lib/upload'
 const DOUBLE_SEND_GUARD_MS = 60_000
 
 // Gmail rejects a message over 25 MB, and attachments grow by a third when
-// encoded, so ~15 MB of photos is the safe ceiling. Photos past it are still in
-// the email, shown from their link instead of attached.
+// encoded, so ~15 MB of photos is the safe ceiling. Photos past it are linked
+// in the email instead of attached.
 const ATTACH_BUDGET_BYTES = 15 * 1024 * 1024
+
+// Photos are stored exactly as the phone took them — 3 to 4.5 MB each. Four of
+// those filled the budget, so a listing with thirteen photos attached five and
+// the agency was told the rest were "too large". Nothing was wrong with the
+// budget; the pictures were simply full-resolution camera originals being
+// emailed as-is.
+//
+// Downscaling to 1600px on the long edge takes a 4 MB photo to a few hundred KB
+// with no difference anyone posting to Instagram or a portal would see, and the
+// whole set then fits with room to spare. The stored original is untouched —
+// this only affects the copy that goes in the email.
+const EMAIL_PHOTO_MAX_EDGE = 1600
+const EMAIL_PHOTO_QUALITY = 82
 const EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' }
 
 /** The part of a session this needs — the web session or a WhatsApp profile. */
@@ -57,8 +70,10 @@ async function attachPhotos(photos: string[], listingId: number) {
     } catch { return null }
   }))
 
+  const sized = await Promise.all(fetched.map(f => (f ? shrinkForEmail(f) : null)))
+
   let used = 0
-  for (const f of fetched) {
+  for (const f of sized) {
     if (!f || used + f.content.length > ATTACH_BUDGET_BYTES) continue
     used += f.content.length
     const filename = `listing-${listingId}-photo-${f.i + 1}.${EXT[f.contentType]}`
@@ -66,6 +81,34 @@ async function attachPhotos(photos: string[], listingId: number) {
     attachedFiles[f.i] = filename
   }
   return { attachments, attachedFiles }
+}
+
+type FetchedPhoto = { i: number; contentType: string; content: Buffer }
+
+/**
+ * A photo at a size worth emailing.
+ *
+ * Returns the original untouched if anything goes wrong — a GIF (which would
+ * lose its animation), an image already small enough, or sharp being
+ * unavailable. Sending a photo at full size is a much smaller problem than not
+ * sending the email, so every failure here degrades instead of throwing.
+ */
+async function shrinkForEmail(f: FetchedPhoto): Promise<FetchedPhoto> {
+  if (f.contentType === 'image/gif') return f
+  if (f.content.length <= 600 * 1024) return f
+  try {
+    const sharp = (await import('sharp')).default
+    const out = await sharp(f.content)
+      .rotate()                       // honour the EXIF orientation before it is stripped
+      .resize({ width: EMAIL_PHOTO_MAX_EDGE, height: EMAIL_PHOTO_MAX_EDGE, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: EMAIL_PHOTO_QUALITY, mozjpeg: true })
+      .toBuffer()
+    // Only take the re-encode if it actually helped.
+    if (out.length >= f.content.length) return f
+    return { i: f.i, contentType: 'image/jpeg', content: out }
+  } catch {
+    return f
+  }
 }
 
 /** The company's marketing recipients, or null when the feature isn't set up. */

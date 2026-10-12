@@ -168,12 +168,18 @@ export function renderMarketingEmail(input: MarketingEmailInput): MarketingEmail
   const linkedPhotos = l.photos.filter((_, i) => !files[i])
   const downloadOf = (src: string, i: number) => photoDownloadUrl(src, files[i] ?? photoFilename(listingId, i, src))
 
+  // The photos are attached, not shown. Showing them inline meant the email
+  // displayed every photo while carrying only the ones that fit the size
+  // budget, so the marketing team counted eight in the body, found five
+  // attached, and had no way to tell which three were missing. Remote images
+  // are also blocked by default in most mail clients, so the showcase often
+  // rendered as nothing anyway.
   const photoNote = !l.photos.length ? ''
     : attachedCount === l.photos.length
-      ? `All ${attachedCount} photo${attachedCount === 1 ? ' is' : 's are'} attached to this email — tap one to download it, or use "Download all" in the attachments.`
+      ? `${attachedCount} photo${attachedCount === 1 ? '' : 's'} attached.`
       : attachedCount
-        ? `${attachedCount} of ${l.photos.length} photos are attached (the rest were too large to attach). Tap any photo to download it.`
-        : 'Tap a photo to download it.'
+        ? `${attachedCount} of ${l.photos.length} photos attached. The ${l.photos.length - attachedCount} that would not fit are linked below:`
+        : `${l.photos.length} photo${l.photos.length === 1 ? '' : 's'}, linked below:`
 
   const text = [
     // Plain, and English only — the same line the HTML half opens with.
@@ -195,14 +201,16 @@ export function renderMarketingEmail(input: MarketingEmailInput): MarketingEmail
     // The listing card is gone from both versions — see the HTML above.
   ].join('\n')
 
-  // The photos are the point, so they keep a width and nothing else — no frame,
-  // no rounded corners. Still wrapped in a link, because that is what makes a
-  // click download the file rather than open it full screen.
+  // A line saying where the photos are, and a link for any that could not be
+  // attached — nothing else. Every photo named here is one the reader can
+  // actually get hold of, which is the whole point of the change.
   const photoBlocks = (photoNote ? `<p>${esc(photoNote)}</p>` : '')
-    + l.photos.map((src, i) => `
-      <a href="${esc(downloadOf(src, i))}" download="${esc(files[i] ?? photoFilename(listingId, i, src))}">
-        <img src="${esc(src)}" alt="Photo ${i + 1}" width="620" style="display:block;width:100%;max-width:620px;height:auto;margin:0 0 10px">
-      </a>`).join('')
+    + (linkedPhotos.length
+      ? `<p>${linkedPhotos.map(src => {
+          const i = l.photos.indexOf(src)
+          return `<a href="${esc(downloadOf(src, i))}">Photo ${i + 1}</a>`
+        }).join('<br>')}</p>`
+      : '')
 
   // Plain, at the agency's request: no colours, no panels, no rounded corners,
   // no footer. What is left is what the email is for, and only that — a stamp

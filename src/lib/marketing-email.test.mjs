@@ -135,16 +135,51 @@ test('marketing email: the listing card is gone, and stays gone', () => {
   // is the only place the team needs them.
   assert.match(email().subject, /New listing #45 from Nour Haddad/)
 })
-test('marketing email: attached photos are real attachments, and clicking one downloads it', () => {
-  const { html, text } = email({ attachedFiles: { 0: 'listing-45-photo-1.jpg' } })
-  // Never embedded inline — Gmail hides inline images from the attachment strip.
-  assert.equal(html.includes('cid:'), false)
-  assert.ok(html.includes(`src="${property.photos[0]}"`))
-  assert.ok(html.includes('?download=listing-45-photo-1.jpg'))
-  assert.match(html, /Download all/)
-  assert.match(text, /Photos: 1 \(1 attached\)/)
-  // Attached photos aren't repeated as bare links in the plain-text version.
-  assert.equal(text.includes(property.photos[0]), false)
+const THREE = [
+  'https://x.supabase.co/storage/v1/object/public/property-photos/company-1/a.jpg',
+  'https://x.supabase.co/storage/v1/object/public/property-photos/company-1/b.jpg',
+  'https://x.supabase.co/storage/v1/object/public/property-photos/company-1/c.jpg',
+]
+const withPhotos = (photos, attachedFiles) => renderMarketingEmail({
+  listing: publicListing({ ...property, photos }, 'Bright 3-bedroom with open sea views.'),
+  listingId: 45, shareUrl: 'https://stategen.app/l/tok', agentName: 'Nour Haddad', attachedFiles,
+})
+
+test('marketing email: photos are attached, never displayed in the body', () => {
+  // The complaint this comes from: the email showed every photo but carried
+  // only the ones that fitted the size budget, so the marketing team counted
+  // more pictures than they could save, with no way to tell which were missing.
+  const { html, text } = withPhotos(THREE, { 0: 'listing-45-photo-1.jpg', 1: 'listing-45-photo-2.jpg', 2: 'listing-45-photo-3.jpg' })
+  assert.equal(html.includes('<img'), false, 'no photo should be rendered in the body')
+  assert.equal(html.includes('cid:'), false, 'Gmail hides inline images from the attachment strip')
+  assert.match(html, /3 photos attached\./)
+  assert.match(text, /Photos: 3 \(3 attached\)/)
+  // Nothing is linked, because everything is in the attachment strip.
+  for (const src of THREE) assert.equal(text.includes(src), false, src)
+})
+
+test('marketing email: a photo that could not be attached is linked, not shown', () => {
+  // The email must never name a photo the reader cannot get hold of.
+  const { html, text } = withPhotos(THREE, { 0: 'listing-45-photo-1.jpg' })
+  assert.equal(html.includes('<img'), false)
+  assert.match(html, /1 of 3 photos attached\. The 2 that would not fit are linked below:/)
+  assert.ok(html.includes('>Photo 2</a>'))
+  assert.ok(html.includes('>Photo 3</a>'))
+  // The attached one is not repeated as a link in either version.
+  assert.equal(html.includes('>Photo 1</a>'), false)
+  assert.equal(text.includes(THREE[0]), false)
+  assert.ok(text.includes(THREE[1]) && text.includes(THREE[2]))
+})
+
+test('marketing email: nothing attached at all still reaches every photo', () => {
+  const { html } = withPhotos(THREE, {})
+  assert.match(html, /3 photos, linked below:/)
+  for (const n of [1, 2, 3]) assert.ok(html.includes(`>Photo ${n}</a>`), `Photo ${n}`)
+})
+
+test('marketing email: one photo reads as one', () => {
+  const { html } = withPhotos([THREE[0]], { 0: 'listing-45-photo-1.jpg' })
+  assert.match(html, /1 photo attached\./)
 })
 
 test('marketing email: no written description still opens with one', () => {
