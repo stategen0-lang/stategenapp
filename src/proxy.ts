@@ -47,6 +47,8 @@ export async function proxy(request: NextRequest) {
   const isPublicPath =
     pathname.startsWith('/login') ||
     pathname.startsWith('/signup') ||
+    // The marketing landing page, proxied in via next.config rewrites.
+    pathname.startsWith('/landingpage') ||
     pathname.startsWith('/join/') ||
     pathname.startsWith('/reset-password') ||
     pathname.startsWith('/terms') ||
