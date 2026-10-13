@@ -1,6 +1,15 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Serve the marketing landing page at /landingpage without duplicating it:
+  // proxy to the standalone landing site (its own repo/deploy). The app itself
+  // stays at the domain root.
+  async rewrites() {
+    return [
+      { source: "/landingpage", destination: "https://stategen.vercel.app/" },
+      { source: "/landingpage/:path*", destination: "https://stategen.vercel.app/:path*" },
+    ];
+  },
   experimental: {
     // How long a prefetched static page stays in the browser's router cache.
     // The default is 5 minutes, so an agent who switched to another app for a
