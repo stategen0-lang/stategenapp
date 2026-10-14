@@ -139,3 +139,23 @@ test('publicListing: publishes the Arabic description, still nothing private', (
   assert.equal(publicListing({ ...p, aiDescriptionAr: '   ' }, 'x').descriptionAr, undefined)
   assert.equal(publicListing({ ...p, aiDescriptionAr: undefined }, 'x').descriptionAr, undefined)
 })
+
+// ── "Listed" stays inside the agency ────────────────────────────────────────
+// Whether a listing has been sent to marketing is shown to every colleague, so
+// nobody re-posts something already advertised. It is nobody's business outside
+// the agency, and a client opening a share link has no use for it.
+test('publicListing does not carry the marketing status', () => {
+  const pub = publicListing({
+    title: 'Sea view apartment', type: 'Apartment', transaction: 'For Sale',
+    price: 450000, rent: 0, district: 'Kaslik', city: 'Jounieh',
+    size: 180, beds: 3, baths: 2, status: 'Available', photos: [],
+    amenities: [], buildingFeatures: [],
+    marketingSentAt: '2026-10-12T09:00:00.000Z',
+    marketingSentBy: 'Nour Haddad',
+  }, 'A description.')
+
+  assert.equal('marketingSentAt' in pub, false)
+  assert.equal('marketingSentBy' in pub, false)
+  assert.equal(JSON.stringify(pub).includes('Nour Haddad'), false)
+  assert.equal(JSON.stringify(pub).includes('2026-10-12'), false)
+})

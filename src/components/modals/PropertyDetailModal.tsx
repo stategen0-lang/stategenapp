@@ -11,6 +11,7 @@ import ClientDetailModal from './ClientDetailModal'
 import PhotoGallery from '@/components/listing/PhotoGallery'
 import { hasField, type ListingField } from '@/lib/property-fields'
 import { SendToMarketingButton } from '@/components/marketing/SendToMarketing'
+import ListedBadge from '@/components/marketing/ListedBadge'
 
 interface Props {
   property: Property
@@ -207,9 +208,15 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
               <p className="text-2xl font-extrabold" style={{ color: '#14223F', letterSpacing: '-0.5px' }}>
                 {p.transaction === 'For Rent' ? `${formatPrice(p.rent)}/mo` : formatPrice(p.price)}
               </p>
-              <span className="text-xs font-semibold px-3 py-1 rounded-full" style={{ background: sc.bg, color: sc.color }}>
-                {p.status}
-              </span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {/* Beside the status, because "already advertised" is read the
+                    same way — and here it shows for every colleague, not only
+                    the people who can send it. */}
+                <ListedBadge property={p} />
+                <span className="text-xs font-semibold px-3 py-1 rounded-full" style={{ background: sc.bg, color: sc.color }}>
+                  {p.status}
+                </span>
+              </div>
             </div>
 
             {/* pre-wrap: template descriptions are multi-line with headings and

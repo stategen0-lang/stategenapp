@@ -2,6 +2,7 @@
 
 import { Property, Agent, TYPE_GRADIENTS, statusStyle, formatPrice, propertyLocation } from '@/lib/data'
 import FactBadges from '@/components/listing/FactBadges'
+import ListedBadge from '@/components/marketing/ListedBadge'
 
 interface Props {
   property: Property
@@ -47,6 +48,7 @@ export default function PropertyCard({ property: p, agent, onClick }: Props) {
                   🎥
                 </span>
               )}
+              <ListedBadge property={p} tone="onPhoto" />
             </div>
             <span
               className="text-xs font-semibold px-2 py-0.5 rounded-full"
