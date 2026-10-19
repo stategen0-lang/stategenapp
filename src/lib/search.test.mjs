@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { filterProperties, filterClients } from './search.ts'
+import { filterProperties, filterClients, areaOptions } from './search.ts'
 
 const props = [
   { id: 1, title: 'Sea View Flat', district: 'Achrafieh', city: 'Beirut', type: 'Apartment', transaction: 'For Sale', status: 'Available', view: 'Sea' },
@@ -155,4 +155,68 @@ test('filterProperties: blank, zero and junk bounds mean "no bound"', () => {
     { priceMin: 0, priceMax: 0 }, { sizeMin: 0, sizeMax: 0 }, { bedsMin: 0 },
     { priceMin: NaN }, { priceMax: undefined }, { bedsMin: null },
   ]) assert.deepEqual(ids(f), all, JSON.stringify(f))
+})
+
+// ── Area ────────────────────────────────────────────────────────────────────
+// The two location fields are used inconsistently across agencies: one fills
+// Neighborhood with the area and Location with the caza, another puts the area
+// straight in Location. Reading one field would hide a whole agency's stock.
+
+const areaStock = [
+  { id: 1, title: '', type: 'Apartment', transaction: 'For Sale', status: 'Available', district: 'Zalka',  city: 'Metn',   price: 1, rent: 0, size: 1, beds: 1 },
+  { id: 2, title: '', type: 'Apartment', transaction: 'For Sale', status: 'Available', district: 'Zalka',  city: 'Metn',   price: 1, rent: 0, size: 1, beds: 1 },
+  // The area in Location, Neighborhood empty — the other agency's shape.
+  { id: 3, title: '', type: 'Apartment', transaction: 'For Sale', status: 'Available', district: '',       city: 'Rabweh', price: 1, rent: 0, size: 1, beds: 1 },
+  // A different spelling of the same place.
+  { id: 4, title: '', type: 'Apartment', transaction: 'For Sale', status: 'Available', district: '',       city: 'Rabwe',  price: 1, rent: 0, size: 1, beds: 1 },
+  // The same area written into both fields, comma-joined.
+  { id: 5, title: '', type: 'Apartment', transaction: 'For Sale', status: 'Available', district: '',       city: 'Rabweh, Rabweh', price: 1, rent: 0, size: 1, beds: 1 },
+  // No area recorded at all.
+  { id: 6, title: '', type: 'Land',      transaction: 'For Sale', status: 'Available', district: '',       city: '',       price: 1, rent: 0, size: 1, beds: 0 },
+]
+const opts = areaOptions(areaStock)
+const byLabel = l => opts.find(o => o.label === l)
+
+test('areaOptions: spelling variants collapse into one entry', () => {
+  // Rabweh, Rabwe and "Rabweh, Rabweh" are one place.
+  const rabweh = byLabel('Rabweh')
+  assert.ok(rabweh, `expected a Rabweh option, got ${JSON.stringify(opts.map(o => o.label))}`)
+  assert.equal(opts.filter(o => /rabw/i.test(o.label)).length, 1)
+  assert.equal(rabweh.count, 3)
+  // The label is the spelling the agency uses most.
+  assert.equal(rabweh.label, 'Rabweh')
+})
+
+test('areaOptions: a listing is counted once even when both fields say it', () => {
+  // #5 has "Rabweh, Rabweh" — one listing in Rabweh, not two.
+  assert.equal(byLabel('Rabweh').count, 3)
+  assert.equal(byLabel('Zalka').count, 2)
+  assert.equal(byLabel('Metn').count, 2)
+})
+
+test('areaOptions: listings with no area contribute nothing, and it is sorted', () => {
+  assert.equal(opts.some(o => !o.label), false)
+  assert.deepEqual(opts.map(o => o.label), [...opts.map(o => o.label)].sort((a, b) => a.localeCompare(b)))
+})
+
+test('filterProperties: area matches whichever field holds it', () => {
+  const ids = key => filterProperties(areaStock, { area: key }).map(p => p.id)
+  assert.deepEqual(ids(byLabel('Zalka').key), [1, 2])        // from Neighborhood
+  assert.deepEqual(ids(byLabel('Rabweh').key), [3, 4, 5])    // from Location, all spellings
+  assert.deepEqual(ids(byLabel('Metn').key), [1, 2])         // the caza is selectable too
+})
+
+test('filterProperties: no area filter leaves everything, including area-less rows', () => {
+  assert.equal(filterProperties(areaStock, { area: '' }).length, 6)
+  assert.equal(filterProperties(areaStock, {}).length, 6)
+  // An area that matches nothing returns nothing rather than everything.
+  assert.equal(filterProperties(areaStock, { area: 'nowhere' }).length, 0)
+})
+
+test('filterProperties: area combines with the other filters', () => {
+  assert.deepEqual(
+    filterProperties(areaStock, { area: byLabel('Rabweh').key, type: 'Apartment' }).map(p => p.id),
+    [3, 4, 5],
+  )
+  assert.deepEqual(filterProperties(areaStock, { area: byLabel('Rabweh').key, bedsMin: 2 }).map(p => p.id), [])
 })

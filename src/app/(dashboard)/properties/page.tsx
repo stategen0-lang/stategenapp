@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { returnTo } from '@/lib/return-to'
 import { Search, X, Map as MapIcon, LayoutGrid, SlidersHorizontal } from 'lucide-react'
 import { getAgent, AGENTS, Property, Agent, PROPERTY_TYPES, propertyTypeLabel } from '@/lib/data'
-import { filterProperties } from '@/lib/search'
+import { filterProperties, areaOptions } from '@/lib/search'
 import PropertyCard from '@/components/properties/MeridianPropertyCard'
 import PropertyDetailModal from '@/components/modals/PropertyDetailModal'
 import NewPropertyModal from '@/components/modals/NewPropertyModal'
@@ -146,6 +146,7 @@ function PropertiesPageInner() {
   // Managers only — an agent's own answer to "whose listings" is the
   // Mine / All switch in the header.
   const [fAgent, setFAgent] = useState('')
+  const [fArea, setFArea] = useState('')
   // Price, size and bedrooms. Kept behind a toggle: five more controls in the
   // top bar pushed the listings below the fold on a phone, and most searches
   // never use them.
@@ -182,21 +183,37 @@ function PropertiesPageInner() {
   // "Mine" means the signed-in agent's own listings (was hardcoded to 'a1').
   // Memoised: this is a new array on every render otherwise, and the map keys
   // its redraw on it — so a keystroke in the search box rebuilt every marker.
-  const filtered = useMemo(() => {
-    const scoped = scope === 'me'
-      ? list.filter(p => session?.agentCode != null && p.agentId === session.agentCode)
-      : list
-    return filterProperties(scoped, {
-      q, type: fType, transaction: fTxn, status: fStatus, agent: fAgent,
-      priceMin: Number(fPriceMin), priceMax: Number(fPriceMax),
-      sizeMin: Number(fSizeMin), sizeMax: Number(fSizeMax),
-      bedsMin: Number(fBeds),
-    })
-  }, [list, scope, session?.agentCode, q, fType, fTxn, fStatus, fAgent, fPriceMin, fPriceMax, fSizeMin, fSizeMax, fBeds])
-  const activeFilters = !!(q || fType || fTxn || fStatus || fAgent || fPriceMin || fPriceMax || fSizeMin || fSizeMax || fBeds)
+  // Mine / All, resolved once. Both the area list and the filtered grid start
+  // from it, and reading a plain value rather than session?.agentCode is what
+  // lets the React compiler keep the memo: with the optional chain in the
+  // dependency list it inferred `session` and bailed out of optimising the
+  // whole component.
+  const myCode = session?.agentCode ?? null
+  const scoped = useMemo(
+    () => (scope === 'me' && myCode ? list.filter(p => p.agentId === myCode) : list),
+    [list, scope, myCode],
+  )
+
+  // Built from the listings themselves, so the dropdown offers the dozen places
+  // this agency works in rather than every village in Lebanon.
+  const areas = useMemo(() => areaOptions(scoped), [scoped])
+
+  const filtered = useMemo(() => filterProperties(scoped, {
+    q, type: fType, transaction: fTxn, status: fStatus, agent: fAgent, area: fArea,
+    priceMin: Number(fPriceMin), priceMax: Number(fPriceMax),
+    sizeMin: Number(fSizeMin), sizeMax: Number(fSizeMax),
+    bedsMin: Number(fBeds),
+  }), [scoped, q, fType, fTxn, fStatus, fAgent, fArea, fPriceMin, fPriceMax, fSizeMin, fSizeMax, fBeds])
+  const activeFilters = !!(q || fType || fTxn || fStatus || fAgent || fArea || fPriceMin || fPriceMax || fSizeMin || fSizeMax || fBeds)
   // Only the ones in the panel, so the toggle can show a count without
   // double-counting what is already visible in the bar.
   const moreCount = [fPriceMin, fPriceMax, fSizeMin, fSizeMax, fBeds].filter(Boolean).length
+
+  useEffect(() => {
+    // The chosen area can disappear — an edit, or switching to Mine. Without
+    // this the select shows blank while still filtering everything out.
+    if (fArea && !areas.some(a => a.key === fArea)) setFArea('')
+  }, [areas, fArea])
 
   const detailProp = detailId != null ? list.find(p => p.id === detailId) ?? null : null
   const detailAgent = detailProp ? agentFor(detailProp.agentId) : null
@@ -262,6 +279,17 @@ function PropertiesPageInner() {
           <option value="">Any type</option>
           {PROPERTY_TYPES.map(t => <option key={t} value={t}>{propertyTypeLabel(t)}</option>)}
         </select>
+        {areas.length > 1 && (
+          <select
+            value={fArea}
+            onChange={e => setFArea(e.target.value)}
+            className="flex-1 md:flex-none rounded-xl px-2.5 py-2 text-sm outline-none"
+            style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: fArea ? '#14223F' : '#6A7488' }}
+          >
+            <option value="">Any area</option>
+            {areas.map(a => <option key={a.key} value={a.key}>{a.label} ({a.count})</option>)}
+          </select>
+        )}
         <select value={fTxn} onChange={e => setFTxn(e.target.value)} className="flex-1 md:flex-none rounded-xl px-2.5 py-2 text-sm outline-none" style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: fTxn ? '#14223F' : '#6A7488' }}>
           <option value="">Sale & rent</option>
           <option value="For Sale">For Sale</option>
@@ -299,7 +327,7 @@ function PropertiesPageInner() {
         </button>
         {activeFilters && (
           <button
-            onClick={() => { setQ(''); setFType(''); setFTxn(''); setFStatus(''); setFAgent('')
+            onClick={() => { setQ(''); setFType(''); setFTxn(''); setFStatus(''); setFAgent(''); setFArea('')
               setFPriceMin(''); setFPriceMax(''); setFSizeMin(''); setFSizeMax(''); setFBeds('') }}
             className="flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-semibold"
             style={{ border: '1.5px solid #EEF0F4', background: '#F7F8FB', color: '#6A7488' }}

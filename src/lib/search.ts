@@ -5,6 +5,7 @@
 // call these to narrow the already-loaded list.
 
 import type { Property, Client } from '@/lib/data'
+import { foldArea } from '@/lib/lebanon/areas-core'
 
 function norm(s: unknown): string {
   return String(s ?? '').toLowerCase()
@@ -37,6 +38,78 @@ export interface PropertyFilters {
   sizeMax?: number
   /** Minimum bedrooms — "3" means 3 or more, the way agents ask for it. */
   bedsMin?: number
+  /** An area key from areaOptions(), or '' for anywhere. */
+  area?: string
+}
+
+/**
+ * The areas a listing is filed under, as fold keys.
+ *
+ * Both fields, because agencies do not agree on which is which: one fills
+ * Neighborhood with the area and Location with the caza ("Zalka" / "Metn"),
+ * another puts the area straight in Location and leaves Neighborhood empty, and
+ * some rows have the two the wrong way round. Reading only one field would hide
+ * an entire agency's stock from the filter.
+ *
+ * Split on commas first: a Location of "Rabweh, Rabweh" is one area written
+ * twice, and folding it whole yields a key that matches nothing else.
+ */
+export function listingAreaKeys(p: Pick<Property, 'district' | 'city'>): string[] {
+  const keys = new Set<string>()
+  for (const field of [p.district, p.city]) {
+    for (const part of String(field ?? '').split(',')) {
+      const key = foldArea(part)
+      if (key) keys.add(key)
+    }
+  }
+  return [...keys]
+}
+
+export interface AreaOption {
+  /** The fold key, which is what the filter stores. */
+  key: string
+  /** The spelling to show: whichever the agency writes most often. */
+  label: string
+  count: number
+}
+
+/**
+ * The areas worth offering, built from the listings themselves rather than the
+ * 3,600-entry national gazetteer — an agent wants the dozen places their agency
+ * actually works in, not every village in Lebanon.
+ *
+ * Folding means "Rabweh", "Rabwe" and "rabweh" are one entry. The label is the
+ * most common spelling among them, so the list reads the way the agency writes,
+ * and ties break alphabetically so the order is stable between renders.
+ */
+export function areaOptions(list: Property[]): AreaOption[] {
+  const spellings = new Map<string, Map<string, number>>()
+  const listings = new Map<string, number>()
+
+  for (const p of list) {
+    // Counted once per listing: a row with "Rabweh" in both fields is one
+    // listing in Rabweh, not two.
+    for (const key of listingAreaKeys(p)) listings.set(key, (listings.get(key) ?? 0) + 1)
+
+    for (const field of [p.district, p.city]) {
+      for (const part of String(field ?? '').split(',')) {
+        const label = part.trim()
+        const key = foldArea(label)
+        if (!key) continue
+        const seen = spellings.get(key) ?? new Map<string, number>()
+        seen.set(label, (seen.get(label) ?? 0) + 1)
+        spellings.set(key, seen)
+      }
+    }
+  }
+
+  return [...listings.entries()]
+    .map(([key, count]) => {
+      const seen = [...(spellings.get(key) ?? new Map()).entries()]
+      const best = seen.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]
+      return { key, label: (best?.[0] as string) ?? key, count }
+    })
+    .sort((a, b) => a.label.localeCompare(b.label))
 }
 
 /**
@@ -68,6 +141,7 @@ export function filterProperties(list: Property[], f: PropertyFilters): Property
     if (f.type && p.type !== f.type) return false
     if (f.transaction && p.transaction !== f.transaction) return false
     if (f.status && p.status !== f.status) return false
+    if (f.area && !listingAreaKeys(p).includes(f.area)) return false
 
     if (priceMin != null || priceMax != null) {
       const price = listingPrice(p)
