@@ -29,14 +29,66 @@ export interface PropertyFilters {
    * themselves, so the picker is only offered to someone who can see everyone.
    */
   agent?: string
+  /** Price bounds in USD, inclusive. See listingPrice() for which figure. */
+  priceMin?: number
+  priceMax?: number
+  /** Built size in m², inclusive. */
+  sizeMin?: number
+  sizeMax?: number
+  /** Minimum bedrooms — "3" means 3 or more, the way agents ask for it. */
+  bedsMin?: number
+}
+
+/**
+ * The figure a price filter compares against.
+ *
+ * A rental's asking figure is its monthly rent, not the (empty) sale price, so
+ * comparing both against `price` would make every rental cost nothing and match
+ * any budget. Reading each listing in its own terms means a 200k–400k search
+ * returns sales and a 500–1,500 search returns rentals, which is how an agent
+ * thinks about it anyway.
+ */
+function listingPrice(p: Property): number {
+  return p.transaction === 'For Rent' ? Number(p.rent) || 0 : Number(p.price) || 0
+}
+
+/** A bound only applies when it is a real, positive number. */
+const bounded = (v: unknown): number | null => {
+  const n = Number(v)
+  return Number.isFinite(n) && n > 0 ? n : null
 }
 
 export function filterProperties(list: Property[], f: PropertyFilters): Property[] {
+  const priceMin = bounded(f.priceMin), priceMax = bounded(f.priceMax)
+  const sizeMin = bounded(f.sizeMin), sizeMax = bounded(f.sizeMax)
+  const bedsMin = bounded(f.bedsMin)
+
   return list.filter(p => {
     if (f.agent && p.agentId !== f.agent) return false
     if (f.type && p.type !== f.type) return false
     if (f.transaction && p.transaction !== f.transaction) return false
     if (f.status && p.status !== f.status) return false
+
+    if (priceMin != null || priceMax != null) {
+      const price = listingPrice(p)
+      // A listing with no figure on it can't be claimed to be in range. Letting
+      // it through would quietly put "price on request" into every search.
+      if (!price) return false
+      if (priceMin != null && price < priceMin) return false
+      if (priceMax != null && price > priceMax) return false
+    }
+
+    if (sizeMin != null || sizeMax != null) {
+      const size = Number(p.size) || 0
+      if (!size) return false            // same reasoning as price
+      if (sizeMin != null && size < sizeMin) return false
+      if (sizeMax != null && size > sizeMax) return false
+    }
+
+    // Land, shops and warehouses have no bedrooms, so asking for 2+ bedrooms
+    // correctly excludes them rather than treating 0 as "unknown".
+    if (bedsMin != null && (Number(p.beds) || 0) < bedsMin) return false
+
     const hay = [p.title, p.district, p.city, p.type, p.view, `#${p.id}`].map(norm).join(' ')
     return matchesQuery(hay, f.q ?? '')
   })

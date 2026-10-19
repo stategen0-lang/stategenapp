@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, Suspense, lazy } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { returnTo } from '@/lib/return-to'
-import { Search, X, Map as MapIcon, LayoutGrid } from 'lucide-react'
+import { Search, X, Map as MapIcon, LayoutGrid, SlidersHorizontal } from 'lucide-react'
 import { getAgent, AGENTS, Property, Agent, PROPERTY_TYPES, propertyTypeLabel } from '@/lib/data'
 import { filterProperties } from '@/lib/search'
 import PropertyCard from '@/components/properties/MeridianPropertyCard'
@@ -39,6 +39,44 @@ export default function PropertiesPage() {
 // useSearchParams() (for the ?open=<id> deep link from the activity feed)
 // requires a Suspense boundary above it — split into an inner component so
 // the wrapper above stays trivial, exactly as the clients page does.
+/**
+ * A min/max pair under one label.
+ *
+ * inputMode="numeric" rather than type="number": the spinner arrows are useless
+ * at these magnitudes, and on a phone it still brings up the number pad. Empty
+ * means unbounded on that side, so an agent can ask for "under 400k" without
+ * inventing a floor.
+ */
+function Range({ label, min, max, setMin, setMax, minPlaceholder, maxPlaceholder, width }: {
+  label: string
+  min: string; max: string
+  setMin: (v: string) => void; setMax: (v: string) => void
+  minPlaceholder: string; maxPlaceholder: string
+  width: string
+}) {
+  const box = {
+    border: '1.5px solid #EEF0F4', background: '#fff', color: '#14223F',
+  } as const
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs font-semibold" style={{ color: '#6A7488' }}>{label}</span>
+      <div className="flex items-center gap-1.5">
+        <input
+          value={min} onChange={e => setMin(e.target.value.replace(/[^\d]/g, ''))}
+          inputMode="numeric" placeholder={minPlaceholder} aria-label={`${label} minimum`}
+          className={`${width} rounded-lg px-2.5 py-2 text-sm outline-none`} style={box}
+        />
+        <span className="text-xs" style={{ color: '#9AA3B2' }}>to</span>
+        <input
+          value={max} onChange={e => setMax(e.target.value.replace(/[^\d]/g, ''))}
+          inputMode="numeric" placeholder={maxPlaceholder} aria-label={`${label} maximum`}
+          className={`${width} rounded-lg px-2.5 py-2 text-sm outline-none`} style={box}
+        />
+      </div>
+    </div>
+  )
+}
+
 function PropertiesPageInner() {
   const [scope, setScope] = useState<'me' | 'company'>('company')
   // Lazy initialisers: localStorage is read once, on the client, never on the server.
@@ -108,6 +146,15 @@ function PropertiesPageInner() {
   // Managers only — an agent's own answer to "whose listings" is the
   // Mine / All switch in the header.
   const [fAgent, setFAgent] = useState('')
+  // Price, size and bedrooms. Kept behind a toggle: five more controls in the
+  // top bar pushed the listings below the fold on a phone, and most searches
+  // never use them.
+  const [more, setMore] = useState(false)
+  const [fPriceMin, setFPriceMin] = useState('')
+  const [fPriceMax, setFPriceMax] = useState('')
+  const [fSizeMin, setFSizeMin] = useState('')
+  const [fSizeMax, setFSizeMax] = useState('')
+  const [fBeds, setFBeds] = useState('')
 
   async function reloadProperties() {
     const r = await fetch('/api/properties')
@@ -139,9 +186,17 @@ function PropertiesPageInner() {
     const scoped = scope === 'me'
       ? list.filter(p => session?.agentCode != null && p.agentId === session.agentCode)
       : list
-    return filterProperties(scoped, { q, type: fType, transaction: fTxn, status: fStatus, agent: fAgent })
-  }, [list, scope, session?.agentCode, q, fType, fTxn, fStatus, fAgent])
-  const activeFilters = !!(q || fType || fTxn || fStatus || fAgent)
+    return filterProperties(scoped, {
+      q, type: fType, transaction: fTxn, status: fStatus, agent: fAgent,
+      priceMin: Number(fPriceMin), priceMax: Number(fPriceMax),
+      sizeMin: Number(fSizeMin), sizeMax: Number(fSizeMax),
+      bedsMin: Number(fBeds),
+    })
+  }, [list, scope, session?.agentCode, q, fType, fTxn, fStatus, fAgent, fPriceMin, fPriceMax, fSizeMin, fSizeMax, fBeds])
+  const activeFilters = !!(q || fType || fTxn || fStatus || fAgent || fPriceMin || fPriceMax || fSizeMin || fSizeMax || fBeds)
+  // Only the ones in the panel, so the toggle can show a count without
+  // double-counting what is already visible in the bar.
+  const moreCount = [fPriceMin, fPriceMax, fSizeMin, fSizeMax, fBeds].filter(Boolean).length
 
   const detailProp = detailId != null ? list.find(p => p.id === detailId) ?? null : null
   const detailAgent = detailProp ? agentFor(detailProp.agentId) : null
@@ -231,9 +286,21 @@ function PropertiesPageInner() {
               .map(([code, a]) => <option key={code} value={code}>{a.name}</option>)}
           </select>
         )}
+        <button
+          onClick={() => setMore(v => !v)}
+          aria-expanded={more}
+          className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold"
+          style={more || moreCount
+            ? { border: '1.5px solid #0E1F3D', background: '#0E1F3D', color: '#fff' }
+            : { border: '1.5px solid #EEF0F4', background: '#fff', color: '#6A7488' }}
+        >
+          <SlidersHorizontal className="h-4 w-4" />
+          Price, size, beds{moreCount ? ` (${moreCount})` : ''}
+        </button>
         {activeFilters && (
           <button
-            onClick={() => { setQ(''); setFType(''); setFTxn(''); setFStatus(''); setFAgent('') }}
+            onClick={() => { setQ(''); setFType(''); setFTxn(''); setFStatus(''); setFAgent('')
+              setFPriceMin(''); setFPriceMax(''); setFSizeMin(''); setFSizeMax(''); setFBeds('') }}
             className="flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-semibold"
             style={{ border: '1.5px solid #EEF0F4', background: '#F7F8FB', color: '#6A7488' }}
           >
@@ -257,6 +324,43 @@ function PropertiesPageInner() {
           ))}
         </div>
       </div>
+      {more && (
+        <div className="flex flex-wrap items-end gap-3 rounded-xl p-3 -mt-1" style={{ border: '1.5px solid #EEF0F4', background: '#F7F8FB' }}>
+          {/* Rentals are compared against their monthly rent, sales against the
+              asking price, so one pair of boxes serves both markets. */}
+          <Range
+            label={fTxn === 'For Rent' ? 'Rent / month (USD)' : fTxn === 'For Sale' ? 'Price (USD)' : 'Price or rent (USD)'}
+            min={fPriceMin} max={fPriceMax} setMin={setFPriceMin} setMax={setFPriceMax}
+            minPlaceholder="No min" maxPlaceholder="No max" width="w-28"
+          />
+          <Range
+            label="Size (m²)"
+            min={fSizeMin} max={fSizeMax} setMin={setFSizeMin} setMax={setFSizeMax}
+            minPlaceholder="No min" maxPlaceholder="No max" width="w-24"
+          />
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-semibold" style={{ color: '#6A7488' }}>Bedrooms</span>
+            <select
+              value={fBeds}
+              onChange={e => setFBeds(e.target.value)}
+              className="rounded-lg px-2.5 py-2 text-sm outline-none"
+              style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: fBeds ? '#14223F' : '#6A7488' }}
+            >
+              <option value="">Any</option>
+              {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}+</option>)}
+            </select>
+          </label>
+          {moreCount > 0 && (
+            <button
+              onClick={() => { setFPriceMin(''); setFPriceMax(''); setFSizeMin(''); setFSizeMax(''); setFBeds('') }}
+              className="rounded-lg px-3 py-2 text-sm font-semibold"
+              style={{ border: '1.5px solid #D7DCE5', background: '#fff', color: '#6A7488' }}
+            >
+              Reset these
+            </button>
+          )}
+        </div>
+      )}
       {activeFilters && (
         <p className="text-xs -mt-2" style={{ color: '#9AA3B2' }}>{filtered.length} result{filtered.length === 1 ? '' : 's'}</p>
       )}

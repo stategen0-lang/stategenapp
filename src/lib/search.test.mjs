@@ -91,3 +91,68 @@ test('filterClients: the agent filter combines with the others', () => {
   assert.deepEqual(filterClients(clientsByAgent, { agent: 'NH-1', type: 'Buyer' }).map(c => c.id), [1, 3])
   assert.deepEqual(filterClients(clientsByAgent, { agent: 'NH-1', q: 'rania' }), [])
 })
+
+// ── Price, size and bedrooms ────────────────────────────────────────────────
+
+const stock = [
+  // Sales, priced in the hundreds of thousands.
+  { id: 10, title: 'Flat A',  type: 'Apartment', transaction: 'For Sale', status: 'Available', price: 250000, rent: 0,    size: 120, beds: 2, district: '', city: '' },
+  { id: 11, title: 'Flat B',  type: 'Apartment', transaction: 'For Sale', status: 'Available', price: 400000, rent: 0,    size: 200, beds: 3, district: '', city: '' },
+  { id: 12, title: 'Villa C', type: 'Villa',     transaction: 'For Sale', status: 'Available', price: 900000, rent: 0,    size: 400, beds: 5, district: '', city: '' },
+  // Rentals, priced per month.
+  { id: 20, title: 'Flat D',  type: 'Apartment', transaction: 'For Rent', status: 'Available', price: 0,      rent: 600,  size: 110, beds: 2, district: '', city: '' },
+  { id: 21, title: 'Flat E',  type: 'Apartment', transaction: 'For Rent', status: 'Available', price: 0,      rent: 1500, size: 180, beds: 3, district: '', city: '' },
+  // No bedrooms, and one with nothing recorded at all.
+  { id: 30, title: 'Shop F',  type: 'Shop',      transaction: 'For Sale', status: 'Available', price: 300000, rent: 0,    size: 80,  beds: 0, district: '', city: '' },
+  { id: 40, title: 'Plot G',  type: 'Land',      transaction: 'For Sale', status: 'Available', price: 0,      rent: 0,    size: 0,   beds: 0, district: '', city: '' },
+]
+const ids = f => filterProperties(stock, f).map(p => p.id)
+
+test('filterProperties: a rental is judged on its rent, not its empty sale price', () => {
+  // The bug this guards: comparing every listing against `price` makes rentals
+  // cost zero, so they slip into every budget — and a rent search returns none.
+  assert.deepEqual(ids({ priceMin: 200000, priceMax: 500000 }), [10, 11, 30])
+  assert.deepEqual(ids({ priceMin: 500, priceMax: 1000 }), [20])
+  assert.deepEqual(ids({ priceMax: 1600, transaction: 'For Rent' }), [20, 21])
+})
+
+test('filterProperties: one-sided price bounds', () => {
+  assert.deepEqual(ids({ priceMin: 500000 }), [12])
+  assert.deepEqual(ids({ priceMax: 300000 }), [10, 20, 21, 30])
+})
+
+test('filterProperties: a listing with no price is not claimed to be in range', () => {
+  // "Price on request" must not quietly appear in every budget search.
+  assert.equal(ids({ priceMin: 1, priceMax: 10000000 }).includes(40), false)
+  // With no price filter it is still listed.
+  assert.ok(ids({}).includes(40))
+})
+
+test('filterProperties: size range, and unknown size excluded from it', () => {
+  assert.deepEqual(ids({ sizeMin: 150 }), [11, 12, 21])
+  assert.deepEqual(ids({ sizeMin: 100, sizeMax: 200 }), [10, 11, 20, 21])
+  assert.equal(ids({ sizeMin: 1 }).includes(40), false)
+})
+
+test('filterProperties: bedrooms is a minimum, the way agents ask for it', () => {
+  assert.deepEqual(ids({ bedsMin: 3 }), [11, 12, 21])
+  assert.deepEqual(ids({ bedsMin: 5 }), [12])
+  // A shop and a plot have no bedrooms, so "2+ beds" rightly excludes them.
+  assert.equal(ids({ bedsMin: 2 }).includes(30), false)
+  assert.equal(ids({ bedsMin: 2 }).includes(40), false)
+})
+
+test('filterProperties: the new filters combine with the old ones', () => {
+  assert.deepEqual(ids({ type: 'Apartment', transaction: 'For Sale', priceMin: 300000, bedsMin: 3 }), [11])
+  assert.deepEqual(ids({ q: 'flat', transaction: 'For Rent', sizeMin: 150 }), [21])
+})
+
+test('filterProperties: blank, zero and junk bounds mean "no bound"', () => {
+  // The page hands these over as Number(''), which is 0 — it must not read as
+  // "max price zero" and empty the list.
+  const all = ids({})
+  for (const f of [
+    { priceMin: 0, priceMax: 0 }, { sizeMin: 0, sizeMax: 0 }, { bedsMin: 0 },
+    { priceMin: NaN }, { priceMax: undefined }, { bedsMin: null },
+  ]) assert.deepEqual(ids(f), all, JSON.stringify(f))
+})
