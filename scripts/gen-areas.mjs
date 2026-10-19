@@ -115,6 +115,13 @@ const TOWNS = {
     ['Broummana', ['Brummana', 'Broumana'], 276377], ['Baabdat', []], ['Bikfaya', []],
     ['Dhour Choueir', ['Dhour el Choueir']], ['Ain Saade', ['Ain Saadeh']], ['Biakout', []],
     ['Mtayleb', ['Mtaileb']], ['Bsalim', []], ['Mazraat Yachouh', ['Mazraat Yachouaa']],
+    // GeoNames spells this "Beit ech Chaar", the 1960s French form, which is
+    // not what anyone here writes. No id needed: the name pool is filtered by
+    // governorate and the only other Beit ech Chaar is in Koura (North Lebanon).
+    // No extra aliases: apply() keeps the GeoNames spelling automatically, and
+    // near-misses are dangerous here — "Beit el Chaer" is Beit ech Chaaer in
+    // Bcharre, a different village 60 km north.
+    ['Beit el Chaar', []],
     ['Ain Aar', []], ['Monteverde', []], ['Bhersaf', []], ['Bteghrine', []],
     ['Fanar', []], ['Jouret el Ballout', []],
   ],

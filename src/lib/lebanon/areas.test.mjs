@@ -252,3 +252,31 @@ test('the spellings that must still be corrected still are', () => {
     assert.equal(r.area.name, canonical, typed)
   }
 })
+
+// Reported from the field: the app wrote "Beit ech Chaar", the GeoNames 1960s
+// French form, for a Metn village every agent there writes as "Beit el Chaar".
+// Curated to the local spelling, with the GeoNames form kept as an alias so the
+// nine listings and fourteen client briefs already filed under it still resolve.
+test('Beit el Chaar uses the local spelling, whichever one is typed', () => {
+  for (const typed of ['beit el chaar', 'Beit el Chaar', 'beit ech chaar', 'Beit Ech Chaar', 'beit chaar']) {
+    const r = resolveArea(ix, typed)
+    assert.equal(r?.area.name, 'Beit el Chaar', typed)
+    assert.equal(r?.area.caza, 'Metn', typed)
+  }
+})
+
+test('the other Beit ech Chaar, in Koura, is left alone', () => {
+  // Two real villages share the name 60 km apart. Renaming the Metn one is a
+  // claim about Metn usage; nothing here says the Koura village is spelled the
+  // same way, and the caza shown beside each is what tells them apart.
+  const koura = ix.areas.filter(a => a.caza === 'Koura' && /chaar/i.test(a.name))
+  assert.equal(koura.length, 1)
+  assert.equal(koura[0].name, 'Beit ech Chaar')
+})
+
+test('a near-miss spelling is not swallowed by Beit el Chaar', () => {
+  // "Beit el Chaer" is Beit ech Chaaer in Bcharre, a different village. Adding
+  // it as an alias is the mistake that sent Hbous 70 km away.
+  const r = resolveArea(ix, 'Beit el Chaer')
+  assert.notEqual(r?.area.name, 'Beit el Chaar')
+})
