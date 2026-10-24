@@ -59,6 +59,15 @@ export function shareSecret(): string {
   return process.env.SHARE_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'insecure-dev-secret'
 }
 
+/**
+ * The address share links are built on: the permanent main domain, never the
+ * address the agent happened to be using (a Vercel deployment address gets
+ * retired or locked, and every link made on it stops working).
+ */
+export function publicOrigin(): string {
+  return (process.env.NEXT_PUBLIC_APP_URL || 'https://stategen.app').replace(/\/+$/, '')
+}
+
 // ── The public view of a listing ─────────────────────────────────────────────
 
 export interface PublicListing {

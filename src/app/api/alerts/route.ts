@@ -1,3 +1,4 @@
+import { isMatchable } from '@/lib/matching'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/session'
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
     // migration 029, and naming a column that isn't there yet fails the whole
     // query — the alerts page would go blank instead of simply not knowing why
     // an alert was raised.
-    .select('*, Properties(Title, Location, Neighborhood, Amenities, Price), client_requests("Client Name", "client phone", notes)')
+    .select('*, Properties(Title, Location, Neighborhood, Amenities, Price, Status), client_requests("Client Name", "client phone", notes)')
     .eq('company_id', session.companyId)
     .order('created_at', { ascending: false })
     .limit(200)
@@ -52,7 +53,10 @@ export async function GET(req: NextRequest) {
     nameOf = new Map((people ?? []).filter(p => p.agent_code).map(p => [p.agent_code as string, p.Full_name as string]))
   }
 
-  const alerts: AlertView[] = (data ?? []).map(r => {
+  // A listing that has since been sold, rented or reserved is no longer a
+  // match: its alerts stop showing (and counting) the moment its status changes.
+  const live = (data ?? []).filter(r => isMatchable({ status: ((r as Row).Properties as Row | null)?.Status as never }))
+  const alerts: AlertView[] = live.map(r => {
     const row = r as Row
     const prop = propertyLabel(row.Properties as Row | null)
     const client = row.client_requests as Row | null
