@@ -45,6 +45,11 @@ const FORBIDDEN = ['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum',
 function walk(schema, path, problems) {
   for (const k of FORBIDDEN) if (k in schema) problems.push(`${path}: "${k}" is not supported by strict tool use`)
   const types = [].concat(schema.type ?? [])
+  // Every enum value must match a single declared type — the API 400s on an
+  // enum beside a type list, which took the agent down on every message.
+  if (schema.enum && (types.length !== 1 || schema.enum.some(v => typeof v !== types[0])))
+    problems.push(`${path}: enum needs exactly one type that all its values match (use anyOf for null)`)
+  for (const [i, sub] of (schema.anyOf ?? []).entries()) walk(sub, `${path}|${i}`, problems)
   if (types.includes('object')) {
     if (schema.additionalProperties !== false) problems.push(`${path}: objects need additionalProperties: false`)
     const keys = Object.keys(schema.properties ?? {})

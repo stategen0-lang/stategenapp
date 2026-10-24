@@ -56,7 +56,9 @@ const number = (d: string) => nullable('number', d)
 const integer = (d: string) => nullable('integer', d)
 const flag = (d: string) => nullable('boolean', d)
 const list = (d: string): Schema => ({ type: ['array', 'null'], items: { type: 'string' }, description: d })
-const choice = (values: string[], d: string): Schema => ({ type: ['string', 'null'], enum: [...values, null], description: d })
+// The API rejects an enum next to a type list ("Enum value 'For Sale' does not
+// match declared type ['string', 'null']"), so a nullable choice is an anyOf.
+const choice = (values: string[], d: string): Schema => ({ anyOf: [{ type: 'string', enum: values }, { type: 'null' }], description: d })
 const must = (type: string, d: string): Schema => ({ type, description: d })
 
 function object(properties: Record<string, Schema>): Tool['input_schema'] {
