@@ -31,7 +31,8 @@ Rules:
 - Use only the facts in your goal; don't invent extra details unless the assistant asks something your goal doesn't cover (then answer briefly and plausibly).
 - If the assistant shows a summary of a change and asks you to confirm (reply YES), check it against your goal. If it is right, confirm in your style (e.g. "yes", "eh", "aywa", "ok", "yalla", "تمام"). If something is wrong, say what to fix.
 - If the assistant asks a question, answer it.
-- When your goal is fully done — the assistant said it saved the change, or it answered what you asked — reply exactly: DONE
+- When your goal is done — the assistant said it saved the change, or it gave you a clear answer to what you asked — reply exactly: DONE. Don't ask follow-ups beyond your goal and don't keep double-checking.
+- If the assistant clearly explains why it can't do something (e.g. the client belongs to another agent), accept it and reply DONE.
 - If the assistant clearly can't do it after you've tried a few times, reply exactly: STUCK`
 
 /** Next message from the simulated agent, given the conversation so far. */

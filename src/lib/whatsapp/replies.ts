@@ -37,8 +37,15 @@ const COMMAND_START = /^(add|book|schedule|create|set ?up|put in|set|mark|update
 // snooze word ("snooze", "remind me") overrides this.
 const EVENT_NOUN = /\b(meeting|meet|viewing|showing|visit|appointment|follow[- ]?up|call)\b/i
 
-// "3d", "3 days", "2w", "2 weeks", "1 month"
-const DURATION = /(\d+)\s*(d|day|days|w|week|weeks|m|month|months)\b/i
+// "3d", "3 days", "2w", "2 weeks", "1 mo", "1 month". Not "m": "8.5m" is a
+// price and "3m" is Arabizi (3 = ع, "3m dawwar" = I'm looking) — both were
+// read as months. Nor a number glued to letters or a decimal point before it.
+const DURATION = /(?<![\w.])(\d+)\s*(d|days?|w|wks?|weeks?|mos?|months?)\b/i
+
+// A reply to a reminder is short ("done", "snooze 3 days", "called him, not
+// interested"). Longer messages are about something else, and reading one as a
+// reply moved whichever client's reminder happened to be outstanding.
+const MAX_REPLY_WORDS = 12
 
 const NAMED_DELAYS: [RegExp, number][] = [
   [/\btomorrow\b/i, 1],
@@ -84,6 +91,7 @@ export function parseReminderReply(raw: string | null | undefined): ReminderRepl
   // outstanding. "remind me later" and "remind me next week" name no task, so
   // they stay snoozes.
   if (/\bremind\s+me\b[^.!?]*?\bto\s+\w/i.test(text)) return { action: 'unknown' }
+  if (text.split(/\s+/).length > MAX_REPLY_WORDS) return { action: 'unknown' }
 
   // A fresh command ("book a viewing tomorrow", "set X's budget…") is never a
   // reminder reply, even if it contains a date word. This stopped a real bug:
@@ -104,6 +112,17 @@ export function parseReminderReply(raw: string | null | undefined): ReminderRepl
   if ((DONE_BARE.test(text) || DONE_PRONOUN.test(text)) && !isCommand) return { action: 'done' }
 
   return { action: 'unknown' }
+}
+
+/**
+ * With the conversational agent on, only a bare reply ("done", "snooze 3d",
+ * "not interested", "called him") is decided here; anything longer goes to the
+ * agent, which reads it in context and has a tool for reminder replies.
+ */
+export function parseBareReminderReply(raw: string | null | undefined): ReminderReply {
+  const text = (raw ?? '').trim()
+  if (text.split(/\s+/).length > 5) return { action: 'unknown' }
+  return parseReminderReply(text)
 }
 
 // ── Confirmation of a pending write ─────────────────────────────────────────

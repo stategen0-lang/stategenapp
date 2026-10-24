@@ -243,3 +243,35 @@ test('parseBareConfirmation: nothing is nothing', () => {
   assert.equal(parseBareConfirmation('   '), 'unknown')
   assert.equal(parseBareConfirmation(null), 'unknown')
 })
+
+// ── Messages that are not reminder replies (simulator, 2026-10-24) ──────────
+// With a reminder outstanding, these were read as "snooze" and moved that
+// client's follow-up — the message itself was never answered.
+import { parseBareReminderReply } from './replies.ts'
+
+test('Arabizi digits and prices are not snooze durations', () => {
+  for (const msg of [
+    'hi, shu fi 3andkon listings lal 1-bedroom apartments for rent bl mansourieh? 3m dawwar 3la 2shi tayyib',
+    'pls confirm the price is 8.5m and not 850k',
+    'el client 3m ya7ki 3an 2 bedrooms',
+  ]) assert.equal(parseReminderReply(msg).action, 'unknown', msg)
+})
+
+test('a long message is never a reminder reply, whatever words it contains', () => {
+  assert.equal(parseReminderReply('Thanks so much for checking, I will look at the listings later tonight and come back to you about the client').action, 'unknown')
+  assert.equal(parseReminderReply('we lost the deal on #12 because the owner raised the price again last week so please update it').action, 'unknown')
+})
+
+test('real reminder replies still work', () => {
+  assert.deepEqual(parseReminderReply('snooze 3d'), { action: 'snooze', snoozeDays: 3 })
+  assert.deepEqual(parseReminderReply('snooze 2 weeks'), { action: 'snooze', snoozeDays: 14 })
+  assert.deepEqual(parseReminderReply('remind me in 1 month'), { action: 'snooze', snoozeDays: 30 })
+  assert.equal(parseReminderReply('done').action, 'done')
+  assert.equal(parseReminderReply('called him, not interested').action, 'not_interested')
+})
+
+test('agent mode: only a bare reply is decided by code', () => {
+  assert.equal(parseBareReminderReply('done').action, 'done')
+  assert.equal(parseBareReminderReply('snooze 3 days').action, 'snooze')
+  assert.equal(parseBareReminderReply('done with the viewing, now update Rita budget to 1000').action, 'unknown')
+})

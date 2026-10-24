@@ -157,7 +157,10 @@ export async function resolveClient(admin: SupabaseClient, profile: Profile, nam
     // Masked names for the same reason as above (no enumerating other agents'
     // clients), but each carries its area so identical names can be told apart
     // and the agent knows how to pick one.
-    const lines = rows.map(r => `• ${clientLabel(profile, r)} — ${(r['prefered-location'] as string) || 'no area set'}`)
+    const lines = rows.map(r => {
+      const mine = canSeeClientPII(toSession(profile), agentOf(r, 'notes'))
+      return `• ${clientLabel(profile, r)}${mine ? '' : " (another agent's client)"} — ${(r['prefered-location'] as string) || 'no area set'}`
+    })
     const egArea = (rows[0]['prefered-location'] as string) || 'Beirut'
     return {
       ok: false,
@@ -238,7 +241,9 @@ export async function stagePropertyUpdate(
     columns: update.columns,
     extras: update.extras,
     blobColumn: 'Amenities',
-    label: `#${row.id} ${row.Title}`,
+    // The name it will have once saved: "Saved — #23 Antelias Apartment" after
+    // a rename to Achrafieh Apartment read as the rename having failed.
+    label: `#${row.id} ${(update.columns as Record<string, unknown>).Title ?? row.Title}`,
   })
 }
 

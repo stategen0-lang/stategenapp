@@ -90,7 +90,9 @@ export function describeError(err: unknown): string {
   return `${status}${type}${message}`.replace(/\s+/g, ' ').trim().slice(0, 200)
 }
 
-export const DEFAULT_MAX_ROUNDS = 6
+// Eight: an Arabic name searched in a few spellings plus a match took six,
+// and the turn ended "I got stuck". The deadline still bounds the time.
+export const DEFAULT_MAX_ROUNDS = 8
 
 // Replies for the turns that cannot end normally. Plain, and honest about
 // nothing having been saved — the worst outcome is an agent believing a change

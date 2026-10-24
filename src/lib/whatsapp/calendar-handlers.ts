@@ -5,8 +5,8 @@
 // an agent in the wrong place at the wrong time.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { parseWhen, describeWhen } from '@/lib/whatsapp/when'
-import { startOfZonedDay, addZonedDays, formatZonedDate, formatZonedTime } from '@/lib/whatsapp/timezone'
+import { parseWhen, describeWhen, type ParsedWhen } from '@/lib/whatsapp/when'
+import { startOfZonedDay, addZonedDays, formatZonedDate, formatZonedTime, toInstant, wallClock } from '@/lib/whatsapp/timezone'
 import { stage, type Profile } from '@/lib/whatsapp/write-handlers'
 import { isEventKind, kindStyle, type EventKind } from '@/lib/calendar'
 import { isManager } from '@/lib/permissions'
@@ -82,8 +82,40 @@ async function finalizeEvent(
   when: NonNullable<ReturnType<typeof parseWhen>>,
 ): Promise<string> {
   const kind = inferKind(text)
-  const title = eventTitle(text, when.matched, kindStyle(kind).label)
+  return stageEvent(admin, profile, { title: eventTitle(text, when.matched, kindStyle(kind).label), kind, when })
+}
 
+/**
+ * An exact Beirut date ("2026-10-25") and optional time ("16:00") as a
+ * ParsedWhen — what the agent's book_event tool sends, so nothing is re-read
+ * from prose. Null for anything that isn't a real date or time.
+ */
+export function whenAt(date: string, time?: string | null): ParsedWhen | null {
+  const d = String(date ?? '').trim().match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!d) return null
+  const [year, month, day] = [Number(d[1]), Number(d[2]), Number(d[3])]
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null
+  const t = time ? String(time).trim().match(/^(\d{1,2}):(\d{2})$/) : null
+  if (time && !t) return null
+  const [hour, minute] = t ? [Number(t[1]), Number(t[2])] : [0, 0]
+  if (hour > 23 || minute > 59) return null
+  const start = toInstant({ year, month, day, hour, minute })
+  // toInstant rolls 31 February into March; a date that moved isn't real.
+  if (formatZonedIso(start) !== `${d[1]}-${d[2]}-${d[3]}`) return null
+  return { start, allDay: !t, matched: '' }
+}
+
+const formatZonedIso = (instant: Date) => {
+  const w = wallClock(instant)
+  return `${w.year}-${String(w.month).padStart(2, '0')}-${String(w.day).padStart(2, '0')}`
+}
+
+/** Prepare a calendar event for the agent's yes. */
+export async function stageEvent(
+  admin: SupabaseClient,
+  profile: Profile,
+  { title, kind, when }: { title: string; kind: EventKind; when: ParsedWhen },
+): Promise<string> {
   // An all-day event runs to the end of that day in the agency's zone; a timed
   // one runs an hour.
   const start = when.start

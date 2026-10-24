@@ -32,6 +32,7 @@ export async function converse({ route, snapshot, profile, next, maxTurns = 8, o
     const body = cleanInboundText(message)
 
     const hadPending = db.table('pending_actions').length > 0
+    const before = structuredClone(db.table('Properties'))
     const writesBefore = db.writes.length
     const capture = { calls: [], blocked: [] }
     const started = Date.now()
@@ -67,9 +68,11 @@ export async function converse({ route, snapshot, profile, next, maxTurns = 8, o
       calls: capture.calls, effects: capture.blocked.map(b => `${b.where} → ${b.host}`),
       ms: Date.now() - started,
     }
+    turn.tools = turn.calls.flatMap(c => (c.response?.content ?? []).filter(b => b.type === 'tool_use').map(b => b.name))
+    turn.history = turns.map(t => t.message).join(' ')
     turn.problems = routed.intent === 'crash'
       ? [{ check: 'router_crash', detail: reply }]
-      : checkTurn(turn, { db, profile, snapshot })
+      : checkTurn(turn, { db, profile, snapshot, before })
     turns.push(turn)
   }
   return { turns, db }

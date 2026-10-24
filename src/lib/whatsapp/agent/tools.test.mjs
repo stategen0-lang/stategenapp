@@ -395,3 +395,57 @@ test('a number sent as text ("1,000") is read', async () => {
   assert.ok(out.confirmation, out.content)
   assert.match(out.confirmation, /1,000/)
 })
+
+// ── Bookings and deal moves as exact fields ─────────────────────────────────
+// Through other_request they were a sentence the old router re-read: the
+// simulator saw "tomorrow at 4pm" become today, and every deal move come back
+// as the pipeline overview.
+
+import { whenAt } from '../calendar-handlers.ts'
+
+const beirutDay = (offsetDays) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Beirut' }).format(new Date(Date.now() + offsetDays * 86_400_000))
+
+test('whenAt reads an exact Beirut date and time, and nothing else', () => {
+  // 4pm in Beirut: UTC+3 in summer, UTC+2 from 25 Oct 2026 (the clocks
+  // change that night) — both sides of it.
+  assert.equal(whenAt('2026-08-10', '16:00').start.toISOString(), '2026-08-10T13:00:00.000Z')
+  assert.equal(whenAt('2026-10-25', '16:00').start.toISOString(), '2026-10-25T14:00:00.000Z')
+  const w = whenAt('2026-11-10', '16:00')
+  assert.equal(w.allDay, false)
+  assert.equal(whenAt('2026-10-25', null).allDay, true)
+  for (const [d, t] of [['25/10/2026', '16:00'], ['2026-02-31', null], ['2026-10-25', '4pm'], ['2026-10-25', '25:00'], ['tomorrow', null]]) {
+    assert.equal(whenAt(d, t), null, `${d} ${t}`)
+  }
+})
+
+test('book_event stages the event for the exact day and time given', async () => {
+  const { db, ctx } = setup(AGENT)
+  const tomorrow = beirutDay(1)
+  const out = await executeTool(ctx, 'book_event', call('book_event', { kind: 'viewing', date: tomorrow, time: '16:00', title: 'Viewing with Rita Haddad — #44' }), fresh())
+  assert.ok(out.confirmation, out.content)
+  const row = db.table('pending_actions').at(-1).payload.columns
+  assert.equal(row.kind, 'viewing')
+  assert.equal(row.title, 'Viewing with Rita Haddad — #44')
+  assert.equal(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Beirut' }).format(new Date(row.starts_at)), tomorrow)
+  assert.equal(db.table('calendar_events').length, 0, 'only staged')
+})
+
+test('book_event refuses a past day and a malformed one', async () => {
+  const { db, ctx } = setup(AGENT)
+  for (const date of [beirutDay(-2), 'next friday']) {
+    const out = await executeTool(ctx, 'book_event', call('book_event', { kind: 'meeting', date, time: '10:00', title: 'Meeting' }), fresh())
+    assert.equal(out.isError, true, date)
+  }
+  assert.equal(db.table('pending_actions').length, 0)
+})
+
+test('move_deal stages the stage change, and "won" closes the deal as won', async () => {
+  const deals = () => [{ id: 'd-1', company_id: COMPANY, client_id: 145, agent_id: 'JH-655', stage: 'lead', outcome: null, value: 0 }]
+  for (const [stage, expect] of [['negotiating', { stage: 'negotiating' }], ['won', { stage: 'closed', outcome: 'won' }]]) {
+    const { db, ctx } = setup(AGENT, { client_requests: [{ ...RITA_145 }], deals: deals() })
+    const out = await executeTool(ctx, 'move_deal', call('move_deal', { client_name: 'Rita Haddad', stage }), fresh())
+    assert.ok(out.confirmation, `${stage}: ${out.content}`)
+    const payload = db.table('pending_actions').at(-1).payload
+    for (const [k, v] of Object.entries(expect)) assert.equal(payload.columns[k], v, `${stage} ${k}`)
+  }
+})

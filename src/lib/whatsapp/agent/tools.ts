@@ -20,7 +20,12 @@ import type { BotReply } from '../cloud.ts'
 import type { IntentResult } from '../intent.ts'
 import type { ToolOutcome, TurnState } from './loop.ts'
 import { replyText } from '../cloud.ts'
-import { stageClientUpdate, stagePropertyUpdate, applyPendingAction } from '../write-handlers.ts'
+import { stageClientUpdate, stagePropertyUpdate, applyPendingAction, stageDescribeProperty, stageArabicDescription, handleReminderReply } from '../write-handlers.ts'
+import { stageEvent, whenAt } from '../calendar-handlers.ts'
+import { stageDealMove } from '../pipeline-handlers.ts'
+import { requestMarketing } from '../marketing-handlers.ts'
+import { startOfZonedDay } from '../timezone.ts'
+import type { EventKind } from '@/lib/calendar'
 import { stageNewRecord } from '../flow-handlers.ts'
 import { handleQueryClient, handleQueryProperty } from '../handlers.ts'
 import { findListings, queryFromIntent } from '../listing-finder.ts'
@@ -62,6 +67,7 @@ const list = (d: string): Schema => ({ type: ['array', 'null'], items: { type: '
 // match declared type ['string', 'null']"), so a nullable choice is an anyOf.
 const choice = (values: string[], d: string): Schema => ({ anyOf: [{ type: 'string', enum: values }, { type: 'null' }], description: d })
 const must = (type: string, d: string): Schema => ({ type, description: d })
+const oneOf = (values: string[], d: string): Schema => ({ type: 'string', enum: values, description: d })
 
 const isNullable = (p: Schema): boolean =>
   [].concat((p.type ?? []) as never).includes('null' as never)
@@ -200,8 +206,48 @@ export const TOOLS: Tool[] = [
     }),
   },
   {
+    name: 'book_event',
+    description: `Put a viewing, meeting, call or follow-up in the agent's calendar. Work out the exact date from today's date in your context ("tomorrow", "Friday", "the 3rd") — if the day or time is unclear, ask instead of guessing. ${ONE_CHANGE_NOTE}`,
+    input_schema: object({
+      kind: oneOf(['viewing', 'meeting', 'call', 'follow_up'], 'What it is.'),
+      date: must('string', 'The day, YYYY-MM-DD, in Beirut.'),
+      time: text('Start time, HH:MM 24-hour (16:00 for 4pm). Null for an all-day reminder.'),
+      title: must('string', 'Short title with who and what, e.g. "Viewing with Rita Haddad — #44 Sin el Fil Villa".'),
+    }),
+  },
+  {
+    name: 'move_deal',
+    description: `Move a client's deal along the pipeline: lead → contacted → viewing → negotiating → won or lost. ${ONE_CHANGE_NOTE}`,
+    input_schema: object({
+      client_name: must('string', 'The client\'s name, or phone number.'),
+      client_area: text('Only when two clients share the name: one area of the one meant.'),
+      stage: oneOf(['lead', 'contacted', 'viewing', 'negotiating', 'won', 'lost'], 'The stage to move to.'),
+    }),
+  },
+  {
+    name: 'write_description',
+    description: `Write a ready-to-post description of a listing, from what's on its record, to save to the listing. Arabic is a translation of the saved English one: if the listing has none yet, write the English first. ${ONE_CHANGE_NOTE}`,
+    input_schema: object({
+      listing_id: must('integer', 'The listing number.'),
+      language: oneOf(['English', 'Arabic'], 'Which language.'),
+    }),
+  },
+  {
+    name: 'send_to_marketing',
+    description: `Email a listing, with its photos, to the agency's marketing team. ${ONE_CHANGE_NOTE}`,
+    input_schema: object({ listing_id: must('integer', 'The listing number.') }),
+  },
+  {
+    name: 'follow_up_reminder',
+    description: 'Answer the follow-up reminder the agent was last sent ("Reminder: call …"): they did it, want it later, or the client is no longer interested. Only when their message is clearly about that reminder — a short "done" or "snooze 3 days" is handled for you before you see it. Saved straight away, like those.',
+    input_schema: object({
+      action: oneOf(['done', 'snooze', 'not_interested'], 'What happened.'),
+      days: integer('For snooze: how many days. Null for the usual 3.'),
+    }),
+  },
+  {
     name: 'other_request',
-    description: 'Everything else the CRM can do that has no tool of its own yet: moving a client\'s deal along the pipeline; logging, accepting or rejecting offers; booking viewings and meetings; the agent\'s schedule and overdue follow-ups; sending a listing to the marketing team; writing a listing description in English or Arabic; a shareable link to a listing; recent activity and team performance. Pass ONE clear instruction in plain English containing every detail needed, e.g. "move Ahmed Khoury to negotiating", "book a viewing with Rita tomorrow at 3pm for listing #45", "send #23 to marketing". Never use it to add or edit clients or listings — those have their own tools.',
+    description: 'Everything else the CRM can do that has no tool of its own yet: logging, accepting or rejecting offers; the agent\'s schedule and overdue follow-ups; a shareable link to a listing; recent activity and team performance; the pipeline overview. Pass ONE clear instruction in plain English containing every detail needed, e.g. "offer 450k from Joe Khoury on #23", "what\'s on my schedule tomorrow", "share link for #45". Never use it for anything that has its own tool.',
     input_schema: object({ instruction: must('string', 'One clear, complete instruction in English.') }),
   },
   {
@@ -216,7 +262,11 @@ export const TOOLS: Tool[] = [
   },
 ]
 
-export const WRITE_TOOLS = new Set(['create_client', 'create_listing', 'update_client', 'update_listing', 'other_request', 'confirm_waiting_change', 'cancel_waiting_change'])
+export const WRITE_TOOLS = new Set([
+  'create_client', 'create_listing', 'update_client', 'update_listing',
+  'book_event', 'move_deal', 'write_description', 'send_to_marketing', 'follow_up_reminder',
+  'other_request', 'confirm_waiting_change', 'cancel_waiting_change',
+])
 
 // ── Reading the model's input ───────────────────────────────────────────────
 // Strict mode already guarantees the shape; these still refuse to pass on
@@ -483,6 +533,58 @@ export async function executeTool(ctx: ToolContext, name: string, rawInput: unkn
       const instruction = str(input, 'instruction')
       if (!instruction) return { content: 'Give one clear instruction.', isError: true }
       return staging(ctx, async () => replyText(await ctx.legacy(instruction)))
+    }
+
+    // Exact fields straight to the handlers. Through other_request these were
+    // written out as a sentence and re-read: "tomorrow" became today, a deal
+    // move came back as the pipeline overview.
+    case 'book_event': {
+      const title = str(input, 'title')
+      const date = str(input, 'date')
+      if (!title || !date) return { content: 'A booking needs a title and a date.', isError: true }
+      const when = whenAt(date, str(input, 'time'))
+      if (!when) return { content: `"${date}${str(input, 'time') ? ` ${str(input, 'time')}` : ''}" isn't a valid date/time — use YYYY-MM-DD and HH:MM.`, isError: true }
+      if (when.start.getTime() < startOfZonedDay().getTime()) {
+        return { content: `${date} is in the past. Check the day with the agent.`, isError: true }
+      }
+      const kind = (str(input, 'kind') ?? 'meeting') as EventKind
+      return staging(ctx, () => stageEvent(ctx.admin, ctx.profile, { title, kind, when }))
+    }
+
+    case 'move_deal': {
+      const name = str(input, 'client_name')
+      const stage = str(input, 'stage')
+      if (!name || !stage) return { content: 'Which client, and which stage?', isError: true }
+      const area = str(input, 'client_area')
+      const closed = stage === 'won' || stage === 'lost'
+      return staging(ctx, () => stageDealMove(ctx.admin, ctx.profile, {
+        intent: 'update_deal',
+        clientName: area ? `${name} in ${area}` : name,
+        fields: closed ? { stage: 'closed', outcome: stage } : { stage },
+      }))
+    }
+
+    case 'write_description': {
+      const propertyId = num(input, 'listing_id')
+      if (!propertyId) return { content: 'Which listing? Give its number.', isError: true }
+      const arabic = str(input, 'language') === 'Arabic'
+      return staging(ctx, () => (arabic ? stageArabicDescription : stageDescribeProperty)(ctx.admin, ctx.profile, { intent: arabic ? 'describe_property_ar' : 'describe_property', propertyId }))
+    }
+
+    case 'send_to_marketing': {
+      const propertyId = num(input, 'listing_id')
+      if (!propertyId) return { content: 'Which listing? Give its number.', isError: true }
+      return staging(ctx, async () => replyText(await requestMarketing(ctx.admin, ctx.profile, propertyId, ctx.origin)))
+    }
+
+    // The same handler a bare "done" / "snooze 3d" reaches in the router —
+    // applied at once, as those are — for replies with more words.
+    case 'follow_up_reminder': {
+      const action = str(input, 'action') as 'done' | 'snooze' | 'not_interested' | undefined
+      if (!action) return { content: 'Done, snooze, or not interested?', isError: true }
+      const reply = await handleReminderReply(ctx.admin, ctx.profile, action, action === 'snooze' ? num(input, 'days') : undefined)
+      if (reply === null) return { content: 'No follow-up reminder is waiting for a reply (they expire after 3 days). Nothing was changed.', isError: true }
+      return { content: `Done. The agent is shown this automatically:\n${reply}`, confirmation: reply }
     }
 
     // The same commit a bare "yes" gets from the router, for approvals with

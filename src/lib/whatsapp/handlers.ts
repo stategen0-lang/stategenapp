@@ -101,6 +101,8 @@ export async function handleQueryClient(
   let rows: Record<string, unknown>[]
   if (looksLikePhone(ref.name)) {
     rows = await clientsByPhone(admin, profile.company_id, ref.name)
+    // "<phone> in Batroun" — the reply to two clients sharing a number.
+    if (ref.location) rows = rows.filter(r => String(r['prefered-location'] ?? '').toLowerCase().includes(ref.location!.toLowerCase()))
   } else {
     let q = admin
       .from('client_requests')
@@ -122,7 +124,9 @@ export async function handleQueryClient(
     // the agent how to pick — "be more specific" is no help when the name is
     // already exact.
     const lines = rows.map(r => {
-      const label = canSeeClientPII(session, clientAgent(r)) ? (r['Client Name'] as string) : maskClientName(Number(r.id))
+      // Say why a name is hidden: "Client #23" alone read as a record the bot
+      // had failed to load, and it went round in circles trying to open it.
+      const label = canSeeClientPII(session, clientAgent(r)) ? (r['Client Name'] as string) : `${maskClientName(Number(r.id))} (another agent's client)`
       const area = (r['prefered-location'] as string) || 'no area set'
       return `• ${label} — ${area}`
     })

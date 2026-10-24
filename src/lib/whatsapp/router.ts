@@ -6,7 +6,7 @@
 // in the webhook.
 
 import type { BotReply } from '@/lib/whatsapp/cloud'
-import { parseConfirmation, parseBareConfirmation, parseReminderReply } from '@/lib/whatsapp/replies'
+import { parseConfirmation, parseBareConfirmation, parseReminderReply, parseBareReminderReply } from '@/lib/whatsapp/replies'
 import { classifyIntent, type Intent } from '@/lib/whatsapp/intent'
 import { handleQueryClient, handleQueryProperty, handleShareListing, HELP_TEXT } from '@/lib/whatsapp/handlers'
 import {
@@ -139,7 +139,7 @@ export async function route(
     // Replies to an outstanding follow-up reminder ("done", "snooze 3d") keep
     // their own handler: it fires only while a reminder is outstanding and
     // returns null otherwise.
-    const reminder = parseReminderReply(body)
+    const reminder = parseBareReminderReply(body)
     if (reminder.action !== 'unknown') {
       const reminderAnswer = await handleReminderReply(admin, profile, reminder.action, reminder.snoozeDays, body)
       if (reminderAnswer !== null) return { intent: 'reminder_response', answer: reminderAnswer }

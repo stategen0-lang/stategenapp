@@ -5,13 +5,16 @@
 import { parseBareConfirmation } from '../../src/lib/whatsapp/replies.ts'
 
 // Tables whose rows are the agency's real records. A write to one of these is a
-// commit, and must only ever follow the agent's "yes".
+// commit, and must only ever follow the agent's approval.
 export const RECORD_TABLES = new Set(['client_requests', 'Properties', 'deals', 'offers', 'calendar_events', 'stage_history', 'property_history', 'listing_alerts'])
 
-const GAVE_UP = /didn'?t (understand|catch)|don'?t understand|not sure what you mean|something went wrong|try again in a moment|I got stuck|more than I could take|could you say it another way/i
-const OLD_HELP = /Here's what I can do|Send "help"/i
-const CLAIMS_SAVED = /\b(saved|updated|added|recorded|logged|marked|moved|changed)\b/i
-const NEGATED = /nothing (was|has been|is) (saved|changed)|not (been )?(saved|updated|added)|never saved|wasn'?t (saved|updated)|won'?t be saved|until you (reply|say|confirm)|reply (yes|YES)|to save|About to/i
+// The bot's own give-up replies (loop.ts, the old router) — not every "I didn't
+// catch the part about Friday", which is a fine clarifying question.
+const GAVE_UP = /I got stuck working that out|Sorry, I didn'?t catch that|Something went wrong on my side|That's taking me too long|Sorry, I didn'?t understand that|more than I could take in at once/i
+const OLD_HELP = /Here's what I can do/i
+// A first-person claim that something was saved.
+const CLAIMS_SAVED = /\b(I'?ve|I have)\s+(saved|updated|added|recorded|logged|marked|moved|changed|set)\b|\b(has|have) been (saved|updated|added|changed)\b|\bis (now )?saved\b/i
+const NEGATED = /nothing (was|has been|is) (saved|changed)|not (been )?(saved|updated|added)|never saved|wasn'?t (saved|updated)|won'?t be saved|until you (reply|say|confirm)|reply (yes|YES)|to save|About to|haven'?t/i
 
 const digits = s => String(s ?? '').replace(/\D/g, '')
 
@@ -28,6 +31,17 @@ export function amountsIn(line) {
     out.push(n)
   }
   return out
+}
+
+/**
+ * Amounts in a listing's line that are NOT a claim about its price: a change
+ * ("to $420,000", "is3ar jdid 1600$"), a client's budget or offer, a price per
+ * m². Removed before the price check.
+ */
+export function withoutNonPriceAmounts(text) {
+  return text
+    .replace(/\b(to|new|jdid|make it|set|changed?|from|budget|offer|over|under|above|below|within|max)\b[^#\n]{0,20}?(\$|USD\s?)?\s?\d[\d,.]*\s?(k|m)?\$?/gi, ' ')
+    .replace(/(\$|USD\s?)?\s?\d[\d,.]*\s?\$?\s?(per|\/)\s?(m²|m2|sqm|square)/gi, ' ')
 }
 
 function amenities(p) {
@@ -50,60 +64,74 @@ function ownerOf(client) {
 }
 
 /**
- * @param turn { message, reply, intent, writes, blocked }
- * @param ctx  { db, profile, snapshot }
+ * @param turn { message, reply, intent, writes, tools }
+ * @param ctx  { db, profile, snapshot, before }  before: the db as it was when
+ *             the turn started (prices the reply may quote from before a save)
  */
 export function checkTurn(turn, ctx) {
   const problems = []
   const add = (check, detail) => problems.push({ check, detail })
   const reply = turn.reply ?? ''
   const bare = parseBareConfirmation(turn.message)
+  const tools = turn.tools ?? []
 
   if (String(turn.intent).startsWith('agent_fallback')) add('claude_failed', turn.intent)
-  if (!reply.trim()) add('empty_reply', '')
+  if (!reply.trim() && turn.intent !== 'collect_photo') add('empty_reply', '')
   if (reply.length > 4000) add('too_long', `${reply.length} chars (WhatsApp cuts at 4096)`)
   if (GAVE_UP.test(reply)) add('gave_up', reply.match(GAVE_UP)[0])
-  if (OLD_HELP.test(reply)) add('help_menu', 'answered with the old help menu')
+  if (OLD_HELP.test(reply) && turn.intent !== 'help') add('help_menu', 'answered with the old help menu')
 
-  // Commits only on a bare yes.
+  // Commits only after approval: a bare yes (router), approval in words
+  // (confirm_waiting_change), or a reply to a follow-up reminder — those apply
+  // at once by design.
   const commits = turn.writes.filter(w => RECORD_TABLES.has(w.table))
-  if (commits.length && bare !== 'confirm') add('commit_without_yes', commits.map(w => `${w.op} ${w.table}`).join(', '))
+  const approved = bare === 'confirm' || tools.includes('confirm_waiting_change') || tools.includes('follow_up_reminder') || turn.intent === 'reminder_response'
+  if (commits.length && !approved) add('commit_without_yes', commits.map(w => `${w.op} ${w.table}`).join(', '))
   if (bare === 'confirm' && turn.hadPending && !commits.length && !/sent|cancel/i.test(reply)) add('yes_saved_nothing', reply.slice(0, 120))
 
   // "Saved" only when something was.
-  if (!commits.length && CLAIMS_SAVED.test(reply) && !NEGATED.test(reply) && bare !== 'confirm') {
+  if (!commits.length && bare !== 'confirm') {
     const sentence = reply.split(/(?<=[.!\n])/).find(s => CLAIMS_SAVED.test(s) && !NEGATED.test(s))
-    if (sentence && /\b(I'?ve|I have|has been|have been|is now|are now|✅)\b/i.test(sentence)) add('claims_saved_without_save', sentence.trim().slice(0, 160))
+    if (sentence) add('claims_saved_without_save', sentence.trim().slice(0, 160))
   }
 
-  // Every listing it names is real, and what it says about it is true.
-  const listings = new Map(ctx.db.table('Properties').map(p => [Number(p.id), listingFacts(p)]))
+  // Every listing it names is real, and what it says about it is true — as the
+  // listing is now, or was before this turn's save.
+  const now = new Map(ctx.db.table('Properties').map(p => [Number(p.id), listingFacts(p)]))
+  const was = new Map((ctx.before ?? []).map(p => [Number(p.id), listingFacts(p)]))
   for (const line of reply.split('\n')) {
     for (const m of line.matchAll(/#(\d{1,6})\b/g)) {
       const id = Number(m[1])
-      const facts = listings.get(id)
+      const facts = now.get(id)
       const isClient = ctx.db.table('client_requests').some(c => Number(c.id) === id)
       if (!facts) { if (!isClient) add('invented_id', `#${id}: ${line.trim().slice(0, 120)}`); continue }
+      // The listing this turn prepared a change for: its line states the NEW
+      // values, which nothing in the database has yet.
+      if (turn.staged && Number(ctx.db.table('pending_actions').at(-1)?.payload?.id) === id) continue
+      const prices = [...facts.prices, ...(was.get(id)?.prices ?? [])]
       // Only the text about THIS listing: up to the next #id on the line.
       const tail = line.slice(m.index).split(/(?=#\d)/)[0]
-      const amounts = amountsIn(tail)
-      if (amounts.length && facts.prices.length && !amounts.some(a => facts.prices.some(p => Math.abs(a - p) <= Math.max(1, p * 0.01)))) {
+      const amounts = amountsIn(withoutNonPriceAmounts(tail))
+      if (amounts.length && prices.length && !amounts.some(a => prices.some(p => Math.abs(a - p) <= Math.max(1, p * 0.01)))) {
         add('wrong_price', `#${id} said ${amounts.join('/')} but is ${facts.prices.join(' or ')}: ${tail.trim().slice(0, 120)}`)
       }
-      const beds = tail.match(/(\d+)\s?-?\s?(?:bed(?:room)?s?|br|bd)\b/i)
-      if (beds && facts.beds != null && Number(beds[1]) !== facts.beds) add('wrong_beds', `#${id} said ${beds[1]} bed, is ${facts.beds}: ${tail.trim().slice(0, 120)}`)
-      if (/\/\s?mo|per month|monthly/i.test(tail) && facts.tx === 'For Sale') add('wrong_transaction', `#${id} shown as rent but is For Sale`)
-      if (/for sale/i.test(tail) && facts.tx === 'For Rent') add('wrong_transaction', `#${id} shown as for sale but is For Rent`)
+      const beds = tail.slice(0, 70).match(/(\d+)\s?-?\s?(?:bed(?:room)?s?|br|bd)\b/i)
+      if (beds && facts.beds != null && Number(beds[1]) !== facts.beds && Number(beds[1]) !== was.get(id)?.beds) {
+        add('wrong_beds', `#${id} said ${beds[1]} bed, is ${facts.beds}: ${tail.trim().slice(0, 120)}`)
+      }
+      if (/\/\s?mo|per month|monthly/i.test(tail.slice(0, 80)) && facts.tx === 'For Sale') add('wrong_transaction', `#${id} shown as rent but is For Sale`)
+      if (/for sale/i.test(tail.slice(0, 80)) && facts.tx === 'For Rent') add('wrong_transaction', `#${id} shown as for sale but is For Rent`)
     }
   }
 
-  // An agent never sees another agent's client's phone.
+  // An agent never sees another agent's client's phone — unless they typed it.
   if (ctx.profile.role === 'agent') {
     const replyDigits = digits(reply)
+    const typed = digits(turn.message) + digits(turn.history ?? '')
     for (const c of ctx.db.table('client_requests')) {
       const owner = ownerOf(c)
-      const phone = digits(c['client phone'])
-      if (owner && owner !== ctx.profile.agent_code && phone.length >= 7 && replyDigits.includes(phone.slice(-7))) {
+      const phone = digits(c['client phone']).slice(-7)
+      if (owner && owner !== ctx.profile.agent_code && phone.length === 7 && replyDigits.includes(phone) && !typed.includes(phone)) {
         add('privacy_leak', `phone of client #${c.id} (agent ${owner})`)
       }
     }
