@@ -2,9 +2,7 @@ import type { Metadata } from 'next'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { dbRowToProperty } from '@/lib/db-mappers'
 import { makeShareToken, shareSecret } from '@/lib/share'
-import { formatPrice, TYPE_GRADIENTS } from '@/lib/data'
-import CardPhotos from '@/components/listing/CardPhotos'
-import FactBadges from '@/components/listing/FactBadges'
+import MicrositeListings, { type MicrositeCard } from '@/components/microsite/MicrositeListings'
 import MicrositeContactForm from '@/components/microsite/MicrositeContactForm'
 
 // Public agency microsite: a branded page listing an agency's available
@@ -16,7 +14,7 @@ export const dynamic = 'force-dynamic'
 type Row = Record<string, unknown>
 
 interface Brand { name: string; logoUrl: string | null; color: string }
-interface Card { token: string; title: string; type: string; transaction: string; price: number; rent: number; district: string; city: string; beds: number; baths: number; size: number; parkings: number; view: string; terrace: boolean; balcony: boolean; garden: boolean; photos: string[]; hasVideo: boolean }
+type Card = MicrositeCard
 interface Site { brand: Brand; cards: Card[] }
 
 function readableOn(hex: string): string {
@@ -92,9 +90,14 @@ function NotFound() {
   )
 }
 
-export default async function MicrositePage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ from?: string }> }) {
+export default async function MicrositePage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { slug } = await params
-  const { from } = await searchParams
+  const query = await searchParams
+  const from = query.from
+  // The filters in the link (?deal=rent&area=…) — rendered filtered on the first load.
+  const initialQuery = new URLSearchParams(
+    Object.entries(query).flatMap(([k, v]) => (typeof v === 'string' ? [[k, v]] : [])),
+  ).toString()
   const fromApp = from === 'app'   // opened from inside the app (Settings) — offer a way back
   const loaded = await loadSite(slug)
   if (!loaded) return <NotFound />
@@ -125,40 +128,7 @@ export default async function MicrositePage({ params, searchParams }: { params: 
       </div>
 
       <div className="max-w-5xl mx-auto px-5">
-        {/* Listings grid */}
-        {cards.length === 0 ? (
-          <p className="text-sm text-center py-16" style={{ color: SUB }}>No available listings right now — check back soon.</p>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
-            {cards.map(card => {
-              const price = card.transaction === 'For Rent' ? `${formatPrice(card.rent)}/mo` : formatPrice(card.price)
-              return (
-                <a key={card.token} href={`/l/${card.token}`} className="block rounded-2xl bg-white overflow-hidden transition-transform hover:-translate-y-0.5"
-                  style={{ border: '1px solid #EEF0F4', boxShadow: '0 2px 10px rgba(20,34,63,0.06)' }}>
-                  {/* Swipe through the listing's photos; badges sit on the first one. */}
-                  <CardPhotos photos={card.photos} title={card.title} fallback={TYPE_GRADIENTS[card.type as keyof typeof TYPE_GRADIENTS] ?? '#E3E7EE'}>
-                    <span className="absolute top-2.5 left-2.5 text-xs font-semibold px-2.5 py-1 rounded-full text-white" style={{ background: 'rgba(0,0,0,0.42)', backdropFilter: 'blur(4px)' }}>
-                      {card.type} · {card.transaction}
-                    </span>
-                    {card.hasVideo && (
-                      <span className="absolute top-2.5 right-2.5 text-xs font-semibold px-2 py-1 rounded-full text-white" style={{ background: 'rgba(0,0,0,0.42)', backdropFilter: 'blur(4px)' }} title="Has a video walkthrough">
-                        🎥
-                      </span>
-                    )}
-                  </CardPhotos>
-                  <div className="p-3.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-bold truncate" style={{ color: H }}>{card.title}</p>
-                      <p className="text-sm font-extrabold whitespace-nowrap" style={{ color: brand.color === '#14223F' ? '#1F7A4D' : brand.color }}>{price}</p>
-                    </div>
-                    <p className="text-xs mt-0.5" style={{ color: SUB }}>{[card.district, card.city].filter(Boolean).join(', ')}</p>
-                    <FactBadges listing={card} className="mt-2" />
-                  </div>
-                </a>
-              )
-            })}
-          </div>
-        )}
+        <MicrositeListings cards={cards} accent={brand.color} initialQuery={initialQuery} />
 
         {/* Contact form */}
         <div className="mt-10 max-w-xl mx-auto">

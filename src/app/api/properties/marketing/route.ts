@@ -7,12 +7,6 @@ import { sendListingToMarketing } from '@/lib/marketing-send'
 // team. Permissions, content and the send itself live in marketing-send.ts,
 // shared with the WhatsApp bot.
 
-function origin(req: NextRequest): string {
-  const proto = req.headers.get('x-forwarded-proto') ?? 'https'
-  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? ''
-  return `${proto}://${host}`
-}
-
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -21,7 +15,7 @@ export async function POST(req: NextRequest) {
   const id = Number(body.id)
   if (!Number.isInteger(id) || id <= 0) return NextResponse.json({ error: 'A valid listing id is required.' }, { status: 400 })
 
-  const result = await sendListingToMarketing(createAdminClient(), session, id, origin(req))
+  const result = await sendListingToMarketing(createAdminClient(), session, id)
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
   return NextResponse.json({ ok: true, sentAt: result.sentAt, to: result.to })
 }

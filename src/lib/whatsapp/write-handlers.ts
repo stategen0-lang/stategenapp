@@ -555,7 +555,7 @@ export async function applyPendingAction(
         sent = await sendListingToMarketing(admin, {
           userId: profile.id, companyId: profile.company_id, role: profile.role as 'owner' | 'manager' | 'agent',
           agentCode: profile.agent_code, fullName: profile.Full_name ?? 'Agent',
-        }, Number(p.id), String(p.extras?.origin ?? ''))
+        }, Number(p.id))
       } catch (err) {
         // An email, not a save: "The save failed" (the generic catch below)
         // told the agent the wrong thing.

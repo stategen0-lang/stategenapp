@@ -15,7 +15,7 @@ import { formatPrice, propertyLocation, type Property } from '@/lib/data'
 import type { IntentResult } from '@/lib/whatsapp/intent'
 import { splitClientRef } from '@/lib/whatsapp/client-ref'
 import { samePhone } from './phone.ts'
-import { makeShareToken, shareSecret } from '@/lib/share'
+import { makeShareToken, shareSecret, publicOrigin } from '@/lib/share'
 
 export const HELP_TEXT = [
   'I can help with:',
@@ -290,7 +290,6 @@ export async function handleShareListing(
   admin: SupabaseClient,
   profile: Profile,
   intent: IntentResult,
-  origin: string,
 ): Promise<string> {
   if (!intent.propertyId) return 'Which listing? Try "send me the link for #23".'
 
@@ -308,7 +307,7 @@ export async function handleShareListing(
   const price = p.transaction === 'For Rent' ? `${formatPrice(p.rent)}/mo` : formatPrice(p.price)
   return [
     `${p.title} — ${price}`,
-    `${origin}/l/${token}`,
+    `${publicOrigin()}/l/${token}`,
     '',
     'Forward this to your client. It shows photos, price and details; owner info stays private.',
   ].join('\n')

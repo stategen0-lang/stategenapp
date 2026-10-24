@@ -11,7 +11,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { canEditProperty, type Session } from '@/lib/permissions'
 import { dbRowToProperty } from '@/lib/db-mappers'
-import { makeShareToken, shareSecret, publicListing } from '@/lib/share'
+import { makeShareToken, shareSecret, publicListing, publicOrigin } from '@/lib/share'
 import { parseRecipients, renderMarketingEmail } from '@/lib/marketing-email'
 import { mergeExtras } from '@/lib/whatsapp/writes'
 import { sendMail, mailConfigured } from '@/lib/mailer'
@@ -140,7 +140,7 @@ export async function marketingEligibility(
 }
 
 export async function sendListingToMarketing(
-  admin: SupabaseClient, actor: MarketingActor, propertyId: number, origin: string,
+  admin: SupabaseClient, actor: MarketingActor, propertyId: number,
 ): Promise<SendOutcome> {
   const eligible = await marketingEligibility(admin, actor, propertyId)
   if (!eligible.ok) return eligible
@@ -175,7 +175,7 @@ export async function sendListingToMarketing(
     listing,
     attachedFiles,
     listingId: propertyId,
-    shareUrl: `${origin}/l/${makeShareToken(propertyId, shareSecret())}`,
+    shareUrl: `${publicOrigin()}/l/${makeShareToken(propertyId, shareSecret())}`,
     agentName: (a.Full_name as string) || actor.fullName,
     agentPhone: (a.whatsapp_number as string) || null,
     companyName: companyName || null,
