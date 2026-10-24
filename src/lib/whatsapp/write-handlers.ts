@@ -308,7 +308,9 @@ export async function stageDescribeProperty(
   const template = (company?.description_template as string | null) ?? null
 
   const p = dbRowToProperty(row, 0)
-  const input: DescriptionInput = describeInput(p)
+  // intent.notes: how the agent wants this draft written (the agent's
+  // write_description tool) — style only, never facts.
+  const input: DescriptionInput = { ...describeInput(p), ...(intent.notes ? { style: intent.notes } : {}) }
 
   let text: string
   try {

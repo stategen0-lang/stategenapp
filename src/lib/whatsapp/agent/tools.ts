@@ -233,6 +233,7 @@ export const TOOLS: Tool[] = [
     input_schema: object({
       listing_id: must('integer', 'The listing number.'),
       language: oneOf(['English', 'Arabic'], 'Which language.'),
+      instructions: text('For an English rewrite: how the agent wants it written, in their words ("no neighbourhood line", "shorter", "no call to action"). Style only — it can\'t add facts.'),
     }),
   },
   {
@@ -575,7 +576,9 @@ export async function executeTool(ctx: ToolContext, name: string, rawInput: unkn
       const propertyId = num(input, 'listing_id')
       if (!propertyId) return { content: 'Which listing? Give its number.', isError: true }
       const arabic = str(input, 'language') === 'Arabic'
-      return staging(ctx, () => (arabic ? stageArabicDescription : stageDescribeProperty)(ctx.admin, ctx.profile, { intent: arabic ? 'describe_property_ar' : 'describe_property', propertyId }))
+      return staging(ctx, () => (arabic ? stageArabicDescription : stageDescribeProperty)(ctx.admin, ctx.profile, {
+        intent: arabic ? 'describe_property_ar' : 'describe_property', propertyId, notes: str(input, 'instructions'),
+      }))
     }
 
     case 'send_to_marketing': {

@@ -219,3 +219,10 @@ test('free-form descriptions are told to use only the listed facts', () => {
   assert.match(prompt, /ONLY the facts in PROPERTY DATA/)
   assert.doesNotMatch(prompt, /mountain views, coastal access/)
 })
+
+test("an agent's rewrite request reaches the writer, but can't override the facts rule", () => {
+  const { prompt } = buildPrompts({ title: 'Studio', location: 'Hamra', type: 'Apartment', price: 750, style: 'no neighbourhood line, no call to action' })
+  assert.match(prompt, /no neighbourhood line, no call to action/)
+  assert.match(prompt, /PROPERTY DATA — that rule wins/)
+  assert.doesNotMatch(buildPrompts({ title: 'Studio', type: 'Apartment', price: 750 }).prompt, /The agent asked for this draft/)
+})

@@ -38,6 +38,12 @@ export interface DescriptionInput {
   notes?: string
   /** Selling points the agent wants said out loud (unlike `notes`). */
   publicNotes?: string
+  /**
+   * How the agent wants this draft written, when they asked for a rewrite
+   * ("no neighbourhood line", "shorter", "no call to action"). Style only —
+   * it can't add facts.
+   */
+  style?: string
 }
 
 export interface Prompts {
@@ -149,7 +155,7 @@ Rules:
 - Never repeat or hint at the agent's internal notes
 - Name the location exactly as given — no country, no added city ("in Ashrafieh", never "in Ashrafieh, Lebanon")
 - Write in English
-- Output the description only, no labels or preamble`,
+- Output the description only, no labels or preamble${d.style ? `\n- The agent asked for this draft: "${String(d.style).replace(/"/g, "'").slice(0, 300)}". Follow it, except where it would add a fact not in PROPERTY DATA — that rule wins` : ''}`,
     maxTokens: 300,
     temperature: 0.7,
   }
