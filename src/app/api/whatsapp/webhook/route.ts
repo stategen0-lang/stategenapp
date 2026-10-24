@@ -11,7 +11,7 @@ import {
 } from '@/lib/whatsapp/write-handlers'
 import { startCreatePropertyFlow, startCreateClientFlow, startClientFormFlow, continueFlow, handleFlowSubmission } from '@/lib/whatsapp/flow-handlers'
 import { stageDealMove, handleQueryPipeline } from '@/lib/whatsapp/pipeline-handlers'
-import { isStartListing, isStartClient, isClientForm, isTemplateRequest, CLIENT_TEMPLATE } from '@/lib/whatsapp/flows'
+import { startKind, isClientForm, isTemplateRequest, CLIENT_TEMPLATE } from '@/lib/whatsapp/flows'
 import { parseConnect, isStopMessage, normalizeCode, pairingExpired } from '@/lib/whatsapp/pairing'
 import { handleAgentActivity, handleOverdueReminders, handleActivityFeed } from '@/lib/whatsapp/manager-handlers'
 import { stageLogOffer, stageResolveOffer, handleQueryOffers, continueOfferPick } from '@/lib/whatsapp/offer-handlers'
@@ -212,8 +212,9 @@ async function route(
   // Grok is still asked, so any details in the message are extracted and the
   // flow can skip questions — but the routing decision is ours when the wording
   // is unambiguous.
-  const intent = isStartListing(body) ? 'create_property'
-    : isStartClient(body) ? 'create_client'
+  const kind = startKind(body)
+  const intent = kind === 'listing' ? 'create_property'
+    : kind === 'client' ? 'create_client'
     : result.intent
 
   switch (intent) {
@@ -464,7 +465,9 @@ export async function POST(req: NextRequest) {
   if (!inbound || !inbound.from) return new Response('ok', { status: 200 })
 
   const phone = normalizePhone(inbound.from)
-  const body = inbound.text.trim()
+  // Already cleaned of WhatsApp's invisible characters by parseInbound — see
+  // clean-text.ts.
+  const body = inbound.text
   const admin = createAdminClient()
 
   // Atomic dedupe + inbound log in one insert. Meta delivers at-least-once, so

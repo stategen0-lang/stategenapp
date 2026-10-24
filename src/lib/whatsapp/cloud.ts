@@ -11,6 +11,7 @@
 // template-generation time no longer risk a timeout.
 
 import crypto from 'node:crypto'
+import { cleanInboundText } from './clean-text.ts'
 
 const GRAPH_VERSION = process.env.WHATSAPP_GRAPH_VERSION || 'v21.0'
 
@@ -146,7 +147,9 @@ export function parseInbound(payload: unknown): InboundMessage | null {
     const contacts = value.contacts as { profile?: { name?: string } }[] | undefined
     const name = String(contacts?.[0]?.profile?.name ?? '')
 
-    const base: InboundMessage = { from, text, name, messageId, type: flow ? 'flow' : image ? 'image' : type }
+    // Cleaned here, where every message enters, so the router, the flows and
+    // the photo handler all read the same text. See clean-text.ts.
+    const base: InboundMessage = { from, text: cleanInboundText(text), name, messageId, type: flow ? 'flow' : image ? 'image' : type }
     if (flow) return { ...base, flow }
     if (image) return { ...base, image }
     return base

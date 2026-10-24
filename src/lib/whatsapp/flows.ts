@@ -386,6 +386,32 @@ export function isStartClient(text: string | null | undefined): boolean {
   return /^(i (want|need|would like) to\s+)?(add|create|register|new|save)\b[^.!?]*\b(client|customer|lead|buyer|renter|tenant)\b/i.test(s)
 }
 
+/**
+ * Is this message starting a listing or a client — when it could be either?
+ *
+ * A client brief describes the property the client wants, so the listing words
+ * turn up in it: "Add client Carole Naffah … Request: small studio or Apartment
+ * for rent". Both detectors above match that, and the router used to try the
+ * listing one first, so the agent was asked "What type of property is it?" for
+ * a client — six times in a row, until they gave up.
+ *
+ * The thing being added is the first noun after the verb. "Add client … an
+ * apartment" is a client; "add an apartment for my client" is a listing.
+ */
+export function startKind(text: string | null | undefined): 'listing' | 'client' | null {
+  const s = (text ?? '').trim()
+  const listing = isStartListing(s)
+  const client = isStartClient(s)
+  if (listing && !client) return 'listing'
+  if (client && !listing) return 'client'
+  if (!listing && !client) return null
+
+  const first = (re: RegExp) => { const m = re.exec(s); return m ? m.index : Infinity }
+  const listingAt = first(/\b(listing|property|properties|apartment|appartement|flat|villa|office|shop|chalet|building|land|house)\b/i)
+  const clientAt = first(/\b(client|customer|lead|buyer|renter|tenant)\b/i)
+  return clientAt < listingAt ? 'client' : 'listing'
+}
+
 export const LISTING_INTRO = 'Adding a listing.'
 export const CLIENT_INTRO = 'Adding a client.'
 
