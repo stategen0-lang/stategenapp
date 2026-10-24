@@ -69,6 +69,47 @@ function clientAgent(row: Record<string, unknown>): string | null {
 
 // ── "info on Ahmed" ─────────────────────────────────────────────────────────
 
+/**
+ * "#41", "client #41", "client 41" — a client picked by number. The way out
+ * when two records share a name AND an area ("Joe Khoury — Achrafieh" and
+ * "Joe Khoury — Beirut, Achrafieh"), which no name or area can separate.
+ */
+export function clientNumber(s: string): number | null {
+  const m = String(s ?? '').trim().match(/^(?:client\s*)?#\s*(\d{1,7})$|^client\s+(\d{1,7})$/i)
+  return m ? Number(m[1] ?? m[2]) : null
+}
+
+export async function clientById(admin: SupabaseClient, companyId: number, id: number): Promise<Record<string, unknown>[]> {
+  const { data } = await admin.from('client_requests').select('*').eq('company_id', companyId).eq('id', id).limit(1)
+  return data ?? []
+}
+
+/**
+ * A name's consonant skeleton, for matching across transliterations: Lebanese
+ * names have no single Latin spelling ("Youssef"/"Yousef"/"Yusuf",
+ * "Ziade"/"Ziadeh"/"Ziadé"). Vowels and y dropped, doubles collapsed, a final
+ * h dropped. Exported for tests.
+ */
+export function nameSkeleton(word: string): string {
+  return String(word ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z]/g, '').replace(/h$/, '').replace(/[aeiouy]/g, '').replace(/(.)\1+/g, '$1')
+}
+
+/**
+ * Clients whose name matches every word of `name` by skeleton — the fallback
+ * when the name as written finds nobody. Live (simulator): "Yousef Ziade",
+ * "Youssef Ziadeh" and two more spellings all missed "Youssef ziade".
+ */
+export async function clientsBySpelling(admin: SupabaseClient, companyId: number, name: string): Promise<Record<string, unknown>[]> {
+  const wanted = String(name).split(/\s+/).map(nameSkeleton).filter(s => s.length >= 2)
+  if (!wanted.length) return []
+  const { data } = await admin.from('client_requests').select('*').eq('company_id', companyId).limit(5000)
+  return (data ?? []).filter(r => {
+    const have = String(r['Client Name'] ?? '').split(/[\s,]+/).map(nameSkeleton).filter(Boolean)
+    return wanted.every(w => have.some(h => h === w))
+  }).slice(0, 6)
+}
+
 /** "70 123 456", "+961 70123456" — digits and separators only, 7+ digits. */
 export function looksLikePhone(s: string): boolean {
   return !/[A-Za-zÀ-ÿ؀-ۿ]/.test(s) && s.replace(/\D/g, '').length >= 7
@@ -99,7 +140,10 @@ export async function handleQueryClient(
   if (!ref.name) return 'Which client? Try "info on Ahmed".'
 
   let rows: Record<string, unknown>[]
-  if (looksLikePhone(ref.name)) {
+  const number = clientNumber(ref.name)
+  if (number) {
+    rows = await clientById(admin, profile.company_id, number)
+  } else if (looksLikePhone(ref.name)) {
     rows = await clientsByPhone(admin, profile.company_id, ref.name)
     // "<phone> in Batroun" — the reply to two clients sharing a number.
     if (ref.location) rows = rows.filter(r => String(r['prefered-location'] ?? '').toLowerCase().includes(ref.location!.toLowerCase()))
@@ -114,6 +158,11 @@ export async function handleQueryClient(
     if (ref.location) q = q.ilike('prefered-location', `%${ref.location}%`)
     const { data } = await q
     rows = data ?? []
+    // Nobody under that exact spelling: try the other ways it's written.
+    if (!rows.length) {
+      rows = await clientsBySpelling(admin, profile.company_id, ref.name)
+      if (ref.location) rows = rows.filter(r => String(r['prefered-location'] ?? '').toLowerCase().includes(ref.location!.toLowerCase()))
+    }
   }
   if (!rows.length) return `No client matching "${ref.name}"${ref.location ? ` in ${ref.location}` : ''}.`
 
@@ -126,12 +175,12 @@ export async function handleQueryClient(
     const lines = rows.map(r => {
       // Say why a name is hidden: "Client #23" alone read as a record the bot
       // had failed to load, and it went round in circles trying to open it.
-      const label = canSeeClientPII(session, clientAgent(r)) ? (r['Client Name'] as string) : `${maskClientName(Number(r.id))} (another agent's client)`
+      const label = canSeeClientPII(session, clientAgent(r)) ? `${r['Client Name'] as string} (#${r.id})` : `${maskClientName(Number(r.id))} (another agent's client)`
       const area = (r['prefered-location'] as string) || 'no area set'
       return `• ${label} — ${area}`
     })
     const egArea = (rows[0]['prefered-location'] as string) || 'Beirut'
-    return `${rows.length} clients match "${ref.name}":\n${lines.join('\n')}\n\nAdd the area to pick one, e.g. "info on ${ref.name} in ${egArea}".`
+    return `${rows.length} clients match "${ref.name}":\n${lines.join('\n')}\n\nAdd the area or the number to pick one, e.g. "info on ${ref.name} in ${egArea}" or "info on #${rows[0].id}".`
   }
 
   const row = rows[0]

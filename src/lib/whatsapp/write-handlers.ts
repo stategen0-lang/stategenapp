@@ -24,7 +24,7 @@ import {
 } from '@/lib/whatsapp/writes'
 import { reminderOutcome } from '@/lib/whatsapp/reminders'
 import { splitClientRef } from '@/lib/whatsapp/client-ref'
-import { clientsByPhone, looksLikePhone } from '@/lib/whatsapp/handlers'
+import { clientsByPhone, looksLikePhone, clientNumber, clientById, clientsBySpelling } from '@/lib/whatsapp/handlers'
 import type { ReminderAction } from '@/lib/whatsapp/replies'
 import { createListingAlerts } from '@/lib/alerts-server'
 import { recordPropertyEdit } from '@/lib/property-edit-effects'
@@ -119,6 +119,12 @@ export async function resolveClient(admin: SupabaseClient, profile: Profile, nam
   const ref = splitClientRef(name)
   if (!ref.name) return { ok: false, message: 'Which client? Try "update Ahmed\'s budget to 400k".' }
 
+  const number = clientNumber(ref.name)
+  if (number) {
+    const [row] = await clientById(admin, profile.company_id, number)
+    return row ? { ok: true, row } : { ok: false, message: `No client #${number}.` }
+  }
+
   if (looksLikePhone(ref.name)) {
     const byPhone = await clientsByPhone(admin, profile.company_id, ref.name)
     if (byPhone.length === 1) return { ok: true, row: byPhone[0] }
@@ -152,6 +158,12 @@ export async function resolveClient(admin: SupabaseClient, profile: Profile, nam
     rows = again ?? []
   }
 
+  // Nobody under that exact spelling: try the other ways it's written.
+  if (!rows.length) {
+    rows = await clientsBySpelling(admin, profile.company_id, ref.name)
+    if (ref.location) rows = rows.filter(r => String(r['prefered-location'] ?? '').toLowerCase().includes(ref.location!.toLowerCase()))
+  }
+
   if (!rows.length) return { ok: false, message: `No client matching "${ref.name}"${ref.location ? ` in ${ref.location}` : ''}.` }
   if (rows.length > 1) {
     // Masked names for the same reason as above (no enumerating other agents'
@@ -159,7 +171,7 @@ export async function resolveClient(admin: SupabaseClient, profile: Profile, nam
     // and the agent knows how to pick one.
     const lines = rows.map(r => {
       const mine = canSeeClientPII(toSession(profile), agentOf(r, 'notes'))
-      return `• ${clientLabel(profile, r)}${mine ? '' : " (another agent's client)"} — ${(r['prefered-location'] as string) || 'no area set'}`
+      return `• ${clientLabel(profile, r)}${mine ? ` (#${r.id})` : " (another agent's client)"} — ${(r['prefered-location'] as string) || 'no area set'}`
     })
     const egArea = (rows[0]['prefered-location'] as string) || 'Beirut'
     return {
@@ -300,8 +312,9 @@ export async function stageDescribeProperty(
 
   let text: string
   try {
-    // No retry and a hard deadline — Twilio abandons the webhook at 15 seconds.
-    text = await generateDescription(input, template, { retry: false, deadlineMs: 12_000 })
+    // No retry and a hard deadline, inside the agent's turn budget (the old
+    // 12s was for Twilio's 15-second webhook; it timed out on real listings).
+    text = await generateDescription(input, template, { retry: false, deadlineMs: 30_000 })
   } catch {
     return 'That took too long to generate — please try again in a moment.'
   }
@@ -358,7 +371,7 @@ export async function stageArabicDescription(
 
   let text: string
   try {
-    text = await generateArabicDescription(english, describeInput(p), { retry: false, deadlineMs: 12_000 })
+    text = await generateArabicDescription(english, describeInput(p), { retry: false, deadlineMs: 30_000 })
   } catch {
     return 'That took too long to generate — please try again in a moment.'
   }
@@ -535,10 +548,18 @@ export async function applyPendingAction(
     // Send to marketing: an email, not a row. Re-checked at send time (the
     // listing or the setting may have changed since the agent was asked).
     if (p.table === 'marketing') {
-      const sent = await sendListingToMarketing(admin, {
-        userId: profile.id, companyId: profile.company_id, role: profile.role as 'owner' | 'manager' | 'agent',
-        agentCode: profile.agent_code, fullName: profile.Full_name ?? 'Agent',
-      }, Number(p.id), String(p.extras?.origin ?? ''))
+      let sent: Awaited<ReturnType<typeof sendListingToMarketing>>
+      try {
+        sent = await sendListingToMarketing(admin, {
+          userId: profile.id, companyId: profile.company_id, role: profile.role as 'owner' | 'manager' | 'agent',
+          agentCode: profile.agent_code, fullName: profile.Full_name ?? 'Agent',
+        }, Number(p.id), String(p.extras?.origin ?? ''))
+      } catch (err) {
+        // An email, not a save: "The save failed" (the generic catch below)
+        // told the agent the wrong thing.
+        console.error('[whatsapp] marketing send failed', err)
+        return `Couldn't send #${p.id} to marketing — the email didn't go out. Try again in a moment, or send it from the web app.`
+      }
       return sent.ok
         ? `📧 Sent #${p.id} to marketing (${sent.to.join(', ')}). Photos are attached to the email.`
         : sent.error

@@ -58,9 +58,10 @@ export function claudeConfigured(): boolean {
 
 let shared: Anthropic | null = null
 function anthropic(): Anthropic {
-  // One retry, a per-request timeout well inside the webhook's maxDuration: an
+  // Two retries (a rate-limit 429 under load came back as "something went
+  // wrong"), and a per-request timeout well inside the webhook's maxDuration: an
   // agent waiting minutes for a reply has already given up on it.
-  return (shared ??= new Anthropic({ timeout: 45_000, maxRetries: 1 }))
+  return (shared ??= new Anthropic({ timeout: 45_000, maxRetries: 2 }))
 }
 
 /**

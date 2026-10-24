@@ -463,3 +463,42 @@ test('find_client picks one of two same-named clients by area', async () => {
   assert.doesNotMatch(one.content, /Tyre/)
   assert.match(one.content, /Achrafieh/)
 })
+
+test('two records with the same name AND area are picked by number', async () => {
+  // Live (simulator, Equity-like data): "Joe Khoury — Achrafieh" and "Joe
+  // Khoury — Beirut, Achrafieh" — no area separates them.
+  const joe = (id, area) => ({ id, company_id: COMPANY, 'Client Name': 'Joe Khoury', 'prefered-location': area, budget_max: 500000, budget_min: 500000, notes: '{"agentId":"JH-655"}' })
+  const { db, ctx } = setup(AGENT, { client_requests: [joe(40, 'Beirut, Achrafieh'), joe(41, 'Achrafieh')] })
+  const list = await executeTool(ctx, 'find_client', call('find_client', { name: 'Joe Khoury', client_area: 'Achrafieh' }), fresh())
+  assert.match(list.content, /#40/)
+  assert.match(list.content, /#41/)
+  const one = await executeTool(ctx, 'find_client', call('find_client', { name: '#41' }), fresh())
+  assert.doesNotMatch(one.content, /2 clients/)
+  const out = await executeTool(ctx, 'update_client', call('update_client', { client_name: '#41', budget: 600000 }), fresh())
+  assert.ok(out.confirmation, out.content)
+  assert.equal(db.table('pending_actions').at(-1).payload.id, 41)
+})
+
+import { nameSkeleton } from '../handlers.ts'
+
+test('names match across Lebanese transliterations', () => {
+  for (const [a, b] of [['Youssef', 'Yousef'], ['Ziade', 'Ziadeh'], ['Ziadé', 'ziade'], ['Charbel', 'Sharbel'.replace('Sh', 'Ch')], ['Rita', 'Reeta']]) {
+    assert.equal(nameSkeleton(a), nameSkeleton(b), `${a} ~ ${b}`)
+  }
+  assert.notEqual(nameSkeleton('Rita'), nameSkeleton('Rana'))
+})
+
+test('a client is found under another spelling of their name — and updated', async () => {
+  // Live (simulator, Equity): "Yousef Ziade", "Youssef Ziadeh" and two more
+  // spellings all missed "Youssef ziade".
+  const youssef = { id: 77, company_id: COMPANY, 'Client Name': 'Youssef ziade', 'prefered-location': 'Metn', budget_max: 300000, budget_min: 300000, notes: '{"agentId":"JH-655"}' }
+  const { db, ctx } = setup(AGENT, { client_requests: [youssef, { ...RITA_145 }] })
+  const found = await executeTool(ctx, 'find_client', call('find_client', { name: 'Yousef Ziadeh' }), fresh())
+  assert.match(found.content, /Youssef ziade/i)
+  const out = await executeTool(ctx, 'update_client', call('update_client', { client_name: 'Yousef Ziadeh', budget: 350000 }), fresh())
+  assert.ok(out.confirmation, out.content)
+  assert.equal(db.table('pending_actions').at(-1).payload.id, 77)
+  // A different person is still not found.
+  const none = await executeTool(ctx, 'find_client', call('find_client', { name: 'Rana Ziade' }), fresh())
+  assert.match(none.content, /No client/)
+})
