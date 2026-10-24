@@ -1,0 +1,378 @@
+<title>WhatsApp Bot Test Report</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; charts and tables break wider inside their own scroll containers. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --ink: #14223f;
+  --ink-2: #4a5468;
+  --ink-3: #7a8396;
+  --line: #e1e5ec;
+  --accent: #2e5288;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --muted-mark: #b9c0cc;
+  --crit: #c62f2f;  --crit-bg: #fbeaea;
+  --high: #b45a00;  --high-bg: #fdf1e3;
+  --med: #6b5a00;   --med-bg: #f7f2d8;
+  --low: #3d6b4a;   --low-bg: #e6f2ea;
+  --font-ui: 'Figtree', 'Segoe UI', system-ui, sans-serif;
+  --font-data: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11151c; --surface: #191e27; --ink: #e9edf4; --ink-2: #b4bccb; --ink-3: #8a93a5; --line: #2b323e;
+    --accent: #8fb0e6; --series-1: #3987e5; --series-2: #d95926; --muted-mark: #4b5363;
+    --crit: #f07a7a; --crit-bg: #3a1f22; --high: #f0a256; --high-bg: #35281a; --med: #d9c463; --med-bg: #2f2c18; --low: #7fc493; --low-bg: #1b2e22;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11151c; --surface: #191e27; --ink: #e9edf4; --ink-2: #b4bccb; --ink-3: #8a93a5; --line: #2b323e;
+  --accent: #8fb0e6; --series-1: #3987e5; --series-2: #d95926; --muted-mark: #4b5363;
+  --crit: #f07a7a; --crit-bg: #3a1f22; --high: #f0a256; --high-bg: #35281a; --med: #d9c463; --med-bg: #2f2c18; --low: #7fc493; --low-bg: #1b2e22;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--font-ui); }
+.wrap { max-width: 980px; margin: 0 auto; padding-block: 40px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 44px; }
+h1, h2, h3 { text-wrap: balance; margin: 0; line-height: 1.2; }
+h1 { font-size: clamp(28px, 4.4vw, 40px); font-weight: 800; letter-spacing: -0.01em; }
+h2 { font-size: 22px; font-weight: 700; }
+h3 { font-size: 16px; font-weight: 700; }
+p { margin: 0; max-width: 68ch; }
+.eyebrow { font: 600 12px/1 var(--font-data); letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.lede { font-size: 17px; color: var(--ink-2); }
+section { display: grid; gap: 16px; min-width: 0; }
+.head { display: grid; gap: 14px; }
+.meta { color: var(--ink-3); font-size: 13px; }
+.num { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 4px; align-content: start; }
+.stat .big { font: 600 28px/1.1 var(--font-data); font-variant-numeric: tabular-nums; }
+.stat .big small { font-size: 15px; color: var(--ink-3); font-weight: 400; }
+.stat .lbl { color: var(--ink-2); font-size: 13px; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px; display: grid; gap: 14px; min-width: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.chart { overflow-x: auto; }
+.chart svg { display: block; width: 100%; height: auto; min-width: 560px; }
+.chart svg text { fill: var(--ink-2); font: 12px var(--font-ui); }
+.chart svg .val { fill: var(--ink); font: 600 12px var(--font-data); }
+.chart svg .axis { stroke: var(--line); }
+.chart svg .grid { stroke: var(--line); stroke-dasharray: 2 4; }
+.note { font-size: 13px; color: var(--ink-3); }
+#tip { position: fixed; pointer-events: none; z-index: 20; background: var(--ink); color: var(--bg); font-size: 12px; padding: 6px 9px; border-radius: 6px; max-width: 260px; line-height: 1.4; }
+
+.tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.05em; background: var(--surface); }
+tr:last-child td { border-bottom: 0; }
+td.n { font-family: var(--font-data); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pill { display: inline-block; font: 600 11px/1 var(--font-ui); letter-spacing: 0.04em; text-transform: uppercase; padding: 5px 8px; border-radius: 999px; white-space: nowrap; }
+.crit { color: var(--crit); background: var(--crit-bg); }
+.high { color: var(--high); background: var(--high-bg); }
+.med  { color: var(--med);  background: var(--med-bg); }
+.low  { color: var(--low);  background: var(--low-bg); }
+
+.examples { display: grid; gap: 14px; }
+.ex { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 10px; min-width: 0; }
+.chat { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.bubble { border-radius: 10px; padding: 10px 12px; font-size: 13.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.bubble b { display: block; font: 600 11px var(--font-data); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.before { background: var(--crit-bg); }
+.before b { color: var(--crit); }
+.after { background: var(--low-bg); }
+.after b { color: var(--low); }
+
+.todo { display: grid; gap: 10px; counter-reset: todo; }
+.task { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; align-items: start; }
+.task .pill { grid-row: span 2; margin-top: 2px; }
+.task p { color: var(--ink-2); font-size: 14px; }
+code { font-family: var(--font-data); font-size: 0.9em; background: var(--bg); border: 1px solid var(--line); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+ul.plain { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--ink-2); max-width: 72ch; }
+button.toggle { justify-self: start; font: 600 13px var(--font-ui); color: var(--accent); background: none; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+button.toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: no-preference) { .bar { transition: opacity .15s; } }
+</style>
+
+<div class="wrap">
+
+<header class="head">
+  <span class="eyebrow">StateGen · WhatsApp assistant · 24 October 2026</span>
+  <h1>WhatsApp Bot Test Report</h1>
+  <p class="lede">Simulated agents held 762 conversations with the new Claude-powered WhatsApp assistant, in four rounds, with fixes between rounds. Every reply was checked against the agency's real data. Every saved change was checked to confirm the right record got the right value, and only after a yes.</p>
+  <p class="meta">Model: Claude Haiku 5.5 for the bot, the simulated agents and the grader. Data: in-memory copies of Test Agency and Equity Properties. Nothing real was changed, and no WhatsApp message or email was sent.</p>
+</header>
+
+<section aria-label="Headline numbers">
+  <div class="stats">
+    <div class="stat"><span class="big num">762</span><span class="lbl">conversations, 2,281 bot replies, 20 kinds of request</span></div>
+    <div class="stat"><span class="big num">58% → 89%</span><span class="lbl">conversations with no hard errors, round 1 → round 3</span></div>
+    <div class="stat"><span class="big num">12.7 → 2.0</span><span class="lbl">accuracy and safety problems per 100 replies</span></div>
+    <div class="stat"><span class="big num">23</span><span class="lbl">bugs found and fixed, all pushed live</span></div>
+    <div class="stat"><span class="big num">$1.77 <small>of $2</small></span><span class="lbl">Anthropic spend on the four test rounds</span></div>
+  </div>
+</section>
+
+<section>
+  <span class="eyebrow">Progress</span>
+  <h2>How often the bot got it right</h2>
+  <p>"No hard errors" means no wrong price, wrong bedrooms, rent/sale mix-up, invented listing, save without a yes, false "saved", give-up or privacy leak. "No issues at all" also requires the grader to find nothing to criticise, including tone and clarity. Conversations broken by the test setup itself (blocked emails, rate limits) are left out.</p>
+  <div class="card">
+    <div class="legend" aria-hidden="true">
+      <span><i class="sw" style="background:var(--series-1)"></i>No hard errors</span>
+      <span><i class="sw" style="background:var(--series-2)"></i>No issues at all (incl. grader)</span>
+    </div>
+    <div class="chart" id="chart-rounds" role="img" aria-label="Pass rate by round: no hard errors 58, 94, 89, 88 percent; no issues at all 46, 81, 78, 72 percent."></div>
+    <p class="note">Round 1 ran before any fixes. Round 3 added a copy of Equity's real data and hit the Anthropic rate limit, from three tests running at once. Round 4 only tested the hardest request types, so it isn't directly comparable.</p>
+    <button class="toggle" type="button" id="t-rounds" aria-expanded="false" aria-controls="tbl-rounds">Show as table</button>
+    <div class="tbl" id="tbl-rounds" hidden>
+      <table>
+        <thead><tr><th>Round</th><th>Conversations</th><th>Bot replies</th><th>No hard errors</th><th>No issues at all</th><th>Problems / 100 replies</th><th>Spend</th></tr></thead>
+        <tbody>
+          <tr><td>1 · before fixes</td><td class="n">164</td><td class="n">669</td><td class="n">58%</td><td class="n">46%</td><td class="n">12.7</td><td class="n">$0.58</td></tr>
+          <tr><td>2</td><td class="n">176</td><td class="n">444</td><td class="n">94%</td><td class="n">81%</td><td class="n">1.4</td><td class="n">$0.34</td></tr>
+          <tr><td>3 · + Equity data</td><td class="n">267</td><td class="n">713</td><td class="n">89%</td><td class="n">78%</td><td class="n">2.0</td><td class="n">$0.60</td></tr>
+          <tr><td>4 · hardest cases only</td><td class="n">108</td><td class="n">299</td><td class="n">88%</td><td class="n">72%</td><td class="n">3.7</td><td class="n">$0.26</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section>
+  <span class="eyebrow">By request</span>
+  <h2>Each kind of request, before and after</h2>
+  <p>The share of conversations with no hard errors in round 1 (grey) and in the latest round that tested it (blue). Hover a dot for the counts.</p>
+  <div class="card">
+    <div class="legend" aria-hidden="true">
+      <span><i class="sw" style="background:var(--muted-mark)"></i>Round 1</span>
+      <span><i class="sw" style="background:var(--series-1)"></i>Latest round</span>
+    </div>
+    <div class="chart" id="chart-kinds" role="img" aria-label="Pass rate by request type, round 1 versus latest round. Full numbers in the table view."></div>
+    <p class="note">Each request type ran 8–15 times per round, so a single conversation moves a bar by 7–12 points. "Correct before saving" fell because Haiku still sometimes writes "I've updated the budget" about a draft. The data itself was saved correctly every time (see "Still not perfect"). Sending to marketing and the manager team overview are left out: too few runs to measure.</p>
+    <button class="toggle" type="button" id="t-kinds" aria-expanded="false" aria-controls="tbl-kinds">Show as table</button>
+    <div class="tbl" id="tbl-kinds" hidden><table><thead><tr><th>Request</th><th>Round 1</th><th>Latest</th></tr></thead><tbody id="kinds-body"></tbody></table></div>
+  </div>
+</section>
+
+<section>
+  <span class="eyebrow">Fixed</span>
+  <h2>What was wrong and is now fixed</h2>
+  <p>All of these are live. Each has an automated test built from the real conversation that exposed it, so it can't quietly come back. The full suite grew from 1,171 to 1,198 tests.</p>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Severity</th><th>Problem</th><th>What agents saw</th><th>Fix</th></tr></thead>
+      <tbody>
+        <tr><td><span class="pill crit">Critical</span></td><td>Claude never answered: the tool definitions were rejected by Anthropic twice (format, then a 16-field limit)</td><td>Every message fell back to the old bot</td><td>Valid tool format; inputs checked in code</td></tr>
+        <tr><td><span class="pill crit">Critical</span></td><td>Reminder replies hijacked unrelated messages. Arabizi "3m" read as 3 months, "8.5m" as months, "later"/"lost" anywhere</td><td>"OK — I'll remind you about Nour Karam…" instead of an answer, and that client's reminder moved. <b>Also in the old bot Equity uses today.</b></td><td>Stricter parsing; only short replies count; Claude handles the rest</td></tr>
+        <tr><td><span class="pill crit">Critical</span></td><td>"Yes, save it" (anything more than a bare yes) never saved</td><td>Claude replied "confirmed on my side" while nothing was saved</td><td>Save and cancel tools that commit exactly what was shown</td></tr>
+        <tr><td><span class="pill high">High</span></td><td>Listing descriptions told to mention "mountain views, coastal access"</td><td>Descriptions claimed views and sea access the property didn't have. <b>Same generator as the web app.</b></td><td>Facts-only instructions; agents can ask for rewrites</td></tr>
+        <tr><td><span class="pill high">High</span></td><td>Viewing bookings re-read from free text</td><td>"Tomorrow 4pm" drafted for today, with a blank time</td><td>Booking tool with exact date and time (Beirut time zone)</td></tr>
+        <tr><td><span class="pill high">High</span></td><td>Deal pipeline moves didn't work over WhatsApp</td><td>Asked to move a deal, the bot showed the pipeline list</td><td>Move-deal tool, including won/lost</td></tr>
+        <tr><td><span class="pill high">High</span></td><td>Numbers sent as text ("1,000") ignored</td><td>A budget or price could be dropped from a change</td><td>Read digits in any format</td></tr>
+        <tr><td><span class="pill high">High</span></td><td>Search results had no bedroom counts</td><td>A 1-bed and a 4-bed listed as "2-bedroom rentals"</td><td>Each result shows "N bed"; no misleading match %</td></tr>
+        <tr><td><span class="pill med">Medium</span></td><td>Clients couldn't be found by phone</td><td>"Searching by her phone number didn't find her"</td><td>Phone search in any format (70 123 456, +961…)</td></tr>
+        <tr><td><span class="pill med">Medium</span></td><td>Same-named clients couldn't be told apart</td><td>Two Rita Haddads, two Joe Khourys in Achrafieh: stuck</td><td>Pick by area (incl. "Achrafieh/Gemmayzeh") or by number "#41"</td></tr>
+        <tr><td><span class="pill med">Medium</span></td><td>Names only matched one spelling</td><td>"Yousef Haddad" didn't find "Youssef Haddad"</td><td>Spelling-tolerant name search</td></tr>
+        <tr><td><span class="pill med">Medium</span></td><td>Arabic names searched five ways, then "I got stuck"</td><td>Long silence, then a give-up message</td><td>Guidance on Latin spellings; more steps per message</td></tr>
+        <tr><td><span class="pill med">Medium</span></td><td>Descriptions timed out after 12 seconds</td><td>"The description tool timed out"</td><td>30 seconds (the 12s limit was from Twilio days)</td></tr>
+        <tr><td><span class="pill med">Medium</span></td><td>Missing setting defaulted to Opus (40× Haiku's price)</td><td>No visible effect; cost risk</td><td>Haiku is the default</td></tr>
+        <tr><td><span class="pill low">Low</span></td><td>Client status vs pipeline stage confused</td><td>"Move to viewing" changed the status field</td><td>Clear guidance plus the move-deal tool</td></tr>
+        <tr><td><span class="pill low">Low</span></td><td>Another agent's client looked like a broken record</td><td>"Client #23" alone; the bot kept trying to open it</td><td>Labelled "(another agent's client)"</td></tr>
+        <tr><td><span class="pill low">Low</span></td><td>"Saved — #23 Antelias Apartment" after renaming it</td><td>Looked like the rename failed</td><td>Shows the new name</td></tr>
+        <tr><td><span class="pill low">Low</span></td><td>Failed marketing email said "The save failed"</td><td>Wrong explanation</td><td>"The email didn't go out"</td></tr>
+        <tr><td><span class="pill low">Low</span></td><td>"No, cancel that, I meant 1,200,000" needed two messages</td><td>"Send it again in your next message"</td><td>Cancel and redo in one message</td></tr>
+        <tr><td><span class="pill low">Low</span></td><td>Bot retracted correct statements ("I was wrong earlier")</td><td>Confusing self-corrections</td><td>Guidance: don't retract without evidence</td></tr>
+        <tr><td><span class="pill low">Low</span></td><td>Rate-limit errors under load</td><td>"Something went wrong" once</td><td>Extra automatic retry</td></tr>
+        <tr><td><span class="pill low">Low</span></td><td>"I've set up the viewing" for a draft</td><td>Sounded saved</td><td>Guidance: say "I've prepared"</td></tr>
+        <tr><td><span class="pill low">Low</span></td><td>"Rita in Achrafieh/Gemmayzeh" didn't parse</td><td>The bot's own suggested wording failed</td><td>Area lists with "," or "/"</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <span class="eyebrow">Before / after</span>
+  <h2>Four real conversations</h2>
+  <div class="examples">
+    <div class="ex">
+      <h3>A rental search, hijacked by a reminder</h3>
+      <div class="chat">
+        <div class="bubble before"><b>Before</b>Agent: "hi, shu fi 3andkon listings lal 1-bedroom apartments for rent bl mansourieh? 3m dawwar…"<br>Bot: "OK — I'll remind you about Nour Karam on 2027-01-22."</div>
+        <div class="bubble after"><b>After</b>The same message reaches Claude, which searches the listings. "3m" (Arabizi for "I'm") is no longer read as 3 months, and nothing happens to Nour Karam's reminder.</div>
+      </div>
+    </div>
+    <div class="ex">
+      <h3>Approving in your own words</h3>
+      <div class="chat">
+        <div class="bubble before"><b>Before</b>Agent: "Yes, that's correct, please save it."<br>Bot: "The 3-bedroom update is confirmed on my side, and it should show as saved." (Nothing was saved.)</div>
+        <div class="bubble after"><b>After</b>Agent: "YES, 3 mzbout. Chkrn!"<br>Bot: "Saved — Fadi Rizk added as a client."</div>
+      </div>
+    </div>
+    <div class="ex">
+      <h3>Booking a viewing</h3>
+      <div class="chat">
+        <div class="bubble before"><b>Before</b>"Viewing for listing #44 … at , requested by Rami Saad." with "Saturday 24 October at 4:00 PM", which was today, when the agent asked for tomorrow. The bot told the agent not to confirm it.</div>
+        <div class="bubble after"><b>After</b>"I've prepared the viewing for Thursday 29 October at 6:00 PM." Then on yes: "Saved — 'Viewing with Bassam Bou Assi — #12' is on your calendar."</div>
+      </div>
+    </div>
+    <div class="ex">
+      <h3>A listing description</h3>
+      <div class="chat">
+        <div class="bubble before"><b>Before</b>A 45 m² studio in Hamra: "…quick access to the Mediterranean coast and distant mountain views…". Neither is in the listing.</div>
+        <div class="bubble after"><b>After</b>Only what's on the record: size, bedrooms, area and price. If the agent asks, "drop the neighbourhood line" or "no call to action" now reaches the writer.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <span class="eyebrow">Your list</span>
+  <h2>What you need to do</h2>
+  <div class="todo">
+    <div class="task"><span class="pill crit">Now</span><h3>Replace the Anthropic key from your screenshot</h3><p>It was visible in a terminal screenshot in our chat. Create a new key in the Anthropic console, put it in Vercel (<code>ANTHROPIC_API_KEY</code>) and in <code>.env.local</code>, redeploy, then delete the old key. Skip this if you already did it.</p></div>
+    <div class="task"><span class="pill high">When ready</span><h3>Turn the new bot on for Equity</h3><p>In Vercel, set <code>WHATSAPP_AGENT</code> to <code>1,7</code>, then Redeploy. Haiku is already the default model. Until then, Equity stays on the old bot. The reminder-hijack fix already protects them there.</p></div>
+    <div class="task"><span class="pill high">This week</span><h3>Keep Anthropic credit topped up</h3><p>About $2.30 of your $5 went to testing today: $1.77 on the four rounds, plus $0.55 on early smoke tests, which accidentally ran on Opus. The live bot costs roughly $0.002–0.003 per message. Turn on auto-reload in the Anthropic console. If credit runs out, the bot quietly falls back to the old one.</p></div>
+    <div class="task"><span class="pill med">Review</span><h3>Check Equity's older listing descriptions</h3><p>40 of Equity's 101 saved descriptions mention views, sea or mountains. They were written with the old instructions. 39 of those listings do have a view recorded, so most are probably right, but some may claim the wrong view or add extras. Skim them, or regenerate any that look off.</p></div>
+    <div class="task"><span class="pill med">Data</span><h3>Merge duplicate client records</h3><p>For example, two "Joe Khoury" records in Achrafieh and two "Rita Haddad". The bot can now pick one by number ("#41"), but duplicates still confuse agents and split their history.</p></div>
+    <div class="task"><span class="pill low">Decide</span><h3>Should managers be asked "which agent?" every time?</h3><p>Today a manager adding a client by WhatsApp must name the agent it goes to. The alternative: assign it to the manager unless they say otherwise. Tell me which you prefer.</p></div>
+    <div class="task"><span class="pill low">Decide</span><h3>Two features agents asked for in the tests</h3><p>Adding a free-text note to a client ("Roy is interested in #45"), and asking one client's pipeline stage. Both need a small design decision on where the note lives. Say the word and I'll build them.</p></div>
+    <div class="task"><span class="pill low">Ask me</span><h3>Move Grok off the retired model</h3><p>Descriptions and the old bot still call <code>grok-3</code>, which xAI retired in May 2026. It still works through a redirect, but could stop without notice. A one-line change, ready when you say.</p></div>
+  </div>
+</section>
+
+<section>
+  <span class="eyebrow">Honest limits</span>
+  <h2>Still not perfect</h2>
+  <ul class="plain">
+    <li><b>Wording on corrections.</b> When an agent corrects a draft, Haiku sometimes writes "I've updated the budget to $1,300" before the confirmation card. The card right after it says "Reply YES to save", and nothing saves without that yes. In every one of these cases the right value was saved after the yes.</li>
+    <li><b>Small invented details, rarely.</b> In a few long Arabic replies Haiku added a wrong detail, once placing a listing in Sidon instead of Sin el Fil. It happened in about 2 of every 100 replies in the later rounds. Prices, bedrooms and rent/sale are now checked against the data and were almost always right.</li>
+    <li><b>Marketing emails were tested up to the send.</b> The simulator blocks all email, so the request, confirmation and yes were tested, but not delivery. Your own live test earlier showed delivery works.</li>
+    <li><b>The grader is Haiku too.</b> It is strict and sometimes wrong, so every flag it raised was read by hand before counting anything as a bug.</li>
+    <li><b>Rate limit.</b> Your Anthropic account allows 500,000 input tokens a minute. Only parallel testing hit it. Live traffic uses a tiny fraction.</li>
+  </ul>
+</section>
+
+<section>
+  <span class="eyebrow">Method</span>
+  <h2>How the testing worked</h2>
+  <ul class="plain">
+    <li>A second Claude played a Lebanese real-estate agent with one goal, such as "raise Rita's budget to 1000" or "find 2-bed rentals in Achrafieh". It wrote in one of seven styles: clear English, terse, Arabizi, Arabic, typos, chatty, or forwarded notes.</li>
+    <li>Its messages went through the exact code production runs, against an in-memory copy of the agency. The simulator removes every credential except the AI providers' and blocks all other network access, so nothing could be written or sent.</li>
+    <li>After each conversation the copy was checked: the right record, the right value, and saved only after approval. Every reply was checked for invented listings, wrong prices, bedrooms or rent/sale, "saved" claims without a save, give-ups and privacy leaks, then graded.</li>
+    <li>The simulator lives in the project (<code>scripts/agent-sim.mjs</code>) and can be rerun after any change.</li>
+  </ul>
+</section>
+
+</div>
+<div id="tip" hidden></div>
+
+<script>
+(function () {
+  const tip = document.getElementById('tip')
+  function showTip(e, html) { tip.innerHTML = html; tip.hidden = false; moveTip(e) }
+  function moveTip(e) {
+    const x = Math.min(e.clientX + 14, window.innerWidth - tip.offsetWidth - 8)
+    const y = Math.max(8, e.clientY - tip.offsetHeight - 12)
+    tip.style.left = x + 'px'; tip.style.top = y + 'px'
+  }
+  function hideTip() { tip.hidden = true }
+  const NS = 'http://www.w3.org/2000/svg'
+  const el = (name, attrs, text) => { const n = document.createElementNS(NS, name); for (const k in attrs) n.setAttribute(k, attrs[k]); if (text != null) n.textContent = text; return n }
+  const hover = (node, html) => { node.addEventListener('mousemove', e => showTip(e, html)); node.addEventListener('mouseleave', hideTip); node.style.cursor = 'default' }
+
+  // ── Chart 1: pass rate by round, two series, grouped bars ──
+  const rounds = [
+    { label: 'Round 1', sub: 'before fixes', a: 58, b: 46, n: 164 },
+    { label: 'Round 2', sub: '', a: 94, b: 81, n: 176 },
+    { label: 'Round 3', sub: '+ Equity data', a: 89, b: 78, n: 267 },
+    { label: 'Round 4', sub: 'hardest cases', a: 88, b: 72, n: 108 },
+  ]
+  {
+    const W = 760, H = 300, L = 44, R = 12, T = 18, B = 54
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, 'aria-hidden': 'true' })
+    const y = v => T + (H - T - B) * (1 - v / 100)
+    for (const g of [0, 25, 50, 75, 100]) {
+      svg.append(el('line', { x1: L, x2: W - R, y1: y(g), y2: y(g), class: g ? 'grid' : 'axis' }))
+      svg.append(el('text', { x: L - 8, y: y(g) + 4, 'text-anchor': 'end' }, g + '%'))
+    }
+    const band = (W - L - R) / rounds.length, bw = Math.min(46, band * 0.28), gap = 2
+    rounds.forEach((r, i) => {
+      const cx = L + band * i + band / 2
+      ;[['a', 'var(--series-1)', 'No hard errors'], ['b', 'var(--series-2)', 'No issues at all']].forEach(([k, color, name], j) => {
+        const x = j === 0 ? cx - bw - gap / 2 : cx + gap / 2
+        const v = r[k], top = y(v), h = y(0) - top
+        const g = el('g', { class: 'bar' })
+        g.append(el('path', { d: `M${x},${y(0)} V${top + 4} Q${x},${top} ${x + 4},${top} H${x + bw - 4} Q${x + bw},${top} ${x + bw},${top + 4} V${y(0)} Z`, fill: color }))
+        g.append(el('text', { x: x + bw / 2, y: top - 6, 'text-anchor': 'middle', class: 'val' }, v + '%'))
+        g.append(el('rect', { x: x - 4, y: T, width: bw + 8, height: H - T - B, fill: 'transparent' }))
+        hover(g, `<b>${r.label}</b><br>${name}: ${v}%<br>${r.n} conversations`)
+        svg.append(g)
+      })
+      svg.append(el('text', { x: cx, y: H - B + 20, 'text-anchor': 'middle', style: 'font-weight:600;fill:var(--ink)' }, r.label))
+      if (r.sub) svg.append(el('text', { x: cx, y: H - B + 36, 'text-anchor': 'middle' }, r.sub))
+    })
+    document.getElementById('chart-rounds').append(svg)
+  }
+
+  // ── Chart 2: per request type, round 1 vs latest (dumbbell) ──
+  const kinds = [
+    ['Change a listing price', 11, 9, 100, 14],
+    ['Book a viewing', 25, 8, 90, 10],
+    ['Write a listing description', 25, 8, 90, 10],
+    ['Move a deal in the pipeline', 33, 9, 100, 14],
+    ['Listing details', 38, 8, 100, 14],
+    ['Match a client to listings', 50, 8, 100, 9],
+    ['Change client bedrooms', 56, 9, 93, 15],
+    ['Look up a client', 63, 8, 100, 10],
+    ['Search listings', 63, 8, 90, 10],
+    ['Greetings & off-topic', 63, 8, 89, 9],
+    ['Add a new client', 67, 9, 86, 14],
+    ['Add a new listing', 67, 9, 100, 10],
+    ['Correct before saving', 67, 9, 40, 10],
+    ["Refuse to edit another agent's client", 71, 7, 100, 12],
+    ['Find a client by phone', 75, 8, 89, 9],
+    ['Mark a listing sold / rented', 78, 9, 100, 14],
+    ['Change a client budget', 78, 9, 90, 10],
+    ['Change a client status', 89, 9, 87, 15],
+    ['Cancel a change', 100, 9, 90, 10],
+  ]
+  {
+    const W = 760, row = 26, T = 26, B = 10, L = 250, R = 50
+    const H = T + kinds.length * row + B
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, 'aria-hidden': 'true' })
+    const x = v => L + (W - L - R) * v / 100
+    for (const g of [0, 25, 50, 75, 100]) {
+      svg.append(el('line', { x1: x(g), x2: x(g), y1: T - 6, y2: H - B, class: g ? 'grid' : 'axis' }))
+      svg.append(el('text', { x: x(g), y: T - 12, 'text-anchor': 'middle' }, g + '%'))
+    }
+    kinds.forEach(([name, a, an, b, bn], i) => {
+      const cy = T + i * row + row / 2
+      const g = el('g')
+      g.append(el('rect', { x: 0, y: cy - row / 2, width: W, height: row, fill: 'transparent' }))
+      g.append(el('text', { x: L - 12, y: cy + 4, 'text-anchor': 'end', style: 'fill:var(--ink)' }, name))
+      g.append(el('line', { x1: x(a), x2: x(b), y1: cy, y2: cy, stroke: b >= a ? 'var(--series-1)' : 'var(--series-2)', 'stroke-width': 2, 'stroke-opacity': 0.5 }))
+      g.append(el('circle', { cx: x(a), cy, r: 5, fill: 'var(--muted-mark)', stroke: 'var(--surface)', 'stroke-width': 2 }))
+      g.append(el('circle', { cx: x(b), cy, r: 6, fill: 'var(--series-1)', stroke: 'var(--surface)', 'stroke-width': 2 }))
+      g.append(el('text', { x: x(Math.max(a, b)) + 12, y: cy + 4, class: 'val' }, b + '%'))
+      hover(g, `<b>${name}</b><br>Round 1: ${a}% of ${an}<br>Latest: ${b}% of ${bn}`)
+      svg.append(g)
+    })
+    document.getElementById('chart-kinds').append(svg)
+    document.getElementById('kinds-body').innerHTML = kinds.map(([n, a, an, b, bn]) => `<tr><td>${n}</td><td class="n">${a}% (${an})</td><td class="n">${b}% (${bn})</td></tr>`).join('')
+  }
+
+  for (const [btn, box] of [['t-rounds', 'tbl-rounds'], ['t-kinds', 'tbl-kinds']]) {
+    const b = document.getElementById(btn), t = document.getElementById(box)
+    b.addEventListener('click', () => { t.hidden = !t.hidden; b.setAttribute('aria-expanded', String(!t.hidden)); b.textContent = t.hidden ? 'Show as table' : 'Hide table' })
+  }
+})()
+</script>
