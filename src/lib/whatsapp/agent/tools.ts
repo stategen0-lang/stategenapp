@@ -611,7 +611,11 @@ export async function executeTool(ctx: ToolContext, name: string, rawInput: unkn
       const pending = await waitingChange(ctx.admin, ctx.profile.id)
       if (!pending) return { content: NOTHING_WAITING, isError: true }
       await ctx.admin.from('pending_actions').delete().eq('id', pending.id)
-      return { content: 'Cancelled — nothing was saved. The agent is shown this automatically.', confirmation: 'Cancelled — nothing was saved.' }
+      return {
+        content: 'Cancelled — nothing was saved. The agent is shown this automatically. If they also said what they want instead, prepare that now.',
+        confirmation: 'Cancelled — nothing was saved.',
+        leavesTurnOpen: true,
+      }
     }
 
     default:

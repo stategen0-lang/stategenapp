@@ -38,6 +38,12 @@ export interface ToolOutcome {
    * write — set only when a pending action was really created.
    */
   confirmation?: string
+  /**
+   * The change ended without anything new waiting (cancel_waiting_change), so
+   * the turn may still prepare one — "no, cancel that, I meant 1,200,000" is
+   * one message. Its confirmation is still shown unless a later one replaces it.
+   */
+  leavesTurnOpen?: boolean
 }
 
 export interface TurnState {
@@ -197,7 +203,7 @@ export async function runAgentTurn(turn: AgentTurn): Promise<AgentResult> {
         out = { content: `The ${use.name} tool failed unexpectedly. Nothing was changed.`, isError: true }
       }
       if (out.confirmation) {
-        state.staged = true
+        if (!out.leavesTurnOpen) state.staged = true
         confirmation = out.confirmation
       }
       toolCalls.push({ name: use.name, ok: !out.isError })

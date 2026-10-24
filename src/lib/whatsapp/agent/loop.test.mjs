@@ -273,3 +273,25 @@ test('describeError: status, API error type and message on one line', async () =
   assert.equal(describeError(new Error('fetch failed')), 'fetch failed')
   assert.equal(describeError('x'.repeat(500)).length, 200)
 })
+
+test('"no, cancel that, I meant 1,200,000": a cancel leaves the turn free to prepare the replacement', async () => {
+  const calls = [
+    { content: [{ type: 'tool_use', id: 'a', name: 'cancel_waiting_change', input: {} }, { type: 'tool_use', id: 'b', name: 'update_client', input: {} }], stop_reason: 'tool_use' },
+    { content: [{ type: 'text', text: 'Prepared the $1,200,000 version.' }], stop_reason: 'end_turn' },
+  ]
+  let i = 0
+  const states = []
+  const r = await runAgentTurn({
+    call: async () => ({ id: 'm', type: 'message', role: 'assistant', model: 'x', usage: {}, ...calls[i++] }),
+    execute: async (name, _input, state) => {
+      states.push({ name, staged: state.staged })
+      return name === 'cancel_waiting_change'
+        ? { content: 'cancelled', confirmation: 'Cancelled — nothing was saved.', leavesTurnOpen: true }
+        : { content: 'prepared', confirmation: 'About to update Karim Aoun:\n• Budget: $1,200,000' }
+    },
+    messages: [{ role: 'user', content: 'no cancel that, I meant 1,200,000' }],
+  })
+  assert.deepEqual(states, [{ name: 'cancel_waiting_change', staged: false }, { name: 'update_client', staged: false }])
+  assert.match(r.reply, /1,200,000/)
+  assert.doesNotMatch(r.reply, /Cancelled/)
+})
