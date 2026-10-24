@@ -610,6 +610,10 @@ export async function applyPendingAction(
           current_flow: 'collecting_photos', step: 'photos',
           context: { propertyId: data.id, count: 0 }, updated_at: new Date().toISOString(),
         }, { onConflict: 'profile_id' })
+        // Photos sent before the YES were kept for this moment.
+        const { attachHeldPhotos } = await import('@/lib/whatsapp/photo-handlers')
+        const attached = await attachHeldPhotos(admin, profile, Number(data.id)).catch(() => 0)
+        if (attached) return `Saved — listing #${data.id} created, with the ${attached === 1 ? 'photo' : `${attached} photos`} you sent 📸\n\nSend more, or reply "done".`
         return `Saved — listing #${data.id} created.\n\n📸 Send photos for it now (one or several), or reply "done".`
       }
       return `Saved — listing #${data?.id} created.`

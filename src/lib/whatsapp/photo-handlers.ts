@@ -8,8 +8,19 @@
 // The window used to close on ANY text, so an agent who typed "ok" or "here are
 // the pics" before sending them got "Sorry, I didn't understand that" for every
 // photo. Now small talk keeps it open, "photos for #23" (or a "#23" caption)
-// opens one for any listing they can edit, and a photo with no window gets told
-// how to attach it instead of being read as a command.
+// opens one for any listing they can edit.
+//
+// A photo with no window is placed by context, not refused (24 Oct 2026: an
+// album sent 27s after "send photos for #250" got "which listing? send them
+// again" — an empty event at the head of the album had closed the window):
+//   • the listing this conversation was just about (the last #number in the
+//     last two hours, if the agent may edit it), else the one they added most
+//     recently today → attached there, and the reply says where;
+//   • the new listing still waiting on YES → held, attached when it's saved;
+//   • no idea → held, and asked once. Naming the listing — "#250", the button,
+//     "the Achrafieh one" to the agent — attaches what was already sent.
+// Held photos are marked on their own whatsapp_logs row (one row per photo, so
+// an album's parallel webhooks never race each other).
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/whatsapp/write-handlers'
@@ -93,17 +104,97 @@ async function attach(admin: SupabaseClient, profile: Profile, propertyId: numbe
   return 'failed'
 }
 
-async function savePhoto(admin: SupabaseClient, profile: Profile, propertyId: number, mediaId: string): Promise<string> {
-  const dl = await downloadMedia(mediaId)
-  if (!dl.ok) return `Couldn't fetch that photo — please resend it, or reply "done".`
-  const up = await storePhotoBytes(admin, profile.company_id, dl.bytes)
-  if (!up.ok) return `${up.error} Try another photo, or reply "done".`
+/** Fetching from WhatsApp and storing the bytes — swapped out in tests. */
+export interface PhotoIO {
+  download: typeof downloadMedia
+  store: typeof storePhotoBytes
+}
+const REAL_IO: PhotoIO = { download: downloadMedia, store: storePhotoBytes }
 
+type Saved = { ok: true; count: number } | { ok: false; reply: string }
+
+async function storeAndAttach(admin: SupabaseClient, profile: Profile, propertyId: number, mediaId: string, io: PhotoIO): Promise<Saved> {
+  const dl = await io.download(mediaId)
+  if (!dl.ok) return { ok: false, reply: `Couldn't fetch that photo — please resend it, or reply "done".` }
+  const up = await io.store(admin, profile.company_id, dl.bytes)
+  if (!up.ok) return { ok: false, reply: `${up.error} Try another photo, or reply "done".` }
   const n = await attach(admin, profile, propertyId, up.url)
-  if (n === 'unreadable') return `#${propertyId}'s photo list couldn't be read, so I didn't change it. Add this photo on the web instead.`
-  if (n === 'failed') return `Couldn't save that photo to #${propertyId} — please resend it.`
+  if (n === 'unreadable') return { ok: false, reply: `#${propertyId}'s photo list couldn't be read, so I didn't change it. Add this photo on the web instead.` }
+  if (n === 'failed') return { ok: false, reply: `Couldn't save that photo to #${propertyId} — please resend it.` }
+  return { ok: true, count: n }
+}
+
+async function savePhoto(admin: SupabaseClient, profile: Profile, propertyId: number, mediaId: string, io: PhotoIO, note = ''): Promise<string> {
+  const saved = await storeAndAttach(admin, profile, propertyId, mediaId, io)
+  if (!saved.ok) return saved.reply
   await openWindow(admin, profile, propertyId)   // keep the window fresh
-  return `📸 Photo ${n} saved to #${propertyId}. Send more, or reply "done".`
+  return `📸 Photo ${saved.count} saved to #${propertyId}${note}. Send more, or reply "done".`
+}
+
+// ── Held photos ──────────────────────────────────────────────────────────────
+
+const HOLD_MS = 2 * 3600_000
+const held = (mediaId: string) => `📷 photo ${mediaId} — waiting for a listing`
+const HELD_PATTERN = '📷 photo % — waiting for a listing'
+
+/** Mark this photo's own log row as waiting for a listing. */
+async function holdPhoto(admin: SupabaseClient, inbound: InboundMessage) {
+  if (!inbound.image || !inbound.messageId) return
+  await admin.from('whatsapp_logs').update({ message: held(inbound.image.id) }).eq('wa_message_id', inbound.messageId)
+}
+
+/**
+ * Attach every photo this agent sent in the last two hours that is still
+ * waiting for a listing. Returns how many were attached.
+ */
+export async function attachHeldPhotos(admin: SupabaseClient, profile: Profile, propertyId: number, io: PhotoIO = REAL_IO): Promise<number> {
+  const { data } = await admin
+    .from('whatsapp_logs').select('id, message, created_at')
+    .eq('profile_id', profile.id).eq('direction', 'inbound')
+    .gt('created_at', new Date(Date.now() - HOLD_MS).toISOString())
+    .ilike('message', HELD_PATTERN)
+    .order('created_at', { ascending: true })
+    .limit(30)
+  let attached = 0
+  for (const row of (data ?? []) as Row[]) {
+    const mediaId = String(row.message).match(/^📷 photo (\S+) — waiting/)?.[1]
+    if (!mediaId) continue
+    const saved = await storeAndAttach(admin, profile, propertyId, mediaId, io)
+    await admin.from('whatsapp_logs').update({
+      message: saved.ok ? `📷 photo ${mediaId} — attached to #${propertyId}` : `📷 photo ${mediaId} — couldn't be attached`,
+    }).eq('id', row.id)
+    if (saved.ok) attached++
+  }
+  return attached
+}
+
+/**
+ * The listing this conversation is about, for a photo sent with no window: the
+ * newest #number in the last two hours of messages that the agent may edit,
+ * else the editable listing they added most recently today.
+ */
+async function contextListing(admin: SupabaseClient, profile: Profile): Promise<Row | null> {
+  const { data: logs } = await admin
+    .from('whatsapp_logs').select('message, created_at')
+    .eq('profile_id', profile.id)
+    .gt('created_at', new Date(Date.now() - HOLD_MS).toISOString())
+    .order('created_at', { ascending: false })
+    .limit(30)
+  for (const l of (logs ?? []) as Row[]) {
+    // A message about one listing ("Saved — listing #250 created", "update
+    // #45"). A search result names several — that's no answer, keep looking.
+    const ids = [...new Set([...String(l.message ?? '').matchAll(/#(\d{1,7})\b/g)].map(m => Number(m[1])))]
+    if (ids.length !== 1) continue
+    const listing = await editableListing(admin, profile, ids[0])
+    if (typeof listing === 'object') return listing
+  }
+  if (!profile.agent_code) return null
+  const { data: recent } = await admin
+    .from('Properties').select('id, Title, Amenities, Photos, created_at')
+    .eq('company_id', profile.company_id)
+    .gt('created_at', new Date(Date.now() - 24 * 3600_000).toISOString())
+    .order('id', { ascending: false }).limit(20)
+  return ((recent ?? []) as Row[]).find(r => agentOf(r) === profile.agent_code) ?? null
 }
 
 /**
@@ -112,13 +203,22 @@ async function savePhoto(admin: SupabaseClient, profile: Profile, propertyId: nu
  * to claim the (unique per agent) conversation_state row answers; the rest stay
  * silent.
  */
-async function strayPhoto(admin: SupabaseClient, profile: Profile): Promise<BotReply> {
-  // Photos sent while the new listing is still waiting on YES.
+async function strayPhoto(admin: SupabaseClient, profile: Profile, inbound: InboundMessage, io: PhotoIO): Promise<BotReply> {
+  // Photos sent while the new listing is still waiting on YES: keep them, and
+  // they're attached the moment it's saved (applyPendingAction).
   const { data: pending } = await admin
     .from('pending_actions').select('action_type')
     .eq('profile_id', profile.id).gt('expires_at', new Date().toISOString())
     .order('created_at', { ascending: false }).limit(1).maybeSingle()
   const waitingOnYes = (pending as Row | null)?.action_type === 'create_property'
+
+  // The listing the conversation is about: put them there, and say so.
+  if (!waitingOnYes) {
+    const listing = await contextListing(admin, profile)
+    if (listing) return savePhoto(admin, profile, Number(listing.id), inbound.image!.id, io, ` ("${listing.Title}" — the listing we were just on; tell me if they're for another one)`)
+  }
+
+  await holdPhoto(admin, inbound)
 
   const claim = await admin.from('conversation_state').insert({
     company_id: profile.company_id, profile_id: profile.id,
@@ -133,7 +233,7 @@ async function strayPhoto(admin: SupabaseClient, profile: Profile): Promise<BotR
   }
 
   if (waitingOnYes) {
-    return 'Reply YES to save the listing first — then send the photos and I\'ll attach them to it.'
+    return 'Got the photos 📸 — reply YES to save the listing and I\'ll attach them to it.'
   }
 
   // Offer their latest listing as a one-tap target.
@@ -141,23 +241,35 @@ async function strayPhoto(admin: SupabaseClient, profile: Profile): Promise<BotR
     .from('Properties').select('id, Amenities')
     .eq('company_id', profile.company_id).order('id', { ascending: false }).limit(50)
   const latest = ((rows ?? []) as Row[]).find(r => canEditProperty(toSession(profile), agentOf(r)))
-  const text = 'Which listing are these photos for? Send "photos for #<number>", then send the photos again.\n\nTip: a photo captioned with the listing number (e.g. "#23") is attached straight away.'
+  const text = 'Got the photos 📸 Which listing are they for? Reply with its number (e.g. "#23") and I\'ll attach them — no need to send them again.'
   if (!latest) return text
   return { text, buttons: [{ id: `photos_${latest.id}`, title: `Photos for #${latest.id}` }] }
 }
 
-/** Open the photo window for a listing the agent may edit. */
-async function startWindow(admin: SupabaseClient, profile: Profile, id: number): Promise<string> {
+/** The agent's attach_photos tool: the listing named in words, held photos attached. */
+export function photosFor(admin: SupabaseClient, profile: Profile, id: number, io: PhotoIO = REAL_IO): Promise<string> {
+  return startWindow(admin, profile, id, io)
+}
+
+/**
+ * Open the photo window for a listing the agent may edit — attaching any
+ * photos they already sent that were waiting for a listing.
+ */
+async function startWindow(admin: SupabaseClient, profile: Profile, id: number, io: PhotoIO): Promise<string> {
   const listing = await editableListing(admin, profile, id)
   if (listing === 'missing') return `There's no listing #${id}. Check the number and try again.`
   if (listing === 'forbidden') return `#${id} belongs to another agent, so I can't add photos to it.`
   await openWindow(admin, profile, id)
+  const attached = await attachHeldPhotos(admin, profile, id, io)
+  if (attached) {
+    return `📸 Attached the ${attached === 1 ? 'photo' : `${attached} photos`} you sent to #${id} "${listing.Title}". Send more, or reply "done".`
+  }
   const have = photoCount(listing.Photos)
   return `📸 Send the photos for #${id} "${listing.Title}" now (one or several)${have ? ` — it has ${have} already` : ''}. Reply "done" when finished.`
 }
 
 export async function continuePhotoCollection(
-  admin: SupabaseClient, profile: Profile, inbound: InboundMessage, origin: string,
+  admin: SupabaseClient, profile: Profile, inbound: InboundMessage, origin: string, io: PhotoIO = REAL_IO,
 ): Promise<BotReply | null> {
   const { data: state } = await admin
     .from('conversation_state').select('current_flow, context, updated_at').eq('profile_id', profile.id).maybeSingle()
@@ -181,7 +293,7 @@ export async function continuePhotoCollection(
   if (inbound.image) {
     const captioned = parseCaptionTarget(inbound.image.caption, { allowBareNumber: !windowId })
     const target = captioned ?? windowId ?? focusId
-    if (!target) return strayPhoto(admin, profile)
+    if (!target) return strayPhoto(admin, profile, inbound, io)
     // Named in the caption, or the opened listing (which may be another agent's —
     // anyone can find a listing by its title): check they may edit it.
     if (target !== windowId) {
@@ -189,7 +301,7 @@ export async function continuePhotoCollection(
       if (listing === 'missing') return `There's no listing #${target}. Check the number and resend the photo.`
       if (listing === 'forbidden') return `#${target} belongs to another agent, so I can't add photos to it.`
     }
-    return savePhoto(admin, profile, target, inbound.image.id)
+    return savePhoto(admin, profile, target, inbound.image.id, io)
   }
 
   // ── "photos" with a listing open: open its photo window ───────────────────
@@ -197,16 +309,29 @@ export async function continuePhotoCollection(
     if (!focusId) {
       return 'Which listing are the photos for? Send "photos for #23", or find it first — e.g. "find the listing of Khoury".'
     }
-    return startWindow(admin, profile, focusId)
+    return startWindow(admin, profile, focusId, io)
   }
 
   // ── "photos for #23": open (or switch) the window ─────────────────────────
   const target = parsePhotoTarget(text)
-  if (target) return startWindow(admin, profile, target)
+  if (target) return startWindow(admin, profile, target, io)
 
-  // A leftover "which listing?" marker: drop it and route this message normally.
-  if (flow === HELP_FLOW) { await clear(); return null }
+  // ── Answering "which listing are these for?" with just "#250" / "250" ─────
+  if (flow === HELP_FLOW) {
+    const named = text.match(/^\s*#?\s*(\d{1,7})\s*$/)
+    if (named) return startWindow(admin, profile, Number(named[1]), io)
+    // Anything else: drop the marker and let the message route normally — the
+    // agent can name the listing in words ("the Achrafieh one"), and the
+    // agent's attach_photos tool attaches what's waiting.
+    await clear()
+    return null
+  }
   if (!open || !windowId) return null
+
+  // Nothing to read — the empty event WhatsApp sends at the head of an album,
+  // a reaction. It used to fall through to "a real request: end the window",
+  // and the album's photos arrived to a closed window.
+  if (!text && !inbound.image) return NO_REPLY
 
   // ── Inside an open window ─────────────────────────────────────────────────
   if (isPhotoDone(text)) {

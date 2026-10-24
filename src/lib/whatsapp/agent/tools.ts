@@ -25,6 +25,7 @@ import { stageEvent, whenAt } from '../calendar-handlers.ts'
 import { stageDealMove } from '../pipeline-handlers.ts'
 import { requestMarketing } from '../marketing-handlers.ts'
 import { startOfZonedDay } from '../timezone.ts'
+import { photosFor } from '../photo-handlers.ts'
 import type { EventKind } from '@/lib/calendar'
 import { stageNewRecord } from '../flow-handlers.ts'
 import { handleQueryClient, handleQueryProperty } from '../handlers.ts'
@@ -239,6 +240,11 @@ export const TOOLS: Tool[] = [
   {
     name: 'send_to_marketing',
     description: `Email a listing, with its photos, to the agency's marketing team. ${ONE_CHANGE_NOTE}`,
+    input_schema: object({ listing_id: must('integer', 'The listing number.') }),
+  },
+  {
+    name: 'attach_photos',
+    description: 'Attach the photos the agent sent that are waiting for a listing (the conversation shows "📷 photo … — waiting for a listing" and you asked which listing) to the one they mean. Work out the listing from what they say — "the Achrafieh one I just added", "Khoury\'s flat" — with find_listings if needed. Also opens the listing for more photos. Saved straight away, like photos sent for a listing.',
     input_schema: object({ listing_id: must('integer', 'The listing number.') }),
   },
   {
@@ -585,6 +591,12 @@ export async function executeTool(ctx: ToolContext, name: string, rawInput: unkn
       const propertyId = num(input, 'listing_id')
       if (!propertyId) return { content: 'Which listing? Give its number.', isError: true }
       return staging(ctx, async () => replyText(await requestMarketing(ctx.admin, ctx.profile, propertyId, ctx.origin)))
+    }
+
+    case 'attach_photos': {
+      const propertyId = num(input, 'listing_id')
+      if (!propertyId) return { content: 'Which listing? Give its number.', isError: true }
+      return { content: await photosFor(ctx.admin, ctx.profile, propertyId) }
     }
 
     // The same handler a bare "done" / "snooze 3d" reaches in the router —
