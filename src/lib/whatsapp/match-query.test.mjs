@@ -216,6 +216,11 @@ test('every match carries a link the agent can tap', () => {
   assert.match(lines[0], /https:\/\/stategen\.app\/properties\?open=153/)
 })
 
+test('each line says how many bedrooms, so nothing has to be guessed', () => {
+  assert.match(listingLines(listing(9, { beds: 2, price: 1 }), ''), / · 2 bed/)
+  assert.equal(listingLines(listing(9, { beds: 0, price: 1 }), '').includes('bed'), false)
+})
+
 test('no origin configured still produces a usable line', () => {
   const line = listingLines(listing(7, { price: 250000 }), '')
   assert.match(line, /#7/)

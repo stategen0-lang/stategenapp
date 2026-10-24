@@ -212,6 +212,9 @@ export function listingLines(p: Property, origin: string, scorePct?: number): st
   const head = [
     `• #${p.id} ${p.title} — ${listingPrice(p)}`,
     where || null,
+    // Without it the agent model, asked for 2 bedrooms, called a 1- and a
+    // 4-bedroom listing "2-bedroom rentals" — it can't check what it isn't shown.
+    p.beds > 0 ? `${p.beds} bed` : null,
     scorePct != null ? `${scorePct}% match` : null,
   ].filter(Boolean).join(' · ')
   return origin ? `${head}\n  ${origin}/properties?open=${p.id}` : head
