@@ -1,12 +1,14 @@
 // The conversational WhatsApp agent — the entry point the webhook calls.
 //
-// Switched on per agency with WHATSAPP_AGENT:
-//   unset / ""   → off everywhere (the existing router answers)
-//   "all"        → on for every agency
-//   "1,7"        → on for those company ids only
+// On for every agency by default (since 24 Oct 2026, after 762 simulated
+// conversations — scripts/agent-sim.mjs). WHATSAPP_AGENT narrows or stops it:
+//   unset / "" / "all" → on for every agency, new ones included
+//   "1,7"              → on for those company ids only
+//   "off"              → off everywhere: the kill switch (the old router answers)
 //
-// It also needs a Claude credential. Turned on without one, it stays off rather
-// than leaving agents with no replies — the old router keeps answering.
+// It also needs a Claude credential. Without one it stays off rather than
+// leaving agents with no replies — the old router keeps answering, as it does
+// for a message Claude can't be reached for.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type Anthropic from '@anthropic-ai/sdk'
@@ -21,8 +23,8 @@ import { createCaller, claudeConfigured, agentModel, type AgentModel } from './c
 /** Whether WHATSAPP_AGENT names this agency. Pure, for testing. */
 export function agentEnabledFor(companyId: number, setting: string | undefined = process.env.WHATSAPP_AGENT): boolean {
   const s = String(setting ?? '').trim().toLowerCase()
-  if (!s || s === 'off' || s === 'false' || s === '0') return false
-  if (s === 'all' || s === 'on' || s === 'true') return true
+  if (s === 'off' || s === 'false' || s === '0') return false
+  if (!s || s === 'all' || s === 'on' || s === 'true') return true
   return s.split(',').map(x => x.trim()).filter(Boolean).includes(String(companyId))
 }
 

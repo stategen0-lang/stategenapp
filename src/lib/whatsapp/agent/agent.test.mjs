@@ -186,9 +186,12 @@ test('a staged change then "yes" is not the agent\'s job — but the card always
 // ── The switch ──────────────────────────────────────────────────────────────
 
 test('WHATSAPP_AGENT switches agencies on by id, all, or not at all', () => {
-  assert.equal(agentEnabledFor(7, undefined), false)
-  assert.equal(agentEnabledFor(7, ''), false)
+  // On for everyone unless narrowed or switched off.
+  assert.equal(agentEnabledFor(7, undefined), true)
+  assert.equal(agentEnabledFor(7, ''), true)
+  assert.equal(agentEnabledFor(42, undefined), true, 'a new agency gets it too')
   assert.equal(agentEnabledFor(7, 'off'), false)
+  assert.equal(agentEnabledFor(7, 'OFF'), false)
   assert.equal(agentEnabledFor(7, 'all'), true)
   assert.equal(agentEnabledFor(7, '1,7'), true)
   assert.equal(agentEnabledFor(7, ' 1 , 7 '), true)
