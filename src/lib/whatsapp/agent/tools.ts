@@ -41,13 +41,15 @@ export interface ToolContext {
 }
 
 // ── Schemas ──────────────────────────────────────────────────────────────────
-// Strict tool use guarantees the model's arguments match the schema, which is
-// what keeps a garbled call from reaching a write. Strict mode requires
-// additionalProperties: false on every object and has no numeric or length
-// constraints; every property is listed as required and made nullable, which
-// is valid however optional fields are treated. The test suite checks every
-// schema against these rules, since a schema the API rejects is a 400 on every
-// message.
+// NOT strict tool use: strict mode allows only 16 nullable/union fields across
+// all tools in a request, and these have ~70 — the API 400s every message.
+// The guarantee strict mode would give is kept in code instead: every value is
+// read by a type-checking helper below (a wrong type is dropped, never
+// trusted), every choice is snapped to one of its listed values by conform(),
+// and nothing a tool stages is saved until the agent says yes. Fields that may
+// be null are optional; only the must() ones are required. The test suite
+// checks every schema against the API's rules, since a schema the API rejects
+// is a 400 on every message.
 
 const nullable = (type: string, description: string, extra: Schema = {}): Schema =>
   ({ type: [type, 'null'], description, ...extra })
@@ -61,8 +63,13 @@ const list = (d: string): Schema => ({ type: ['array', 'null'], items: { type: '
 const choice = (values: string[], d: string): Schema => ({ anyOf: [{ type: 'string', enum: values }, { type: 'null' }], description: d })
 const must = (type: string, d: string): Schema => ({ type, description: d })
 
+const isNullable = (p: Schema): boolean =>
+  [].concat((p.type ?? []) as never).includes('null' as never)
+  || ((p.anyOf ?? []) as Schema[]).some(o => o.type === 'null')
+
 function object(properties: Record<string, Schema>): Tool['input_schema'] {
-  return { type: 'object', properties, required: Object.keys(properties), additionalProperties: false }
+  const required = Object.keys(properties).filter(k => !isNullable(properties[k]))
+  return { type: 'object', properties, required, additionalProperties: false }
 }
 
 const TRANSACTION = choice(['For Sale', 'For Rent'], 'For Sale or For Rent. Null if the agent did not say.')
@@ -76,13 +83,11 @@ export const TOOLS: Tool[] = [
   {
     name: 'find_client',
     description: 'Look up one of the agency\'s clients by name or phone number and get their brief: what they want, budget, areas, status. Use before updating a client, or when the agent asks about one. Another agent\'s client comes back with the name and phone hidden — that is intentional; do not try to work around it.',
-    strict: true,
     input_schema: object({ name: must('string', 'The client\'s name or phone number, as the agent wrote it.') }),
   },
   {
     name: 'find_listings',
     description: 'Find specific existing listings by owner name or phone, words from the title, a listing number, or area — when the agent refers to a particular property ("the Khoury flat", "#45", "the villa in Broummana"). To find listings that FIT a client\'s needs, use match_listings instead.',
-    strict: true,
     input_schema: object({
       search: text('Owner name or phone, title words, or a listing number like #45.'),
       area: text('Area or neighbourhood.'),
@@ -94,7 +99,6 @@ export const TOOLS: Tool[] = [
   {
     name: 'match_listings',
     description: 'Rank the agency\'s available listings against what a client wants — budget, areas, type, rent or sale, bedrooms — and return the best matches with a score and a link. Pass everything the agent said and leave the rest null. If they did not say rent or sale, leave transaction null and both are searched.',
-    strict: true,
     input_schema: object({
       transaction: TRANSACTION,
       property_type: PROPERTY_TYPE,
@@ -108,13 +112,11 @@ export const TOOLS: Tool[] = [
   {
     name: 'get_listing',
     description: 'Full details of one listing by its number.',
-    strict: true,
     input_schema: object({ listing_id: must('integer', 'The listing number, e.g. 45 for #45.') }),
   },
   {
     name: 'create_client',
     description: `Prepare a NEW client (buyer or renter). Use when the agent adds a client or forwards a person's enquiry — a name and/or phone together with what they are looking for. Fill every field the message gives and leave the rest null. Required: name, phone, client_type, property_type, at least one area, and budget; if any is missing the tool says which, and you ask for all of them in one message. ${ONE_CHANGE_NOTE}`,
-    strict: true,
     input_schema: object({
       name: text('The client\'s name.'),
       phone: text('Their phone number exactly as written.'),
@@ -138,7 +140,6 @@ export const TOOLS: Tool[] = [
   {
     name: 'create_listing',
     description: `Prepare a NEW listing. Fill every field the message gives and leave the rest null. Required: property_type, transaction, area, price, owner_name and owner_phone; if any is missing the tool says which, and you ask for all of them in one message. ${ONE_CHANGE_NOTE}`,
-    strict: true,
     input_schema: object({
       property_type: PROPERTY_TYPE,
       transaction: TRANSACTION,
@@ -165,7 +166,6 @@ export const TOOLS: Tool[] = [
   {
     name: 'update_client',
     description: `Change an existing client: budget, status, area, bedrooms, phone or rating. ${ONE_CHANGE_NOTE}`,
-    strict: true,
     input_schema: object({
       client_name: must('string', 'The client\'s name as the agent wrote it.'),
       budget: number('New budget in USD.'),
@@ -179,7 +179,6 @@ export const TOOLS: Tool[] = [
   {
     name: 'update_listing',
     description: `Change an existing listing by its number: status (e.g. sold or rented), price, details or features. Find the number first with find_listings if the agent did not give it. ${ONE_CHANGE_NOTE}`,
-    strict: true,
     input_schema: object({
       listing_id: must('integer', 'The listing number.'),
       status: choice(['Available', 'Reserved', 'Sold', 'Rented'], 'New status.'),
@@ -202,7 +201,6 @@ export const TOOLS: Tool[] = [
   {
     name: 'other_request',
     description: 'Everything else the CRM can do that has no tool of its own yet: moving a client\'s deal along the pipeline; logging, accepting or rejecting offers; booking viewings and meetings; the agent\'s schedule and overdue follow-ups; sending a listing to the marketing team; writing a listing description in English or Arabic; a shareable link to a listing; recent activity and team performance. Pass ONE clear instruction in plain English containing every detail needed, e.g. "move Ahmed Khoury to negotiating", "book a viewing with Rita tomorrow at 3pm for listing #45", "send #23 to marketing". Never use it to add or edit clients or listings — those have their own tools.',
-    strict: true,
     input_schema: object({ instruction: must('string', 'One clear, complete instruction in English.') }),
   },
 ]
@@ -217,13 +215,39 @@ export const WRITE_TOOLS = new Set(['create_client', 'create_listing', 'update_c
 type Input = Record<string, unknown>
 const asInput = (v: unknown): Input => (v && typeof v === 'object' && !Array.isArray(v) ? v as Input : {})
 const str = (i: Input, k: string): string | undefined => (typeof i[k] === 'string' && (i[k] as string).trim() ? (i[k] as string).trim() : undefined)
-const num = (i: Input, k: string): number | undefined => (typeof i[k] === 'number' && Number.isFinite(i[k]) ? i[k] as number : undefined)
+const num = (i: Input, k: string): number | undefined => {
+  const v = i[k]
+  if (typeof v === 'number') return Number.isFinite(v) ? v : undefined
+  // Without strict mode a number can arrive as "1,000" — accept plain digits only.
+  if (typeof v === 'string' && /^s*d[d,]*(.d+)?s*$/.test(v)) return Number(v.replace(/[,s]/g, ''))
+  return undefined
+}
 const bool = (i: Input, k: string): boolean | undefined => (typeof i[k] === 'boolean' ? i[k] as boolean : undefined)
 const strs = (i: Input, k: string): string[] | undefined => {
   const v = i[k]
   if (!Array.isArray(v)) return undefined
   const out = v.filter((x): x is string => typeof x === 'string' && x.trim() !== '').map(x => x.trim())
   return out.length ? out : undefined
+}
+
+/**
+ * Snap every choice field to one of its listed values, ignoring case ("for
+ * rent" → "For Rent"); a value not on the list is dropped. Strict mode would
+ * have guaranteed this; without it, this is what does. Exported for tests.
+ */
+export function conform(name: string, input: Input): Input {
+  const props = TOOLS.find(t => t.name === name)?.input_schema.properties as Record<string, Schema> | undefined
+  if (!props) return input
+  const out: Input = { ...input }
+  for (const [k, p] of Object.entries(props)) {
+    const values = (p.enum ?? ((p.anyOf ?? []) as Schema[]).find(o => o.enum)?.enum) as string[] | undefined
+    if (!values || out[k] === undefined || out[k] === null) continue
+    const said = typeof out[k] === 'string' ? (out[k] as string).trim().toLowerCase().replace(/[s_-]+/g, ' ') : ''
+    const hit = values.find(v => v.toLowerCase().replace(/[s_-]+/g, ' ') === said)
+    if (hit) out[k] = hit
+    else delete out[k]
+  }
+  return out
 }
 
 /** Drop undefined so the handlers see only what the agent actually said. */
@@ -301,7 +325,7 @@ function stagedOutcome(
 // ── The dispatcher ──────────────────────────────────────────────────────────
 
 export async function executeTool(ctx: ToolContext, name: string, rawInput: unknown, state: TurnState): Promise<ToolOutcome> {
-  const input = asInput(rawInput)
+  const input = conform(name, asInput(rawInput))
 
   // stage() keeps one live action per agent, so a second write in the same
   // turn would silently replace the first — the one the agent is about to see

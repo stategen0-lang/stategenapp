@@ -1,7 +1,7 @@
 // node --experimental-strip-types --import ./scripts/test-setup.mjs --test src/lib/whatsapp/agent/tools.test.mjs
 //
 // The agent's tools against a fake database. The schemas are checked against
-// strict tool use's rules, because a schema the API rejects fails every message;
+// the API's rules, because a schema the API rejects fails every message;
 // the write tools are checked to only ever STAGE, never save, and to hold the
 // permission and one-change-at-a-time rules no matter what the model asks.
 
@@ -9,7 +9,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { fakeDb } from '../fake-db.mjs'
 import { briefFromIntent } from '../match-query.ts'
-import { TOOLS, WRITE_TOOLS, executeTool, matchIntent, ALREADY_STAGED, STAGED_PREFIX } from './tools.ts'
+import { TOOLS, conform, WRITE_TOOLS, executeTool, matchIntent, ALREADY_STAGED, STAGED_PREFIX } from './tools.ts'
 
 const COMPANY = 7
 const AGENT = { id: 'p-jad', company_id: COMPANY, role: 'agent', agent_code: 'JH-655', Full_name: 'Jad Habchi' }
@@ -54,7 +54,12 @@ function walk(schema, path, problems) {
     if (schema.additionalProperties !== false) problems.push(`${path}: objects need additionalProperties: false`)
     const keys = Object.keys(schema.properties ?? {})
     const required = new Set(schema.required ?? [])
-    for (const k of keys) if (!required.has(k)) problems.push(`${path}.${k}: every property must be listed in required`)
+    // Nullable means optional; anything that can't be null must be required.
+    for (const k of keys) {
+      const p = schema.properties[k]
+      const nullable = [].concat(p.type ?? []).includes('null') || (p.anyOf ?? []).some(o => o.type === 'null')
+      if (nullable === required.has(k)) problems.push(`${path}.${k}: ${nullable ? 'nullable fields are optional' : 'non-null fields must be required'}`)
+    }
     for (const k of keys) walk(schema.properties[k], `${path}.${k}`, problems)
   }
   if (types.includes('array') && schema.items) walk(schema.items, `${path}[]`, problems)
@@ -66,11 +71,13 @@ test('every tool schema follows strict tool use\'s rules', () => {
   assert.deepEqual(problems, [])
 })
 
-test('tools are well-formed: strict, unique names, real descriptions', () => {
+test('tools are well-formed: not strict, unique names, real descriptions', () => {
   const names = TOOLS.map(t => t.name)
   assert.equal(new Set(names).size, names.length, 'duplicate tool name')
   for (const t of TOOLS) {
-    assert.equal(t.strict, true, `${t.name} should be strict`)
+    // Strict mode caps a request at 16 nullable fields; these tools have far
+    // more, and the API rejected every message. conform() + the readers do the job.
+    assert.notEqual(t.strict, true, `${t.name} must not be strict`)
     assert.match(t.name, /^[a-z_]+$/)
     assert.ok(t.description.length > 40, `${t.name} needs a real description`)
   }
@@ -277,4 +284,13 @@ test('with nothing waiting, no replacement is mentioned', async () => {
   const { ctx } = setup(AGENT)
   const out = await executeTool(ctx, 'create_client', call('create_client', RITA), fresh())
   assert.equal(out.content.includes(REPLACED_NOTE), false)
+})
+
+test('conform snaps choices to their listed value and drops the rest', () => {
+  assert.deepEqual(conform('match_listings', { transaction: 'for rent' }).transaction, 'For Rent')
+  assert.equal(conform('match_listings', { transaction: 'rent please' }).transaction, undefined)
+  assert.equal(conform('create_listing', { furnishing: 'semi furnished' }).furnishing, 'Semi-furnished')
+  assert.equal(conform('update_client', { status: 'NEGOTIATING' }).status, 'Negotiating')
+  // Non-choice fields pass through untouched.
+  assert.equal(conform('match_listings', { areas: ['Achrafieh'] }).areas[0], 'Achrafieh')
 })
