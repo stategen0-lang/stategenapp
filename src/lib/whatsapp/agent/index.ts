@@ -53,7 +53,25 @@ export interface AgentInput {
   model?: AgentModel
 }
 
-export async function answerWithAgent(input: AgentInput): Promise<string> {
+/**
+ * Whether a turn should be handed to the old router instead: Claude failed on
+ * the very first call, before any tool ran and before anything was staged —
+ * a bad key, an outage, a rate limit, or (on Haiku, which has no server-side
+ * fallback) a false-positive refusal. Nothing happened, so answering with the
+ * old router is safe, and it beats "something went wrong". Pure, for tests.
+ */
+export function shouldFallBack(result: { ended: string; rounds: number; confirmation: string | null; toolCalls: unknown[] }): boolean {
+  return (result.ended === 'error' || result.ended === 'refusal')
+    && result.rounds === 1
+    && result.confirmation === null
+    && result.toolCalls.length === 0
+}
+
+/**
+ * The agent's reply, or null when Claude couldn't be reached and the caller
+ * should answer with the old router instead.
+ */
+export async function answerWithAgent(input: AgentInput): Promise<string | null> {
   const { admin, profile } = input
 
   const { data: company } = await admin.from('Companies').select('Name').eq('id', profile.company_id).maybeSingle()
@@ -96,5 +114,9 @@ export async function answerWithAgent(input: AgentInput): Promise<string> {
     ms: Date.now() - started,
   }))
 
+  if (shouldFallBack(result)) {
+    console.warn('[whatsapp-agent] Claude unavailable on the first call — the old router answers instead:', result.ended)
+    return null
+  }
   return result.reply
 }

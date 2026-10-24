@@ -287,3 +287,51 @@ test('WHATSAPP_AGENT_MODEL accepts the three agent models and nothing else', () 
   assert.equal(agentModel('claude-haiku-5-5-20260101'), 'claude-opus-5-5')
   assert.equal(agentModel('gpt-5'), 'claude-opus-5-5')
 })
+
+// ── Always a reply ──────────────────────────────────────────────────────────
+// If Claude can't be reached before anything happens, answerWithAgent returns
+// null and the webhook answers with the old router — the agent always gets a
+// real reply, never "something went wrong".
+
+import { shouldFallBack } from './index.ts'
+
+const run = (claude) => answerWithAgent({
+  admin: world().client, profile: AGENT, body: 'any listings in Hamra?', phone: PHONE, inboundLogId: null,
+  origin: 'https://stategen.app', legacy: async () => '', claude, model: 'claude-haiku-5-5',
+})
+
+test('a bad API key hands the turn to the old router', async () => {
+  // What an invalid key looks like: the very first call throws.
+  const claude = { beta: { messages: { create: async () => { const e = new Error('401 invalid x-api-key'); e.status = 401; throw e } } } }
+  assert.equal(await run(claude), null)
+})
+
+test('a first-call refusal on Haiku hands the turn to the old router', async () => {
+  // Haiku 5.5 has no server-side fallback; this is the client-side one.
+  assert.equal(await run(fakeClaude(msg([], 'refusal'))), null)
+})
+
+test('a failure AFTER a tool ran is answered by the agent, not handed off', async () => {
+  // Work already happened this turn; replaying the message on the old router
+  // could do it twice.
+  let calls = 0
+  const claude = { beta: { messages: { create: async () => {
+    if (calls++ === 0) return msg([{ type: 'tool_use', id: 't1', name: 'get_listing', input: { listing_id: 1 } }])
+    throw new Error('overloaded')
+  } } } }
+  const reply = await run(claude)
+  assert.notEqual(reply, null)
+  assert.match(reply, /nothing was saved/i)
+})
+
+test('shouldFallBack: only a first-call failure with nothing done', () => {
+  const base = { rounds: 1, confirmation: null, toolCalls: [] }
+  assert.equal(shouldFallBack({ ...base, ended: 'error' }), true)
+  assert.equal(shouldFallBack({ ...base, ended: 'refusal' }), true)
+  // A normal reply, or a later round, or anything staged or run: no hand-off.
+  assert.equal(shouldFallBack({ ...base, ended: 'reply' }), false)
+  assert.equal(shouldFallBack({ ...base, ended: 'error', rounds: 2 }), false)
+  assert.equal(shouldFallBack({ ...base, ended: 'error', confirmation: 'About to add…' }), false)
+  assert.equal(shouldFallBack({ ...base, ended: 'error', toolCalls: [{ name: 'x', ok: true }] }), false)
+  assert.equal(shouldFallBack({ ...base, ended: 'deadline' }), false)
+})

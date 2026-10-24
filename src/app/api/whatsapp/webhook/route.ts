@@ -121,7 +121,7 @@ async function withListing(
  * the database, so hoisting one into a const above the branches applies it even
  * when a different branch ends up answering. That bug shipped briefly in Phase 4.
  */
-type Routed = { intent: Intent | 'confirm_pending' | 'send_marketing' | 'agent'; answer: BotReply }
+type Routed = { intent: Intent | 'confirm_pending' | 'send_marketing' | 'agent' | 'agent_fallback'; answer: BotReply }
 
 async function route(
   admin: SupabaseClient,
@@ -176,17 +176,44 @@ async function route(
       const reminderAnswer = await handleReminderReply(admin, profile, reminder.action, reminder.snoozeDays, body)
       if (reminderAnswer !== null) return { intent: 'reminder_response', answer: reminderAnswer }
     }
-    return {
-      intent: 'agent',
-      answer: await answerWithAgent({
+    let agentAnswer: string | null = null
+    try {
+      agentAnswer = await answerWithAgent({
         admin, profile, body, origin,
         phone: meta.phone,
         inboundLogId: meta.inboundLogId,
         legacy: async instruction => (await routeByIntent(admin, profile, instruction, origin, { forAgent: true })).answer,
-      }),
+      })
+    } catch (err) {
+      // Anything unexpected in the agent itself (loading history, a bug) is
+      // treated like Claude being unavailable: the old router still answers.
+      console.error('[whatsapp-agent] failed — the old router answers instead', err)
     }
+    if (agentAnswer !== null) return { intent: 'agent', answer: agentAnswer }
+
+    // Claude couldn't be reached before anything happened — a bad key, an
+    // outage. The old router answers instead, so the agent gets a reply rather
+    // than "something went wrong". Logged as agent_fallback, so a failing key
+    // shows up in whatsapp_logs instead of only in the server logs.
+    const legacy = await routeContinuations(admin, profile, body, origin, confirmation)
+    return { intent: 'agent_fallback', answer: legacy.answer }
   }
 
+  return routeContinuations(admin, profile, body, origin, confirmation)
+}
+
+/**
+ * The old router's rules for remembering what the agent was in the middle of,
+ * then classification. What answers when the agent is off — and when it's on
+ * but Claude can't be reached.
+ */
+async function routeContinuations(
+  admin: SupabaseClient,
+  profile: Profile,
+  body: string,
+  origin: string,
+  confirmation: ReturnType<typeof parseConfirmation>,
+): Promise<Routed> {
   // A reply to "which listing?" — opens that listing, and applies the change the
   // agent asked for if the request carried one ("mark Khoury's flat as sold").
   const listingPick = await continueListingPick(admin, profile, body,
