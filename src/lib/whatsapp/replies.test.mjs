@@ -193,3 +193,53 @@ test('"remind me" with no task is still a snooze', () => {
   assert.deepEqual(parseReminderReply('snooze 3d'), { action: 'snooze', snoozeDays: 3 })
   assert.deepEqual(parseReminderReply('snooze until tomorrow to give him time'), { action: 'snooze', snoozeDays: 1 })
 })
+
+// ── parseBareConfirmation (the conversational agent) ────────────────────────
+// Under the agent only a message that is nothing BUT a yes or no is decided by
+// code. The first-word rule saved "yes but she's a renter not a buyer" as a
+// buyer and threw a whole client away on "no, the phone is 03 123 456".
+
+import { parseBareConfirmation } from './replies.ts'
+
+test('parseBareConfirmation: a bare yes in every way agents write it', () => {
+  for (const t of ['yes', 'Yes', 'YES!', 'ok', 'okay.', 'yep', 'sure', 'go ahead', 'yes please',
+                   'save it', 'perfect', 'eh', 'Eh,', 'aywa', 'akid', 'tamam', 'yalla', '👍', '✅', 'نعم', 'تمام']) {
+    assert.equal(parseBareConfirmation(t), 'confirm', t)
+  }
+})
+
+test('parseBareConfirmation: a bare no', () => {
+  for (const t of ['no', 'No.', 'nope', 'cancel', 'never mind', 'dont save', 'la', 'la2', '❌', 'لا']) {
+    assert.equal(parseBareConfirmation(t), 'cancel', t)
+  }
+})
+
+test('parseBareConfirmation: a correction is never decided by code', () => {
+  // These are the messages the first-word rule got dangerously wrong.
+  for (const t of [
+    "yes but she's a renter not a buyer",
+    'no the phone is 03 123 456',
+    'ok and add parking',
+    'yes, budget 700 not 600',
+    'sure but make it furnished',
+    'no wait',
+    'yes and what is on my schedule today',
+  ]) assert.equal(parseBareConfirmation(t), 'unknown', t)
+})
+
+test('parseBareConfirmation: a question is never a confirmation', () => {
+  // In Lebanese "eh" is yes and "eh?" is "what?".
+  for (const t of ['eh?', 'yes?', 'ok?', 'no?']) assert.equal(parseBareConfirmation(t), 'unknown', t)
+})
+
+test('parseBareConfirmation: ambiguous words are left to the model', () => {
+  // "done" answers follow-up reminders; "great" is often just a reaction;
+  // خلص can mean go or stop. A false yes saves something — so these ask.
+  for (const t of ['done', 'great', 'good', 'خلص']) assert.equal(parseBareConfirmation(t), 'unknown', t)
+})
+
+test('parseBareConfirmation: nothing is nothing', () => {
+  assert.equal(parseBareConfirmation(''), 'unknown')
+  assert.equal(parseBareConfirmation('   '), 'unknown')
+  assert.equal(parseBareConfirmation(null), 'unknown')
+})

@@ -122,6 +122,52 @@ export function parseConfirmation(raw: string | null | undefined): Confirmation 
   return 'unknown'
 }
 
+/**
+ * A message that is NOTHING BUT a yes or a no — for the conversational agent.
+ *
+ * parseConfirmation reads only the first word, so "yes but she's a renter not
+ * a buyer" saves her as a buyer, and "no, the phone is 03 123 456" throws the
+ * whole client away. Under the agent, anything beyond a bare yes or no goes to
+ * the model instead, which sees the waiting change and prepares a corrected
+ * one; a plain "yes" is still committed here, by code the model never touches.
+ *
+ * A question mark always means it isn't a confirmation: in Lebanese "eh" is
+ * yes, and "eh?" is "what?".
+ */
+const BARE_CONFIRM = new Set([
+  'yes', 'y', 'yeah', 'yea', 'yep', 'yup', 'ya', 'ok', 'okay', 'ok ok', 'k', 'kk', 'sure', 'confirm', 'confirmed',
+  'correct', 'go ahead', 'do it', 'save', 'save it', 'yes please', 'yes save', 'yes save it', 'ok save',
+  'yes go ahead', 'ok go ahead', 'perfect', 'approved',
+  // Not here on purpose: "done" (also the answer to a follow-up reminder),
+  // "great" / "good" (as often a reaction as an approval). A false yes saves
+  // something; a false "unknown" only means the model asks.
+  // Lebanese / Arabizi
+  'eh', 'ee', 'aywa', 'akid', 'tamam', 'tamem', 'yalla', 'eh akid',
+  'نعم', 'اي', 'ايه', 'أكيد', 'تمام',
+  '👍', '✅', '👌',
+])
+const BARE_CANCEL = new Set([
+  'no', 'n', 'nope', 'nah', 'cancel', 'stop', 'abort', 'discard', 'nevermind', 'never mind',
+  'dont', 'don\'t', 'dont save', 'don\'t save', 'no thanks', 'no thank you', 'cancel it', 'forget it',
+  // Lebanese / Arabizi
+  // خلص is left out: it can mean "that's it, go" as easily as "stop".
+  'la', 'la2', 'la ma baddi', 'لا', 'لأ',
+  '👎', '❌',
+])
+
+export function parseBareConfirmation(raw: string | null | undefined): Confirmation {
+  const text = String(raw ?? '').trim()
+  if (!text || text.includes('?')) return 'unknown'
+  const core = text
+    .toLowerCase()
+    .replace(/[.!،,\s]+$/u, '')     // trailing punctuation: "yes!" "ok." "eh,"
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (BARE_CONFIRM.has(core)) return 'confirm'
+  if (BARE_CANCEL.has(core)) return 'cancel'
+  return 'unknown'
+}
+
 // ── Scheduling helpers ──────────────────────────────────────────────────────
 
 /** Date `days` from `from`, as an ISO date string (YYYY-MM-DD). */

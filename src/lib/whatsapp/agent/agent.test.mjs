@@ -242,3 +242,48 @@ test('the context says who is talking, their role, and Beirut time', () => {
   assert.match(manager, /a manager/)
   assert.match(manager, /assigned to one of the agents/)
 })
+
+// ── Model choice ────────────────────────────────────────────────────────────
+
+import { agentModel } from './client.ts'
+
+async function requestFor(model) {
+  const db = world()
+  const claude = fakeClaude(msg([{ type: 'text', text: 'hi' }]))
+  await answerWithAgent({
+    admin: db.client, profile: AGENT, body: 'hi', phone: PHONE, inboundLogId: null,
+    origin: 'https://stategen.app', legacy: async () => '', claude, model,
+  })
+  return claude.requests[0]
+}
+
+test('Haiku 5.5: no fallbacks parameter — it has no server-side fallback', async () => {
+  // fallbacks "default" is useless on Haiku and the list form is a 400.
+  const req = await requestFor('claude-haiku-5-5')
+  assert.equal(req.model, 'claude-haiku-5-5')
+  assert.equal('fallbacks' in req, false)
+  assert.equal(req.betas.includes('server-side-fallback-2026-07-01'), false)
+  // Everything else is the same safe setup.
+  assert.ok(req.betas.includes('thinking-binding-controls-2026-08-01'))
+  assert.equal(req.thinking.type, 'adaptive')
+  assert.deepEqual(req.tool_choice, { type: 'auto' })
+  for (const banned of ['temperature', 'top_p', 'top_k']) assert.equal(banned in req, false, banned)
+})
+
+test('Opus 5.5 and Sonnet 5.5 keep the server-side fallback', async () => {
+  for (const model of ['claude-opus-5-5', 'claude-sonnet-5-5']) {
+    const req = await requestFor(model)
+    assert.equal(req.model, model)
+    assert.equal(req.fallbacks, 'default', model)
+    assert.ok(req.betas.includes('server-side-fallback-2026-07-01'), model)
+  }
+})
+
+test('WHATSAPP_AGENT_MODEL accepts the three agent models and nothing else', () => {
+  assert.equal(agentModel('claude-haiku-5-5'), 'claude-haiku-5-5')
+  assert.equal(agentModel(' Claude-Sonnet-5-5 '), 'claude-sonnet-5-5')
+  assert.equal(agentModel(undefined), 'claude-opus-5-5')
+  // An unknown or dated id would be a 400 on every message — use the default.
+  assert.equal(agentModel('claude-haiku-5-5-20260101'), 'claude-opus-5-5')
+  assert.equal(agentModel('gpt-5'), 'claude-opus-5-5')
+})

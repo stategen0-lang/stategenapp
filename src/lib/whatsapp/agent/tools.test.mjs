@@ -250,3 +250,26 @@ test('an unknown tool is refused', async () => {
   const out = await executeTool(ctx, 'delete_everything', {}, fresh())
   assert.equal(out.isError, true)
 })
+
+// ── Replacing a waiting change ──────────────────────────────────────────────
+
+import { REPLACED_NOTE } from './tools.ts'
+
+test('a correction to a waiting change is staged, and the model is told it replaced it', async () => {
+  // "yes but she's a renter" reaches the agent, which re-prepares the client.
+  // stage() drops the waiting one; the model must know that happened.
+  const { db, ctx } = setup(AGENT, {
+    pending_actions: [{ id: 50, profile_id: AGENT.id, company_id: COMPANY, summary: 'About to add a new client: Rita (buyer)' }],
+  })
+  const out = await executeTool(ctx, 'create_client', call('create_client', RITA), fresh())
+  assert.ok(out.confirmation)
+  assert.ok(out.content.startsWith(REPLACED_NOTE), out.content)
+  assert.equal(db.table('pending_actions').length, 1, 'still exactly one waiting change')
+  assert.notEqual(db.table('pending_actions')[0].id, 50)
+})
+
+test('with nothing waiting, no replacement is mentioned', async () => {
+  const { ctx } = setup(AGENT)
+  const out = await executeTool(ctx, 'create_client', call('create_client', RITA), fresh())
+  assert.equal(out.content.includes(REPLACED_NOTE), false)
+})

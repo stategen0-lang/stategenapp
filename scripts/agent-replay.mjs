@@ -3,7 +3,7 @@
 // before it is switched on for an agency.
 //
 //   node --env-file=.env.local --experimental-strip-types --import ./scripts/test-setup.mjs \
-//        scripts/agent-replay.mjs --company 7 --days 30 --limit 25 --yes
+//        scripts/agent-replay.mjs --company 7 --days 30 --limit 25 --model claude-haiku-5-5 --yes
 //
 // SAFE BY CONSTRUCTION — it cannot change anything:
 //   • Production is only ever read (select). The snapshot is loaded into the
@@ -29,8 +29,10 @@ import { runAgentTurn } from '../src/lib/whatsapp/agent/loop.ts'
 import { TOOLS, executeTool } from '../src/lib/whatsapp/agent/tools.ts'
 import { SYSTEM_PROMPT, contextBlock } from '../src/lib/whatsapp/agent/prompt.ts'
 import { toMessages, CONVERSATION_WINDOW_HOURS } from '../src/lib/whatsapp/agent/history.ts'
-import { createCaller, claudeConfigured, AGENT_MODEL } from '../src/lib/whatsapp/agent/client.ts'
-import { parseConfirmation } from '../src/lib/whatsapp/replies.ts'
+import { createCaller, claudeConfigured, agentModel } from '../src/lib/whatsapp/agent/client.ts'
+// Agent-mode routing: only a BARE yes/no is answered by code; corrections such
+// as 'yes but she is a renter' reach the agent and are replayed.
+import { parseBareConfirmation as parseConfirmation } from '../src/lib/whatsapp/replies.ts'
 
 // ── Arguments ───────────────────────────────────────────────────────────────
 const arg = (name, fallback) => {
@@ -41,7 +43,8 @@ const COMPANY = Number(arg('company', '0'))
 const DAYS = Number(arg('days', '30'))
 const LIMIT = Number(arg('limit', '25'))
 const CONFIRMED = process.argv.includes('--yes')
-const OUT = arg('out', path.join(os.tmpdir(), `agent-replay-company-${COMPANY}.html`))
+const MODEL = agentModel(arg('model', process.env.WHATSAPP_AGENT_MODEL))
+const OUT = arg('out', path.join(os.tmpdir(), `agent-replay-company-${COMPANY}-${MODEL}.html`))
 
 if (!COMPANY) { console.error('usage: … scripts/agent-replay.mjs --company <id> [--days 30] [--limit 25] [--yes]'); process.exit(1) }
 if (!claudeConfigured()) { console.error('No Anthropic credential (ANTHROPIC_API_KEY).'); process.exit(1) }
@@ -69,7 +72,7 @@ const skipped = inbound.filter(l => parseConfirmation(l.message) !== 'unknown')
 const todo = inbound.filter(l => parseConfirmation(l.message) === 'unknown').slice(-LIMIT)
 
 console.log(`${company.Name}: ${inbound.length} messages in ${DAYS} days — ${skipped.length} yes/no (answered by code, skipped), replaying the latest ${todo.length}.`)
-console.log(`Model ${AGENT_MODEL}, one turn each. Report → ${OUT}`)
+console.log(`Model ${MODEL}, one turn each. Report → ${OUT}`)
 if (!CONFIRMED) { console.log('\nNothing sent. Add --yes to run it (this calls the Claude API and costs money).'); process.exit(0) }
 
 // ── Replay ──────────────────────────────────────────────────────────────────
@@ -97,7 +100,7 @@ for (const [i, row] of todo.entries()) {
   let result
   try {
     result = await runAgentTurn({
-      call: createCaller(system, TOOLS),
+      call: createCaller(system, TOOLS, undefined, MODEL),
       execute: async (name, input, state) => {
         const out = await executeTool(ctx, name, input, state)
         toolLog.push({ name, input, staged: Boolean(out.confirmation), error: Boolean(out.isError) })
@@ -139,7 +142,7 @@ fs.writeFileSync(OUT, `<!doctype html><meta charset="utf-8"><title>Agent replay 
   h3{font-size:13px;margin:0 0 6px} small{color:#6a7488;font-weight:400}
   details{margin-top:6px;font-size:12px} summary{cursor:pointer;color:#2e5288}
 </style>
-<h1>Agent replay — ${esc(company.Name)}</h1>
+<h1>Agent replay — ${esc(company.Name)} · ${esc(MODEL)}</h1>
 <p>${results.length} real messages, replayed against a read-only snapshot. Nothing was saved anywhere. Contains client details — do not share.</p>
 ${rows}`)
 console.log(`\nReport written: ${OUT}`)

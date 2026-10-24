@@ -1,8 +1,9 @@
 // The one place the WhatsApp agent talks to Claude.
 //
 // Settings, and why:
-//   • claude-opus-5-5 — at ~7 messages a day the cost is small, and reading a
-//     messy forwarded brief correctly is the whole job.
+//   • claude-opus-5-5 by default; WHATSAPP_AGENT_MODEL picks Sonnet 5.5 or
+//     Haiku 5.5 instead. At ~7 messages a day every option is cheap — the
+//     replay harness compares them on real messages.
 //   • effort "medium" — Opus 5.5's thinking can't be switched off; effort is the
 //     dial. Medium is its default; set explicitly so the behaviour doesn't move
 //     if the default does. Override with WHATSAPP_AGENT_EFFORT.
@@ -26,6 +27,22 @@ type SystemBlock = Anthropic.Beta.BetaTextBlockParam
 
 export const AGENT_MODEL = 'claude-opus-5-5'
 const MAX_TOKENS = 16_000
+
+// The models the agent may run on. Set with WHATSAPP_AGENT_MODEL; anything
+// else falls back to the default rather than sending an unknown id.
+export const AGENT_MODELS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'] as const
+export type AgentModel = (typeof AGENT_MODELS)[number]
+
+export function agentModel(raw = process.env.WHATSAPP_AGENT_MODEL): AgentModel {
+  const v = String(raw ?? '').trim().toLowerCase()
+  return (AGENT_MODELS as readonly string[]).includes(v) ? v as AgentModel : AGENT_MODEL
+}
+
+// Server-side refusal fallback exists for Opus 5.5 and Sonnet 5.5. Haiku 5.5
+// has none: with fallbacks "default" a declined request just stays declined,
+// and the list form is a 400 — so it is not sent. The loop answers a refusal
+// either way.
+const HAS_SERVER_FALLBACK: ReadonlySet<string> = new Set(['claude-opus-5-5', 'claude-sonnet-5-5'])
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const
 type Effort = (typeof EFFORTS)[number]
 
@@ -52,13 +69,23 @@ function anthropic(): Anthropic {
  * rounds of one turn: they are the prefix the cache and the reasoning blocks
  * both depend on.
  */
-export function createCaller(system: SystemBlock[], tools: Tool[], client: Anthropic = anthropic()) {
+export function createCaller(
+  system: SystemBlock[],
+  tools: Tool[],
+  client: Anthropic = anthropic(),
+  model: AgentModel = agentModel(),
+) {
   const effort = agentEffort()
+  const fallback = HAS_SERVER_FALLBACK.has(model)
   return (messages: Msg[]) => client.beta.messages.create({
-    model: AGENT_MODEL,
+    model,
     max_tokens: MAX_TOKENS,
-    betas: ['server-side-fallback-2026-07-01', 'thinking-binding-controls-2026-08-01'],
-    fallbacks: 'default',
+    betas: fallback
+      ? ['server-side-fallback-2026-07-01', 'thinking-binding-controls-2026-08-01']
+      : ['thinking-binding-controls-2026-08-01'],
+    ...(fallback ? { fallbacks: 'default' as const } : {}),
+    // block_binding needs adaptive thinking on every model here — which is
+    // what all three run.
     thinking: { type: 'adaptive', block_binding: { prefix_mismatch_behavior: 'drop_block' } },
     output_config: { effort },
     tool_choice: { type: 'auto' },

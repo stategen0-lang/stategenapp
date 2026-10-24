@@ -16,7 +16,7 @@ import { runAgentTurn } from './loop.ts'
 import { TOOLS, executeTool, type ToolContext } from './tools.ts'
 import { SYSTEM_PROMPT, contextBlock } from './prompt.ts'
 import { loadHistory } from './history.ts'
-import { createCaller, claudeConfigured } from './client.ts'
+import { createCaller, claudeConfigured, agentModel, type AgentModel } from './client.ts'
 
 /** Whether WHATSAPP_AGENT names this agency. Pure, for testing. */
 export function agentEnabledFor(companyId: number, setting: string | undefined = process.env.WHATSAPP_AGENT): boolean {
@@ -49,6 +49,8 @@ export interface AgentInput {
   legacy: (instruction: string) => Promise<BotReply>
   /** Injected in tests; the real client otherwise. */
   claude?: Anthropic
+  /** Overrides WHATSAPP_AGENT_MODEL — for tests and the replay harness. */
+  model?: AgentModel
 }
 
 export async function answerWithAgent(input: AgentInput): Promise<string> {
@@ -74,7 +76,9 @@ export async function answerWithAgent(input: AgentInput): Promise<string> {
   const started = Date.now()
 
   const result = await runAgentTurn({
-    call: input.claude ? createCaller(system, TOOLS, input.claude) : createCaller(system, TOOLS),
+    call: input.claude
+      ? createCaller(system, TOOLS, input.claude, input.model ?? agentModel())
+      : createCaller(system, TOOLS, undefined, input.model ?? agentModel()),
     execute: (name, toolInput, state) => executeTool(ctx, name, toolInput, state),
     messages: [...history, { role: 'user', content: input.body }],
     deadline: started + TURN_BUDGET_MS,
@@ -84,6 +88,7 @@ export async function answerWithAgent(input: AgentInput): Promise<string> {
   // message text: it carries clients' names and numbers.
   console.info('[whatsapp-agent]', JSON.stringify({
     company: profile.company_id,
+    model: input.model ?? agentModel(),
     ended: result.ended,
     rounds: result.rounds,
     staged: Boolean(result.confirmation),

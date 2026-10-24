@@ -2,7 +2,7 @@ import { NextRequest, after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { verifyMetaSignature, parseInbound, verifyToken, sendReply, replyText, type BotReply, type InboundMessage } from '@/lib/whatsapp/cloud'
 import { normalizePhone } from '@/lib/whatsapp/phone'
-import { parseConfirmation, parseReminderReply } from '@/lib/whatsapp/replies'
+import { parseConfirmation, parseBareConfirmation, parseReminderReply } from '@/lib/whatsapp/replies'
 import { classifyIntent, Intent } from '@/lib/whatsapp/intent'
 import { handleQueryClient, handleQueryProperty, handleShareListing, HELP_TEXT } from '@/lib/whatsapp/handlers'
 import {
@@ -140,7 +140,11 @@ async function route(
     .limit(1)
     .maybeSingle()
 
-  const confirmation = parseConfirmation(body)
+  // With the agent on, only a message that is nothing but a yes or a no is
+  // decided here. "yes but she's a renter" goes to the agent, which prepares
+  // the corrected change — under the first-word rule it saved her as a buyer.
+  const agentOn = agentReady(profile.company_id)
+  const confirmation = agentOn ? parseBareConfirmation(body) : parseConfirmation(body)
 
   if (pending && confirmation !== 'unknown') {
     // Consume the action first, whichever way it goes: a pending write must
@@ -163,7 +167,7 @@ async function route(
   // conversation itself, so for an agency that has it switched on it takes
   // over from here. The yes/no above stays deterministic: a "yes" commits a
   // staged change without the model being involved at all.
-  if (agentReady(profile.company_id)) {
+  if (agentOn) {
     // Replies to an outstanding follow-up reminder ("done", "snooze 3d") keep
     // their own handler: it fires only while a reminder is outstanding and
     // returns null otherwise.

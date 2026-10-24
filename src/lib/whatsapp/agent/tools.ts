@@ -277,10 +277,23 @@ async function staging(ctx: ToolContext, run: () => Promise<string>): Promise<To
   const before = await latestPending(ctx.admin, ctx.profile.id)
   const reply = await run()
   const after = await latestPending(ctx.admin, ctx.profile.id)
-  if (after && after.id !== before?.id) {
-    return { content: STAGED_PREFIX + after.summary, confirmation: after.summary }
-  }
-  return { content: reply }
+  return stagedOutcome(before, after) ?? { content: reply }
+}
+
+export const REPLACED_NOTE = 'It replaced a change that was waiting from earlier in the conversation. If that was a correction of it, fine; if it was something unrelated, tell the agent the earlier one was dropped.\n'
+
+/**
+ * The outcome when a new pending action appeared, or null. stage() keeps one
+ * live action, so a new one always replaces whatever was waiting — the model is
+ * told, so a correction reads as one and an unrelated change doesn't silently
+ * drop the earlier one.
+ */
+function stagedOutcome(
+  before: { id: string; summary: string } | null,
+  after: { id: string; summary: string } | null,
+): ToolOutcome | null {
+  if (!after || after.id === before?.id) return null
+  return { content: (before ? REPLACED_NOTE : '') + STAGED_PREFIX + after.summary, confirmation: after.summary }
 }
 
 // ── The dispatcher ──────────────────────────────────────────────────────────
@@ -441,9 +454,8 @@ async function stageRecord(
       return { content: `Not prepared yet — "${forAgent}" isn't one of the agency's agents. Ask which one: ${roster(result.agents)}.` }
     case 'staged': {
       const after = await latestPending(ctx.admin, ctx.profile.id)
-      if (after && after.id !== before?.id) return { content: STAGED_PREFIX + after.summary, confirmation: after.summary }
       // finish() returned without staging — it says why (usually a save error).
-      return { content: result.reply, isError: true }
+      return stagedOutcome(before, after) ?? { content: result.reply, isError: true }
     }
   }
 }
