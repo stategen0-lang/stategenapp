@@ -65,7 +65,7 @@ export async function judge({ history, turn, evidence, agentName }) {
   // tool call, which otherwise reads as a false claim.
   const commits = turn.writes.filter(w => /client_requests|Properties|deals|offers|calendar_events|stage_history/.test(w))
   const facts = [
-    `The agent is ${agentName}.`,
+    `The agent is ${agentName}. Today is ${new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Beirut', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date())} in Beirut (the assistant is told this too).`,
     turn.intent === 'confirm_pending' ? 'This message was a plain yes/no, handled by code rather than the assistant: it saved or cancelled the waiting change, and the reply is the system\'s own confirmation.' : null,
     commits.length ? `This turn really wrote to the database: ${commits.join(', ')}.` : 'This turn wrote nothing to the agency\'s records.',
     'By design the assistant never messages clients itself; drafting a message for the agent to forward is correct.',

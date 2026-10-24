@@ -140,8 +140,9 @@ PROPERTY DATA:
 
 Rules:
 - 2-3 sentences only
-- Highlight location appeal using Lebanese context (Beirut lifestyle, mountain views, coastal access, etc.)
-- Mention the most attractive features naturally
+- Use ONLY the facts in PROPERTY DATA. Never state a view, sea or mountain access, parking, garden, balcony, terrace, pool, furnishing or any other feature that isn't listed there — agents publish this text as written, and a feature the property doesn't have is a false listing
+- Bring out the location's appeal in general terms that are true of the area itself (neighbourhood character, convenience), never as a feature of this property
+- Mention the most attractive listed features naturally
 - End with a subtle call to action
 - Do NOT use generic filler phrases like "don't miss this opportunity"
 - Work the agent's selling points in naturally

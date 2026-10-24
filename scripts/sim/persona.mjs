@@ -19,7 +19,7 @@ export const STYLES = {
   forwarded: 'Paste details like a forwarded note: lines like "name: … / phone: … / budget: …", or a client message you received, then a short instruction.',
 }
 
-const SYSTEM = (goal, style) => `You are a real-estate agent in Lebanon texting your agency's WhatsApp assistant (a bot that manages the agency's clients and listings).
+const SYSTEM = (goal, style, who) => `You are ${who.name}, ${who.role} at a real-estate agency in Lebanon, texting the agency's WhatsApp assistant (a bot that manages the agency's clients and listings). The assistant knows who you are: when it says "you" or "${who.name}", that's you.
 
 YOUR GOAL:
 ${goal}
@@ -27,7 +27,7 @@ ${goal}
 HOW YOU WRITE: ${STYLES[style]}
 
 Rules:
-- Reply with ONLY your next WhatsApp message — no quotes, no explanations.
+- Reply with ONLY your next WhatsApp message — no quotes, no explanations, never your reasoning or your goal.
 - Use only the facts in your goal; don't invent extra details unless the assistant asks something your goal doesn't cover (then answer briefly and plausibly).
 - If the assistant shows a summary of a change and asks you to confirm (reply YES), check it against your goal. If it is right, confirm in your style (e.g. "yes", "eh", "aywa", "ok", "yalla", "تمام"). If something is wrong, say what to fix.
 - If the assistant asks a question, answer it.
@@ -36,20 +36,27 @@ Rules:
 - If the assistant clearly can't do it after you've tried a few times, reply exactly: STUCK`
 
 /** Next message from the simulated agent, given the conversation so far. */
-export async function personaSays({ goal, style, turns }) {
+export async function personaSays({ goal, style, turns, who }) {
   // The chat as a transcript in one message, with the speakers named. Mapping
   // the persona to the "assistant" role made it drift into answering as the
   // bot ("I can't send that message from here").
   const transcript = turns.length
     ? turns.map(t => `YOU: ${t.message}\nASSISTANT (the bot): ${t.reply || '(no reply)'}`).join('\n\n')
     : '(The chat is empty — you are opening it.)'
-  const res = await anthropic().messages.create({
-    model: MODEL,
-    max_tokens: 600,
-    thinking: { type: 'disabled' },
-    system: SYSTEM(goal, style),
-    messages: [{ role: 'user', content: `${transcript}\n\nWrite YOUR next WhatsApp message to the bot (or DONE / STUCK).` }],
-  })
-  const text = res.content.filter(b => b.type === 'text').map(b => b.text).join('').trim()
-  return text.replace(/^["“]|["”]$/g, '')
+  // A message narrating the persona's own reasoning ("My goal doesn't say…")
+  // is a broken test, not something a real agent sends: ask once more.
+  const META = /\bmy goal\b|^The assistant (asked|said|has|is)|^I should\b|^YOU:/i
+  let text = ''
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await anthropic().messages.create({
+      model: MODEL,
+      max_tokens: 600,
+      thinking: { type: 'disabled' },
+      system: SYSTEM(goal, style, who),
+      messages: [{ role: 'user', content: `${transcript}\n\nWrite YOUR next WhatsApp message to the bot (or DONE / STUCK).${attempt ? ' Only the message itself — no reasoning.' : ''}` }],
+    })
+    text = res.content.filter(b => b.type === 'text').map(b => b.text).join('').trim().replace(/^["“]|["”]$/g, '')
+    if (!META.test(text)) break
+  }
+  return text
 }

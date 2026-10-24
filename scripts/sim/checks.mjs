@@ -90,7 +90,9 @@ export function checkTurn(turn, ctx) {
   if (bare === 'confirm' && turn.hadPending && !commits.length && !/sent|cancel/i.test(reply)) add('yes_saved_nothing', reply.slice(0, 120))
 
   // "Saved" only when something was.
-  if (!commits.length && bare !== 'confirm') {
+  // (Unless something was saved earlier in the conversation — "the bedroom
+  // change is saved" can refer back to it.)
+  if (!commits.length && bare !== 'confirm' && !turn.savedEarlier) {
     const sentence = reply.split(/(?<=[.!\n])/).find(s => CLAIMS_SAVED.test(s) && !NEGATED.test(s))
     if (sentence) add('claims_saved_without_save', sentence.trim().slice(0, 160))
   }

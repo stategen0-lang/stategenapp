@@ -22,7 +22,7 @@ export function splitClientRef(ref: string | null | undefined): ClientRef {
   // A client's areas are stored as a list ("Achrafieh, Gemmayzeh") and that list
   // is what gets quoted back, so a comma is allowed and the first area is the
   // one searched — any one of them tells same-named clients apart.
-  const m = text.match(/^(.+?)\s+in\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ ',\-]{1,60})$/i)
-  if (m) return { name: m[1].trim(), location: m[2].split(',')[0].trim() }
+  const m = text.match(/^(.+?)\s+in\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ ',/\-]{1,60})$/i)
+  if (m) return { name: m[1].trim(), location: m[2].split(/[,/]/)[0].trim() }
   return { name: text }
 }

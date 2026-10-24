@@ -72,6 +72,12 @@ export function lockdown({ companyId }) {
   process.env.WHATSAPP_AGENT = String(companyId)
   // As production runs it (the user's standing choice).
   process.env.WHATSAPP_AGENT_MODEL = 'claude-haiku-5-5'
+  // Fake mail settings, so "send to marketing" is tested as production runs it
+  // rather than refused as unconfigured. The host doesn't exist and the
+  // network is closed below, so nothing can be sent.
+  process.env.SMTP_HOST = 'smtp.sim.invalid'
+  process.env.SMTP_USER = 'sim@sim.invalid'
+  process.env.SMTP_PASS = 'not-a-password'
 
   const realFetch = globalThis.fetch
   globalThis.fetch = async (input, init) => {

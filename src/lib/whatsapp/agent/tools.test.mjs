@@ -390,7 +390,7 @@ test('cancel_waiting_change drops it and saves nothing', async () => {
 })
 
 test('a number sent as text ("1,000") is read', async () => {
-  const { db, ctx } = setup(AGENT, { client_requests: [{ ...RITA_145 }] })
+  const { ctx } = setup(AGENT, { client_requests: [{ ...RITA_145 }] })
   const out = await executeTool(ctx, 'update_client', call('update_client', { client_name: 'Rita Haddad', budget: '1,000' }), fresh())
   assert.ok(out.confirmation, out.content)
   assert.match(out.confirmation, /1,000/)
@@ -448,4 +448,18 @@ test('move_deal stages the stage change, and "won" closes the deal as won', asyn
     const payload = db.table('pending_actions').at(-1).payload
     for (const [k, v] of Object.entries(expect)) assert.equal(payload.columns[k], v, `${stage} ${k}`)
   }
+})
+
+test('find_client picks one of two same-named clients by area', async () => {
+  const { ctx } = setup(MANAGER, {
+    client_requests: [
+      { id: 31, company_id: COMPANY, 'Client Name': 'Rita Haddad', 'prefered-location': 'Tyre', notes: '{"agentId":"JH-655"}' },
+      { ...RITA_145, 'prefered-location': 'Achrafieh, Gemmayzeh' },
+    ],
+  })
+  const both = await executeTool(ctx, 'find_client', call('find_client', { name: 'Rita Haddad' }), fresh())
+  assert.match(both.content, /2 clients/)
+  const one = await executeTool(ctx, 'find_client', call('find_client', { name: 'Rita Haddad', client_area: 'Achrafieh/Gemmayzeh' }), fresh())
+  assert.doesNotMatch(one.content, /Tyre/)
+  assert.match(one.content, /Achrafieh/)
 })

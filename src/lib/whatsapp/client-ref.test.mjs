@@ -35,3 +35,7 @@ test('splitClientRef: does not split on a number-only area', () => {
 test('splitClientRef: a quoted area list searches its first area', () => {
   assert.deepEqual(splitClientRef('Rita Haddad in Achrafieh, Gemmayzeh'), { name: 'Rita Haddad', location: 'Achrafieh' })
 })
+
+test('splitClientRef: an area list written with a slash searches its first area', () => {
+  assert.deepEqual(splitClientRef('Rita Haddad in Achrafieh/Gemmayzeh'), { name: 'Rita Haddad', location: 'Achrafieh' })
+})

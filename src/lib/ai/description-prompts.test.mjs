@@ -208,3 +208,14 @@ test('the Arabic version is told the same tick-boxes', () => {
   assert.ok(prompt.includes('Generator'))
   assert.ok(prompt.includes('Pool'))
 })
+
+// The free-form prompt used to tell the writer to "highlight location appeal
+// using Lebanese context (Beirut lifestyle, mountain views, coastal access)" —
+// so descriptions claimed views and sea access the property didn't have, and
+// rewrites asked to stick to the record invented them again (simulator,
+// 2026-10-24). Agents publish this text as written.
+test('free-form descriptions are told to use only the listed facts', () => {
+  const { prompt } = buildPrompts({ title: 'Studio', location: 'Hamra', type: 'Apartment', price: 750 })
+  assert.match(prompt, /ONLY the facts in PROPERTY DATA/)
+  assert.doesNotMatch(prompt, /mountain views, coastal access/)
+})

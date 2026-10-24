@@ -70,6 +70,7 @@ export async function converse({ route, snapshot, profile, next, maxTurns = 8, o
     }
     turn.tools = turn.calls.flatMap(c => (c.response?.content ?? []).filter(b => b.type === 'tool_use').map(b => b.name))
     turn.history = turns.map(t => t.message).join(' ')
+    turn.savedEarlier = turns.some(t => t.writes.some(w => !/pending_actions|conversation_state/.test(w.table)))
     turn.problems = routed.intent === 'crash'
       ? [{ check: 'router_crash', detail: reply }]
       : checkTurn(turn, { db, profile, snapshot, before })

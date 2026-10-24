@@ -89,7 +89,10 @@ export const TOOLS: Tool[] = [
   {
     name: 'find_client',
     description: 'Look up one of the agency\'s clients by name or phone number and get their brief: what they want, budget, areas, status. Use before updating a client, or when the agent asks about one. Another agent\'s client comes back with the name and phone hidden — that is intentional; do not try to work around it.',
-    input_schema: object({ name: must('string', 'The client\'s name or phone number, as the agent wrote it.') }),
+    input_schema: object({
+      name: must('string', 'The client\'s name or phone number, as the agent wrote it.'),
+      client_area: text('When several clients share the name or number: one area of the one meant, as the previous result listed it (e.g. Achrafieh).'),
+    }),
   },
   {
     name: 'find_listings',
@@ -410,8 +413,12 @@ export async function executeTool(ctx: ToolContext, name: string, rawInput: unkn
 
   switch (name) {
     case 'find_client': {
-      const clientName = str(input, 'name')
-      if (!clientName) return { content: 'Which client? Give a name or phone number.', isError: true }
+      const name = str(input, 'name')
+      if (!name) return { content: 'Which client? Give a name or phone number.', isError: true }
+      // Live (simulator): "info on Rita Haddad in Achrafieh/Gemmayzeh" — the
+      // agent named the area, and the lookup had no way to take it.
+      const area = str(input, 'client_area')
+      const clientName = area ? `${name} in ${area}` : name
       return { content: await handleQueryClient(ctx.admin, ctx.profile, { intent: 'query_client', clientName }) }
     }
 

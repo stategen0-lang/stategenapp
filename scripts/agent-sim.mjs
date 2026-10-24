@@ -82,7 +82,7 @@ async function runOne(goal) {
     convo = await converse({
       route, snapshot, profile, maxTurns: MAX_TURNS,
       next: async (turns) => {
-        const said = await personaSays({ goal: goal.goal, style, turns })
+        const said = await personaSays({ goal: goal.goal, style, turns, who: { name: profile.Full_name, role: profile.role === 'agent' ? 'an agent' : 'a manager' } })
         if (/^DONE\b/.test(said)) { ending = 'done'; return null }
         if (/^STUCK\b/.test(said)) { ending = 'stuck'; return null }
         return said
