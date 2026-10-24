@@ -58,10 +58,16 @@ export function fakeDb(tables = {}, opts = {}) {
     let ignoreDuplicates = false
     let order = null
 
+    // Postgres semantics: % is any run of characters, wherever it appears.
+    const ilike = (text, pattern) => {
+      const escaped = pattern.split('%').map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      return new RegExp(`^${escaped.join('.*')}$`, 'is').test(text)
+    }
+
     const rows = () => {
       let out = data[table].filter(row =>
         filters.every(([kind, col, val]) => {
-          if (kind === 'ilike') return String(row[col] ?? '').toLowerCase().includes(String(val).replace(/%/g, '').toLowerCase())
+          if (kind === 'ilike') return ilike(String(row[col] ?? ''), String(val))
           if (kind === 'in') return val.map(norm).includes(norm(row[col]))
           if (kind === 'not_null') return row[col] !== null && row[col] !== undefined
           // ISO timestamps compare correctly as strings, which is all this is used for.

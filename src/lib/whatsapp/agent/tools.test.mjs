@@ -294,3 +294,43 @@ test('conform snaps choices to their listed value and drops the rest', () => {
   // Non-choice fields pass through untouched.
   assert.equal(conform('match_listings', { areas: ['Achrafieh'] }).areas[0], 'Achrafieh')
 })
+
+test('two clients with one name: client_area picks the one meant, even from an area list', async () => {
+  // Live: "Rita Haddad the Achrafieh one, budget 1000" — the agent had no way
+  // to say which Rita, and "in Achrafieh, Gemmayzeh" didn't parse.
+  const { db, ctx } = setup(MANAGER, {
+    client_requests: [
+      { id: 31, company_id: COMPANY, 'Client Name': 'Rita Haddad', 'prefered-location': 'Tyre', budget_max: 825000, notes: '{"agentId":"JH-655"}' },
+      { id: 145, company_id: COMPANY, 'Client Name': 'Rita Haddad', 'prefered-location': 'Achrafieh, Gemmayzeh', budget_max: 900, notes: '{"agentId":"JH-655"}' },
+    ],
+  })
+  for (const client_area of ['Achrafieh', 'Achrafieh, Gemmayzeh']) {
+    db.table('pending_actions').length = 0
+    const out = await executeTool(ctx, 'update_client', call('update_client', { client_name: 'Rita Haddad', client_area, budget: 1000 }), fresh())
+    assert.ok(out.confirmation, `${client_area}: ${out.content}`)
+    assert.equal(db.table('pending_actions').at(-1).payload.id, 145)
+  }
+  // Without the area it still asks, rather than guessing.
+  db.table('pending_actions').length = 0
+  const ask = await executeTool(ctx, 'update_client', call('update_client', { client_name: 'Rita Haddad', budget: 1000 }), fresh())
+  assert.equal(ask.confirmation, undefined)
+})
+
+test('a client can be found and updated by phone, however it is typed', async () => {
+  // Live: "searching by her phone number didn't find her" — the lookup only
+  // ever searched names.
+  const { db, ctx } = setup(MANAGER, {
+    client_requests: [
+      { id: 31, company_id: COMPANY, 'Client Name': 'Rita Haddad', 'client phone': '03 555 666', 'prefered-location': 'Tyre', notes: '{"agentId":"JH-655"}' },
+      { id: 145, company_id: COMPANY, 'Client Name': 'Rita Haddad', 'client phone': '70 123 456', 'prefered-location': 'Achrafieh, Gemmayzeh', notes: '{"agentId":"JH-655"}' },
+    ],
+  })
+  const found = await executeTool(ctx, 'find_client', call('find_client', { name: '+961 70123456' }), fresh())
+  assert.match(found.content, /Achrafieh/)
+  assert.doesNotMatch(found.content, /Tyre/)
+  const out = await executeTool(ctx, 'update_client', call('update_client', { client_name: '70 123 456', budget: 1000 }), fresh())
+  assert.ok(out.confirmation, out.content)
+  assert.equal(db.table('pending_actions').at(-1).payload.id, 145)
+  const none = await executeTool(ctx, 'find_client', call('find_client', { name: '71 999 000' }), fresh())
+  assert.match(none.content, /No client/)
+})

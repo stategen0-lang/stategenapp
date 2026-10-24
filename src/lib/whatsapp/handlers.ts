@@ -14,6 +14,7 @@ import { companyAreaIndex } from '@/lib/lebanon/company-areas-server'
 import { formatPrice, propertyLocation, type Property } from '@/lib/data'
 import type { IntentResult } from '@/lib/whatsapp/intent'
 import { splitClientRef } from '@/lib/whatsapp/client-ref'
+import { samePhone } from './phone.ts'
 import { makeShareToken, shareSecret } from '@/lib/share'
 
 export const HELP_TEXT = [
@@ -67,6 +68,28 @@ function clientAgent(row: Record<string, unknown>): string | null {
 }
 
 // ── "info on Ahmed" ─────────────────────────────────────────────────────────
+
+/** "70 123 456", "+961 70123456" — digits and separators only, 7+ digits. */
+export function looksLikePhone(s: string): boolean {
+  return !/[A-Za-zÀ-ÿ؀-ۿ]/.test(s) && s.replace(/\D/g, '').length >= 7
+}
+
+/**
+ * Clients whose phone is this number, however either was typed. Phones are
+ * stored as written ("70 123 456"), so the database narrows by the last six
+ * digits in order and samePhone() decides.
+ */
+export async function clientsByPhone(admin: SupabaseClient, companyId: number, raw: string): Promise<Record<string, unknown>[]> {
+  const tail = raw.replace(/\D/g, '').slice(-6)
+  const { data } = await admin
+    .from('client_requests')
+    .select('*')
+    .eq('company_id', companyId)
+    .ilike('client phone', `%${tail.split('').join('%')}%`)
+    .limit(50)
+  return (data ?? []).filter(r => samePhone(r['client phone'] as string, raw)).slice(0, 6)
+}
+
 export async function handleQueryClient(
   admin: SupabaseClient,
   profile: Profile,
@@ -75,17 +98,21 @@ export async function handleQueryClient(
   const ref = splitClientRef(intent.clientName)
   if (!ref.name) return 'Which client? Try "info on Ahmed".'
 
-  let q = admin
-    .from('client_requests')
-    .select('*')
-    .eq('company_id', profile.company_id)
-    .ilike('Client Name', `%${ref.name}%`)
-    .limit(6)
-  // An area qualifier ("… in Beit Mery") narrows same-named clients.
-  if (ref.location) q = q.ilike('prefered-location', `%${ref.location}%`)
-
-  const { data } = await q
-  const rows = data ?? []
+  let rows: Record<string, unknown>[]
+  if (looksLikePhone(ref.name)) {
+    rows = await clientsByPhone(admin, profile.company_id, ref.name)
+  } else {
+    let q = admin
+      .from('client_requests')
+      .select('*')
+      .eq('company_id', profile.company_id)
+      .ilike('Client Name', `%${ref.name}%`)
+      .limit(6)
+    // An area qualifier ("… in Beit Mery") narrows same-named clients.
+    if (ref.location) q = q.ilike('prefered-location', `%${ref.location}%`)
+    const { data } = await q
+    rows = data ?? []
+  }
   if (!rows.length) return `No client matching "${ref.name}"${ref.location ? ` in ${ref.location}` : ''}.`
 
   const session = toSession(profile)

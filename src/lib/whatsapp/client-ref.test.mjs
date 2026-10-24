@@ -31,3 +31,7 @@ test('splitClientRef: does not split on a number-only area', () => {
   // "in 3" is not an area — leave it on the name for the caller to handle.
   assert.equal(splitClientRef('Ahmed in 3').location, undefined)
 })
+
+test('splitClientRef: a quoted area list searches its first area', () => {
+  assert.deepEqual(splitClientRef('Rita Haddad in Achrafieh, Gemmayzeh'), { name: 'Rita Haddad', location: 'Achrafieh' })
+})

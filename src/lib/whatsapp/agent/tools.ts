@@ -168,6 +168,7 @@ export const TOOLS: Tool[] = [
     description: `Change an existing client: budget, status, area, bedrooms, phone or rating. ${ONE_CHANGE_NOTE}`,
     input_schema: object({
       client_name: must('string', 'The client\'s name as the agent wrote it.'),
+      client_area: text('Only when two clients share the name: one area of the one meant, as find_client or the error listed it (e.g. Achrafieh).'),
       budget: number('New budget in USD.'),
       status: choice(['Searching', 'Viewing', 'Negotiating', 'Closed', 'Inactive'], 'New status.'),
       area: text('New preferred area(s), comma-separated.'),
@@ -414,8 +415,11 @@ export async function executeTool(ctx: ToolContext, name: string, rawInput: unkn
     }
 
     case 'update_client': {
-      const clientName = str(input, 'client_name')
-      if (!clientName) return { content: 'Which client? Give their name.', isError: true }
+      const name = str(input, 'client_name')
+      if (!name) return { content: 'Which client? Give their name.', isError: true }
+      // resolveClient reads "<name> in <area>" to tell same-named clients apart.
+      const area = str(input, 'client_area')
+      const clientName = area ? `${name} in ${area}` : name
       const fields = defined({
         budget: num(input, 'budget'),
         status: str(input, 'status'),

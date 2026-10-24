@@ -24,6 +24,7 @@ import {
 } from '@/lib/whatsapp/writes'
 import { reminderOutcome } from '@/lib/whatsapp/reminders'
 import { splitClientRef } from '@/lib/whatsapp/client-ref'
+import { clientsByPhone, looksLikePhone } from '@/lib/whatsapp/handlers'
 import type { ReminderAction } from '@/lib/whatsapp/replies'
 import { createListingAlerts } from '@/lib/alerts-server'
 import { recordPropertyEdit } from '@/lib/property-edit-effects'
@@ -117,6 +118,12 @@ type Resolved =
 export async function resolveClient(admin: SupabaseClient, profile: Profile, name: string | undefined): Promise<Resolved> {
   const ref = splitClientRef(name)
   if (!ref.name) return { ok: false, message: 'Which client? Try "update Ahmed\'s budget to 400k".' }
+
+  if (looksLikePhone(ref.name)) {
+    const byPhone = await clientsByPhone(admin, profile.company_id, ref.name)
+    if (byPhone.length === 1) return { ok: true, row: byPhone[0] }
+    if (!byPhone.length) return { ok: false, message: `No client with the phone ${ref.name}.` }
+  }
 
   let q = admin
     .from('client_requests')
