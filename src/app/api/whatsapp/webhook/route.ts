@@ -23,7 +23,8 @@ import { findListings, continueListingPick, focusedListing, focusListing, queryF
 import { hasCriteria } from '@/lib/listing-search-core'
 import type { IntentResult } from '@/lib/whatsapp/intent'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { agentReady, answerWithAgent } from '@/lib/whatsapp/agent'
+import { agentReady, answerWithAgent, type AgentFallback } from '@/lib/whatsapp/agent'
+import { describeError } from '@/lib/whatsapp/agent/loop'
 
 // The reply runs in after(), which the platform stops at this limit. Set
 // explicitly because an agent turn can take several model round-trips; the
@@ -121,7 +122,7 @@ async function withListing(
  * the database, so hoisting one into a const above the branches applies it even
  * when a different branch ends up answering. That bug shipped briefly in Phase 4.
  */
-type Routed = { intent: Intent | 'confirm_pending' | 'send_marketing' | 'agent' | 'agent_fallback'; answer: BotReply }
+type Routed = { intent: Intent | 'confirm_pending' | 'send_marketing' | 'agent' | `agent_fallback${string}`; answer: BotReply }
 
 async function route(
   admin: SupabaseClient,
@@ -176,7 +177,7 @@ async function route(
       const reminderAnswer = await handleReminderReply(admin, profile, reminder.action, reminder.snoozeDays, body)
       if (reminderAnswer !== null) return { intent: 'reminder_response', answer: reminderAnswer }
     }
-    let agentAnswer: string | null = null
+    let agentAnswer: string | AgentFallback
     try {
       agentAnswer = await answerWithAgent({
         admin, profile, body, origin,
@@ -188,15 +189,16 @@ async function route(
       // Anything unexpected in the agent itself (loading history, a bug) is
       // treated like Claude being unavailable: the old router still answers.
       console.error('[whatsapp-agent] failed — the old router answers instead', err)
+      agentAnswer = { fallback: `crash: ${describeError(err)}` }
     }
-    if (agentAnswer !== null) return { intent: 'agent', answer: agentAnswer }
+    if (typeof agentAnswer === 'string') return { intent: 'agent', answer: agentAnswer }
 
     // Claude couldn't be reached before anything happened — a bad key, an
     // outage. The old router answers instead, so the agent gets a reply rather
-    // than "something went wrong". Logged as agent_fallback, so a failing key
-    // shows up in whatsapp_logs instead of only in the server logs.
+    // than "something went wrong". The reason goes into whatsapp_logs with the
+    // intent, so it can be read from the database, not only the server logs.
     const legacy = await routeContinuations(admin, profile, body, origin, confirmation)
-    return { intent: 'agent_fallback', answer: legacy.answer }
+    return { intent: `agent_fallback: ${agentAnswer.fallback}`, answer: legacy.answer }
   }
 
   return routeContinuations(admin, profile, body, origin, confirmation)

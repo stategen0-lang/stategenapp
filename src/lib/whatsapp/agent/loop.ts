@@ -72,6 +72,22 @@ export interface AgentResult {
   toolCalls: { name: string; ok: boolean }[]
   /** Why the turn ended — kept for the log, so a bad turn can be diagnosed. */
   ended: 'reply' | 'refusal' | 'truncated' | 'round_limit' | 'empty' | 'deadline' | 'error'
+  /** For 'error': what the API said, e.g. "401 authentication_error: invalid x-api-key". */
+  error: string | null
+}
+
+/**
+ * A model-call failure as one short line. Read off the SDK's error shape
+ * without importing it, so the loop stays testable. The API's error messages
+ * name what was wrong ("invalid x-api-key", a schema path) and never echo the
+ * key itself.
+ */
+export function describeError(err: unknown): string {
+  const e = err as { status?: number; error?: { error?: { type?: string; message?: string } }; message?: string }
+  const status = typeof e?.status === 'number' ? `${e.status} ` : ''
+  const type = e?.error?.error?.type ? `${e.error.error.type}: ` : ''
+  const message = e?.error?.error?.message ?? e?.message ?? String(err)
+  return `${status}${type}${message}`.replace(/\s+/g, ' ').trim().slice(0, 200)
 }
 
 export const DEFAULT_MAX_ROUNDS = 6
@@ -113,10 +129,11 @@ export async function runAgentTurn(turn: AgentTurn): Promise<AgentResult> {
   const state: TurnState = { staged: false }
   const toolCalls: AgentResult['toolCalls'] = []
   let confirmation: string | null = null
+  let error: string | null = null
   const maxRounds = turn.maxRounds ?? DEFAULT_MAX_ROUNDS
 
   const done = (reply: string, ended: AgentResult['ended'], rounds: number): AgentResult =>
-    ({ reply, confirmation, rounds, toolCalls, ended })
+    ({ reply, confirmation, rounds, toolCalls, ended, error })
 
   const now = turn.now ?? Date.now
   // Whatever stops the turn early, a change already staged is still waiting on
@@ -133,7 +150,8 @@ export async function runAgentTurn(turn: AgentTurn): Promise<AgentResult> {
     } catch (err) {
       // Rate limits, overload, network: the SDK has already retried. Nothing
       // the model said in this round was acted on.
-      console.error('[whatsapp-agent] model call failed', err)
+      error = describeError(err)
+      console.error('[whatsapp-agent] model call failed:', error)
       return stopEarly(ERROR_REPLY, 'error', round)
     }
 

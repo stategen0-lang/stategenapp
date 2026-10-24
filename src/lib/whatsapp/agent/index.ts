@@ -67,11 +67,14 @@ export function shouldFallBack(result: { ended: string; rounds: number; confirma
     && result.toolCalls.length === 0
 }
 
+/** Claude couldn't be reached; why, in one line, for the log. */
+export interface AgentFallback { fallback: string }
+
 /**
- * The agent's reply, or null when Claude couldn't be reached and the caller
- * should answer with the old router instead.
+ * The agent's reply — or, when Claude couldn't be reached, the reason, and the
+ * caller answers with the old router instead.
  */
-export async function answerWithAgent(input: AgentInput): Promise<string | null> {
+export async function answerWithAgent(input: AgentInput): Promise<string | AgentFallback> {
   const { admin, profile } = input
 
   const { data: company } = await admin.from('Companies').select('Name').eq('id', profile.company_id).maybeSingle()
@@ -115,8 +118,9 @@ export async function answerWithAgent(input: AgentInput): Promise<string | null>
   }))
 
   if (shouldFallBack(result)) {
-    console.warn('[whatsapp-agent] Claude unavailable on the first call — the old router answers instead:', result.ended)
-    return null
+    const reason = result.ended === 'refusal' ? 'refusal' : (result.error ?? 'error')
+    console.warn('[whatsapp-agent] Claude unavailable on the first call — the old router answers instead:', reason)
+    return { fallback: reason }
   }
   return result.reply
 }

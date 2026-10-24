@@ -290,7 +290,7 @@ test('WHATSAPP_AGENT_MODEL accepts the three agent models and nothing else', () 
 
 // ── Always a reply ──────────────────────────────────────────────────────────
 // If Claude can't be reached before anything happens, answerWithAgent returns
-// null and the webhook answers with the old router — the agent always gets a
+// { fallback: reason } and the webhook answers with the old router — the agent always gets a
 // real reply, never "something went wrong".
 
 import { shouldFallBack } from './index.ts'
@@ -303,12 +303,13 @@ const run = (claude) => answerWithAgent({
 test('a bad API key hands the turn to the old router', async () => {
   // What an invalid key looks like: the very first call throws.
   const claude = { beta: { messages: { create: async () => { const e = new Error('401 invalid x-api-key'); e.status = 401; throw e } } } }
-  assert.equal(await run(claude), null)
+  // The reason is what gets written to whatsapp_logs, so it must name the cause.
+  assert.deepEqual(await run(claude), { fallback: '401 401 invalid x-api-key' })
 })
 
 test('a first-call refusal on Haiku hands the turn to the old router', async () => {
   // Haiku 5.5 has no server-side fallback; this is the client-side one.
-  assert.equal(await run(fakeClaude(msg([], 'refusal'))), null)
+  assert.deepEqual(await run(fakeClaude(msg([], 'refusal'))), { fallback: 'refusal' })
 })
 
 test('a failure AFTER a tool ran is answered by the agent, not handed off', async () => {
@@ -320,7 +321,7 @@ test('a failure AFTER a tool ran is answered by the agent, not handed off', asyn
     throw new Error('overloaded')
   } } } }
   const reply = await run(claude)
-  assert.notEqual(reply, null)
+  assert.equal(typeof reply, 'string')
   assert.match(reply, /nothing was saved/i)
 })
 

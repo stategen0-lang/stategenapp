@@ -265,3 +265,11 @@ test('a staged change survives a later failure or deadline', async () => {
   assert.equal(r.reply, CARD)
   assert.equal(r.ended, 'error')
 })
+
+test('describeError: status, API error type and message on one line', async () => {
+  const { describeError } = await import('./loop.ts')
+  const apiErr = Object.assign(new Error('raw'), { status: 400, error: { error: { type: 'invalid_request_error', message: 'tools.0: bad\nschema' } } })
+  assert.equal(describeError(apiErr), '400 invalid_request_error: tools.0: bad schema')
+  assert.equal(describeError(new Error('fetch failed')), 'fetch failed')
+  assert.equal(describeError('x'.repeat(500)).length, 200)
+})
