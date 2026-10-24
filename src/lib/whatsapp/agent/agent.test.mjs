@@ -96,7 +96,7 @@ test('the request sent to Claude is exactly what the API expects', async () => {
   })
   const [req] = claude.requests
 
-  assert.equal(req.model, 'claude-opus-5-5')
+  assert.equal(req.model, 'claude-haiku-5-5')
   assert.ok(req.max_tokens >= 4000, 'room for thinking as well as the reply')
   // Rejected with a 400 since 21 Oct 2026 on every model.
   for (const banned of ['temperature', 'top_p', 'top_k']) assert.equal(banned in req, false, banned)
@@ -106,9 +106,9 @@ test('the request sent to Claude is exactly what the API expects', async () => {
   assert.equal(req.thinking.type, 'adaptive')
   assert.equal(req.thinking.block_binding.prefix_mismatch_behavior, 'drop_block')
   assert.equal(req.output_config.effort, 'medium')
-  // Fallback on from day one, with the header that matches its form.
-  assert.equal(req.fallbacks, 'default')
-  assert.ok(req.betas.includes('server-side-fallback-2026-07-01'))
+  // Haiku 5.5 has no server-side fallback; the old router is its fallback.
+  assert.equal('fallbacks' in req, false)
+  assert.equal(req.betas.includes('server-side-fallback-2026-07-01'), false)
   assert.ok(req.betas.includes('thinking-binding-controls-2026-08-01'))
   // Stable prefix cached; the per-message context after it.
   assert.equal(req.system[0].text, SYSTEM_PROMPT)
@@ -282,10 +282,10 @@ test('Opus 5.5 and Sonnet 5.5 keep the server-side fallback', async () => {
 test('WHATSAPP_AGENT_MODEL accepts the three agent models and nothing else', () => {
   assert.equal(agentModel('claude-haiku-5-5'), 'claude-haiku-5-5')
   assert.equal(agentModel(' Claude-Sonnet-5-5 '), 'claude-sonnet-5-5')
-  assert.equal(agentModel(undefined), 'claude-opus-5-5')
+  assert.equal(agentModel(undefined), 'claude-haiku-5-5')
   // An unknown or dated id would be a 400 on every message — use the default.
-  assert.equal(agentModel('claude-haiku-5-5-20260101'), 'claude-opus-5-5')
-  assert.equal(agentModel('gpt-5'), 'claude-opus-5-5')
+  assert.equal(agentModel('claude-opus-5-5-20260101'), 'claude-haiku-5-5')
+  assert.equal(agentModel('gpt-5'), 'claude-haiku-5-5')
 })
 
 // ── Always a reply ──────────────────────────────────────────────────────────

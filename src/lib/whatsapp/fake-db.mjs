@@ -25,6 +25,8 @@ const norm = v => (v === null || v === undefined ? v : String(v))
  *   `"<table>.<embedded table>": "<foreign key column>"`. PostgREST infers
  *   these from the schema; here they are declared, because guessing which
  *   column joins deals to client_requests is how a fake starts lying.
+ * @param {Record<string, () => object>} [opts.defaults] column defaults per
+ *   table, applied on insert — what Postgres fills in (expires_at, created_at).
  */
 export function fakeDb(tables = {}, opts = {}) {
   const links = opts.links ?? {
@@ -33,6 +35,7 @@ export function fakeDb(tables = {}, opts = {}) {
     'listing_alerts.Properties': 'property_id',
     'listing_alerts.client_requests': 'client_id',
   }
+  const defaults = opts.defaults ?? {}
   const data = Object.fromEntries(Object.entries(tables).map(([t, rows]) => [t, rows.map(r => ({ ...r }))]))
   /** Every write attempted, in order: { table, op, values, filters }. */
   const writes = []
@@ -64,16 +67,37 @@ export function fakeDb(tables = {}, opts = {}) {
       return new RegExp(`^${escaped.join('.*')}$`, 'is').test(text)
     }
 
+    // "deals.company_id" filters on an embedded row, through its link.
+    const valueOf = (row, col) => {
+      if (!col.includes('.')) return row[col]
+      const [name, field] = col.split('.')
+      const fk = links[table + '.' + name]
+      const related = fk ? (data[name] ?? []).find(r => norm(r.id) === norm(row[fk])) : null
+      return related?.[field]
+    }
+    // Numbers compare as numbers ("900" < "1000"); ISO timestamps as strings.
+    const cmp = (a, b) => {
+      const x = Number(a), y = Number(b)
+      if (a !== '' && b !== '' && Number.isFinite(x) && Number.isFinite(y)) return x - y
+      return String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0
+    }
+    const test = (row, [kind, col, val]) => {
+      const v = valueOf(row, col)
+      if (kind === 'ilike') return ilike(String(v ?? ''), String(val))
+      if (kind === 'in') return val.map(norm).includes(norm(v))
+      if (kind === 'not_null') return v !== null && v !== undefined
+      if (kind === 'is_null') return v === null || v === undefined
+      if (kind === 'gt') return v != null && cmp(v, val) > 0
+      if (kind === 'gte') return v != null && cmp(v, val) >= 0
+      if (kind === 'lt') return v != null && cmp(v, val) < 0
+      if (kind === 'lte') return v != null && cmp(v, val) <= 0
+      if (kind === 'neq') return norm(v) !== norm(val)
+      if (kind === 'or') return val.some(f => test(row, f))
+      return norm(v) === norm(val)
+    }
+
     const rows = () => {
-      let out = data[table].filter(row =>
-        filters.every(([kind, col, val]) => {
-          if (kind === 'ilike') return ilike(String(row[col] ?? ''), String(val))
-          if (kind === 'in') return val.map(norm).includes(norm(row[col]))
-          if (kind === 'not_null') return row[col] !== null && row[col] !== undefined
-          // ISO timestamps compare correctly as strings, which is all this is used for.
-          if (kind === 'gt') return row[col] != null && String(row[col]) > String(val)
-          return norm(row[col]) === norm(val)
-        }))
+      let out = data[table].filter(row => filters.every(f => test(row, f)))
       if (order) {
         const { col, ascending } = order
         out = [...out].sort((a, b) => (a[col] > b[col] ? 1 : a[col] < b[col] ? -1 : 0) * (ascending ? 1 : -1))
@@ -106,7 +130,7 @@ export function fakeDb(tables = {}, opts = {}) {
           // merge into it, which is what upsert means.
           const clash = conflict && data[table].find(r => conflict.every(c => norm(r[c]) === norm(v[c])))
           if (clash) { if (!ignoreDuplicates) Object.assign(clash, v); continue }
-          const row = { id: nextId(table), ...v }
+          const row = { id: nextId(table), ...(defaults[table]?.() ?? defaults['*']?.() ?? {}), ...v }
           data[table].push(row)
           added.push(row)
         }
@@ -148,6 +172,24 @@ export function fakeDb(tables = {}, opts = {}) {
       ilike(col, val) { filters.push(['ilike', col, val]); return api },
       in(col, values) { filters.push(['in', col, values]); return api },
       gt(col, val) { filters.push(['gt', col, val]); return api },
+      gte(col, val) { filters.push(['gte', col, val]); return api },
+      lt(col, val) { filters.push(['lt', col, val]); return api },
+      lte(col, val) { filters.push(['lte', col, val]); return api },
+      neq(col, val) { filters.push(['neq', col, val]); return api },
+      is(col, val) {
+        if (val !== null) throw new Error(`fake-db: .is(${col}, ${val}) is not supported`)
+        filters.push(['is_null', col, null]); return api
+      },
+      // PostgREST's "a.ilike.*x*,b.eq.y" — the forms the app uses. * is %.
+      or(expr) {
+        const parts = String(expr).split(',').map(p => {
+          const [col, kind, ...rest] = p.trim().split('.')
+          const val = rest.join('.')
+          return [kind, col, kind === 'ilike' ? val.replaceAll('*', '%') : val]
+        })
+        filters.push(['or', '', parts]); return api
+      },
+      range(a, b) { limit = b - a + 1; return api },
       // Only the form the app uses: .not(col, 'is', null).
       not(col, op, val) {
         if (op !== 'is' || val !== null) throw new Error(`fake-db: .not(${col}, ${op}, ${val}) is not supported`)

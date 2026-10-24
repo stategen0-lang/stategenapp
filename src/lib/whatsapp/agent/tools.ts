@@ -20,7 +20,7 @@ import type { BotReply } from '../cloud.ts'
 import type { IntentResult } from '../intent.ts'
 import type { ToolOutcome, TurnState } from './loop.ts'
 import { replyText } from '../cloud.ts'
-import { stageClientUpdate, stagePropertyUpdate } from '../write-handlers.ts'
+import { stageClientUpdate, stagePropertyUpdate, applyPendingAction } from '../write-handlers.ts'
 import { stageNewRecord } from '../flow-handlers.ts'
 import { handleQueryClient, handleQueryProperty } from '../handlers.ts'
 import { findListings, queryFromIntent } from '../listing-finder.ts'
@@ -204,9 +204,19 @@ export const TOOLS: Tool[] = [
     description: 'Everything else the CRM can do that has no tool of its own yet: moving a client\'s deal along the pipeline; logging, accepting or rejecting offers; booking viewings and meetings; the agent\'s schedule and overdue follow-ups; sending a listing to the marketing team; writing a listing description in English or Arabic; a shareable link to a listing; recent activity and team performance. Pass ONE clear instruction in plain English containing every detail needed, e.g. "move Ahmed Khoury to negotiating", "book a viewing with Rita tomorrow at 3pm for listing #45", "send #23 to marketing". Never use it to add or edit clients or listings — those have their own tools.',
     input_schema: object({ instruction: must('string', 'One clear, complete instruction in English.') }),
   },
+  {
+    name: 'confirm_waiting_change',
+    description: 'Save the change waiting for the agent\'s approval — the last "About to …" confirmation they were shown. Use it when their message approves that change as shown, with or without more words: "yes save it", "eh sa7", "ok go ahead", "correct", "تمام". If they approve but also change or add something ("yes but budget 1200"), do not use this — prepare the corrected change instead. Never for a change prepared in this same reply: the agent hasn\'t seen it yet.',
+    input_schema: object({}),
+  },
+  {
+    name: 'cancel_waiting_change',
+    description: 'Drop the change waiting for the agent\'s approval, when they say not to save it: "no cancel", "la2 khalas", "forget it", "don\'t save". Nothing is saved.',
+    input_schema: object({}),
+  },
 ]
 
-export const WRITE_TOOLS = new Set(['create_client', 'create_listing', 'update_client', 'update_listing', 'other_request'])
+export const WRITE_TOOLS = new Set(['create_client', 'create_listing', 'update_client', 'update_listing', 'other_request', 'confirm_waiting_change', 'cancel_waiting_change'])
 
 // ── Reading the model's input ───────────────────────────────────────────────
 // Strict mode already guarantees the shape; these still refuse to pass on
@@ -220,7 +230,7 @@ const num = (i: Input, k: string): number | undefined => {
   const v = i[k]
   if (typeof v === 'number') return Number.isFinite(v) ? v : undefined
   // Without strict mode a number can arrive as "1,000" — accept plain digits only.
-  if (typeof v === 'string' && /^s*d[d,]*(.d+)?s*$/.test(v)) return Number(v.replace(/[,s]/g, ''))
+  if (typeof v === 'string' && /^\s*\d[\d,]*(\.\d+)?\s*$/.test(v)) return Number(v.replace(/[,\s]/g, ''))
   return undefined
 }
 const bool = (i: Input, k: string): boolean | undefined => (typeof i[k] === 'boolean' ? i[k] as boolean : undefined)
@@ -243,8 +253,8 @@ export function conform(name: string, input: Input): Input {
   for (const [k, p] of Object.entries(props)) {
     const values = (p.enum ?? ((p.anyOf ?? []) as Schema[]).find(o => o.enum)?.enum) as string[] | undefined
     if (!values || out[k] === undefined || out[k] === null) continue
-    const said = typeof out[k] === 'string' ? (out[k] as string).trim().toLowerCase().replace(/[s_-]+/g, ' ') : ''
-    const hit = values.find(v => v.toLowerCase().replace(/[s_-]+/g, ' ') === said)
+    const said = typeof out[k] === 'string' ? (out[k] as string).trim().toLowerCase().replace(/[\s_-]+/g, ' ') : ''
+    const hit = values.find(v => v.toLowerCase().replace(/[\s_-]+/g, ' ') === said)
     if (hit) out[k] = hit
     else delete out[k]
   }
@@ -293,7 +303,22 @@ async function latestPending(admin: SupabaseClient, profileId: string): Promise<
 }
 
 export const STAGED_PREFIX = 'Prepared — NOT saved yet. The agent is shown this confirmation automatically, so do not repeat its details; add at most one short sentence if there is something they should know. Waiting on their yes:\n'
-export const ALREADY_STAGED = 'A change is already waiting for the agent\'s yes in this conversation turn. Do not prepare another — tell the agent to confirm or cancel the first one, and offer to do this next.'
+export const ALREADY_STAGED = 'One change per message: a change was already prepared, saved or cancelled in this reply. Do not do another — tell the agent you\'ll do this next, once they\'ve dealt with the first.'
+
+export const NOTHING_WAITING = 'Nothing is waiting for the agent\'s approval — it was already saved or cancelled, or it expired (a prepared change waits 10 minutes). Tell the agent plainly, and offer to prepare it again if they still want it.'
+
+/** The change the agent was last shown, if it's still live. */
+async function waitingChange(admin: SupabaseClient, profileId: string) {
+  const { data } = await admin
+    .from('pending_actions')
+    .select('id, action_type, summary, payload, expires_at')
+    .eq('profile_id', profileId)
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  return data as { id: string; action_type: string; summary: string; payload: unknown } | null
+}
 
 /**
  * Run a handler that may stage a change, and report whether it did. Decided by
@@ -458,6 +483,26 @@ export async function executeTool(ctx: ToolContext, name: string, rawInput: unkn
       const instruction = str(input, 'instruction')
       if (!instruction) return { content: 'Give one clear instruction.', isError: true }
       return staging(ctx, async () => replyText(await ctx.legacy(instruction)))
+    }
+
+    // The same commit a bare "yes" gets from the router, for approvals with
+    // more words. Exactly what the agent was shown is saved — the payload was
+    // fixed when it was prepared, and one prepared in this reply can't be
+    // confirmed (state.staged, checked above). Consumed before it's applied,
+    // so it can never be applied twice.
+    case 'confirm_waiting_change': {
+      const pending = await waitingChange(ctx.admin, ctx.profile.id)
+      if (!pending) return { content: NOTHING_WAITING, isError: true }
+      await ctx.admin.from('pending_actions').delete().eq('id', pending.id)
+      const saved = replyText(await applyPendingAction(ctx.admin, ctx.profile, pending.action_type, pending.payload as never))
+      return { content: `Done. The agent is shown this automatically, so don't repeat it:\n${saved}`, confirmation: saved }
+    }
+
+    case 'cancel_waiting_change': {
+      const pending = await waitingChange(ctx.admin, ctx.profile.id)
+      if (!pending) return { content: NOTHING_WAITING, isError: true }
+      await ctx.admin.from('pending_actions').delete().eq('id', pending.id)
+      return { content: 'Cancelled — nothing was saved. The agent is shown this automatically.', confirmation: 'Cancelled — nothing was saved.' }
     }
 
     default:

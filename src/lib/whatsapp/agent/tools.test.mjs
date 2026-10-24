@@ -9,6 +9,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { fakeDb } from '../fake-db.mjs'
 import { briefFromIntent } from '../match-query.ts'
+import { NOTHING_WAITING } from './tools.ts'
 import { TOOLS, conform, WRITE_TOOLS, executeTool, matchIntent, ALREADY_STAGED, STAGED_PREFIX } from './tools.ts'
 
 const COMPANY = 7
@@ -27,6 +28,9 @@ function setup(profile, tables = {}, legacy = async () => 'legacy reply') {
     pending_actions: [], conversation_state: [], client_requests: [], Properties: [],
     Profiles: PROFILES, Companies: [{ id: COMPANY, title_template: null }],
     ...tables,
+  }, {
+    // What Postgres fills in: a prepared change lives 10 minutes.
+    defaults: { pending_actions: () => ({ created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 600_000).toISOString() }) },
   })
   return { db, ctx: { admin: db.client, profile, origin: 'https://stategen.app', legacy } }
 }
@@ -333,4 +337,61 @@ test('a client can be found and updated by phone, however it is typed', async ()
   assert.equal(db.table('pending_actions').at(-1).payload.id, 145)
   const none = await executeTool(ctx, 'find_client', call('find_client', { name: '71 999 000' }), fresh())
   assert.match(none.content, /No client/)
+})
+
+// ── Approving with more words than "yes" ────────────────────────────────────
+// Live (simulator): "Yes, that's correct, please save it" reached the agent,
+// which had no way to save — and told the agent it was "confirmed on my side".
+
+const RITA_145 = { id: 145, company_id: COMPANY, 'Client Name': 'Rita Haddad', 'client phone': '70 123 456', 'prefered-location': 'Achrafieh', budget_max: 900, budget_min: 900, notes: '{"agentId":"JH-655"}' }
+
+test('confirm_waiting_change saves exactly the change the agent was shown', async () => {
+  const { db, ctx } = setup(AGENT, { client_requests: [{ ...RITA_145 }] })
+  const staged = await executeTool(ctx, 'update_client', call('update_client', { client_name: 'Rita Haddad', budget: 1000 }), fresh())
+  assert.ok(staged.confirmation)
+  // The next message — a new turn.
+  const out = await executeTool(ctx, 'confirm_waiting_change', {}, fresh())
+  assert.equal(out.isError, undefined, out.content)
+  assert.match(out.confirmation, /saved|updated/i)
+  assert.equal(Number(db.table('client_requests')[0].budget_max), 1000)
+  assert.equal(db.table('pending_actions').length, 0, 'consumed')
+  // Twice is nothing: it can never be applied again.
+  const again = await executeTool(ctx, 'confirm_waiting_change', {}, fresh())
+  assert.equal(again.content, NOTHING_WAITING)
+})
+
+test('a change prepared in the same reply cannot be confirmed — the agent has not seen it', async () => {
+  const { db, ctx } = setup(AGENT, { client_requests: [{ ...RITA_145 }] })
+  const state = fresh()
+  await executeTool(ctx, 'update_client', call('update_client', { client_name: 'Rita Haddad', budget: 1000 }), state)
+  state.staged = true   // what the loop does when a tool stages
+  const out = await executeTool(ctx, 'confirm_waiting_change', {}, state)
+  assert.equal(out.isError, true)
+  assert.equal(Number(db.table('client_requests')[0].budget_max), 900)
+})
+
+test('an expired change is not saved', async () => {
+  const { db, ctx } = setup(AGENT, { client_requests: [{ ...RITA_145 }] })
+  await executeTool(ctx, 'update_client', call('update_client', { client_name: 'Rita Haddad', budget: 1000 }), fresh())
+  db.table('pending_actions')[0].expires_at = new Date(Date.now() - 1000).toISOString()
+  const out = await executeTool(ctx, 'confirm_waiting_change', {}, fresh())
+  assert.equal(out.content, NOTHING_WAITING)
+  assert.equal(Number(db.table('client_requests')[0].budget_max), 900)
+})
+
+test('cancel_waiting_change drops it and saves nothing', async () => {
+  const { db, ctx } = setup(AGENT, { client_requests: [{ ...RITA_145 }] })
+  await executeTool(ctx, 'update_client', call('update_client', { client_name: 'Rita Haddad', budget: 1000 }), fresh())
+  const out = await executeTool(ctx, 'cancel_waiting_change', {}, fresh())
+  assert.match(out.confirmation, /Cancelled/)
+  assert.equal(db.table('pending_actions').length, 0)
+  assert.equal(Number(db.table('client_requests')[0].budget_max), 900)
+  assert.equal((await executeTool(ctx, 'cancel_waiting_change', {}, fresh())).content, NOTHING_WAITING)
+})
+
+test('a number sent as text ("1,000") is read', async () => {
+  const { db, ctx } = setup(AGENT, { client_requests: [{ ...RITA_145 }] })
+  const out = await executeTool(ctx, 'update_client', call('update_client', { client_name: 'Rita Haddad', budget: '1,000' }), fresh())
+  assert.ok(out.confirmation, out.content)
+  assert.match(out.confirmation, /1,000/)
 })

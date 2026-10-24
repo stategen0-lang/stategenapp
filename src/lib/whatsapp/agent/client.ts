@@ -1,9 +1,9 @@
 // The one place the WhatsApp agent talks to Claude.
 //
 // Settings, and why:
-//   • claude-opus-5-5 by default; WHATSAPP_AGENT_MODEL picks Sonnet 5.5 or
-//     Haiku 5.5 instead. At ~7 messages a day every option is cheap — the
-//     replay harness compares them on real messages.
+//   • claude-haiku-5-5 by default — the agency's choice, and what production
+//     runs. WHATSAPP_AGENT_MODEL picks Sonnet 5.5 or Opus 5.5 instead. The
+//     default is the cheapest so a missing setting can't run up a bill.
 //   • effort "medium" — Opus 5.5's thinking can't be switched off; effort is the
 //     dial. Medium is its default; set explicitly so the behaviour doesn't move
 //     if the default does. Override with WHATSAPP_AGENT_EFFORT.
@@ -25,7 +25,7 @@ type Msg = Anthropic.Beta.BetaMessageParam
 type Tool = Anthropic.Beta.BetaTool
 type SystemBlock = Anthropic.Beta.BetaTextBlockParam
 
-export const AGENT_MODEL = 'claude-opus-5-5'
+export const AGENT_MODEL = 'claude-haiku-5-5'
 const MAX_TOKENS = 16_000
 
 // The models the agent may run on. Set with WHATSAPP_AGENT_MODEL; anything
