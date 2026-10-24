@@ -5,7 +5,7 @@
 import { STAGES, type Stage, type Outcome } from '../pipeline.ts'
 
 // Spoken words → a pipeline stage. Kept deliberately small and unambiguous;
-// anything not here falls through to Grok rather than being guessed at.
+// anything not here falls through to the model rather than being guessed at.
 const STAGE_WORDS: Record<string, Stage> = {
   lead: 'lead', leads: 'lead',
   contacted: 'contacted', contact: 'contacted',

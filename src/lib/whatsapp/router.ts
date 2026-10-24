@@ -263,7 +263,7 @@ async function routeByIntent(
 ): Promise<Routed> {
   const result = await classifyIntent(body)
 
-  // Grok is still asked, so any details in the message are extracted and the
+  // The model is still asked, so any details in the message are extracted and the
   // flow can skip questions — but the routing decision is ours when the wording
   // is unambiguous.
   const kind = startKind(body)
@@ -304,7 +304,7 @@ async function routeByIntent(
     case 'confirm':
     case 'cancel':
       return { intent, answer: NOTHING_PENDING }
-    // Grok read it as a reminder reply, but nothing is outstanding — otherwise
+    // The model read it as a reminder reply, but nothing is outstanding — otherwise
     // the local matcher above would have handled it.
     case 'reminder_response':
       return { intent, answer: `You have no follow-up reminders waiting.\n\n${HELP_TEXT}` }

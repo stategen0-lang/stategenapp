@@ -1,8 +1,8 @@
 // Deterministic reply parsing.
 //
-// The spec routes everything through Grok, but the highest-volume replies are
+// The spec routes everything through a model, but the highest-volume replies are
 // a handful of fixed words ("done", "snooze 3d", "yes"). Matching those locally
-// is instant, free, and can't be mangled by a model — Grok is only needed for
+// is instant, free, and can't be mangled by a model — the model is only needed for
 // genuinely open-ended messages. Pure and testable.
 
 export type ReminderAction = 'done' | 'snooze' | 'not_interested' | 'unknown'
@@ -74,7 +74,7 @@ export function parseSnoozeDays(text: string): number | null {
 
 /**
  * Classify a reply to a call reminder. Returns 'unknown' when it isn't one of
- * the fixed replies, so the caller can fall back to Grok rather than guessing.
+ * the fixed replies, so the caller can fall back to the model rather than guessing.
  */
 export function parseReminderReply(raw: string | null | undefined): ReminderReply {
   const text = (raw ?? '').trim()

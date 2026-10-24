@@ -4,9 +4,10 @@
 // "write a description for #23" flow, so both generate through exactly the same
 // prompts and reasoning-token handling — one source of truth, no internal HTTP
 // hop. The pure prompt-building lives in ./description-prompts (unit-tested);
-// this file only adds the Grok call, empty-completion retry, and deadline.
+// this file only adds the model call (lib/ai/llm.ts), empty-completion retry,
+// and deadline.
 
-import { chat } from '@/lib/xai'
+import { complete } from '@/lib/ai/llm'
 import { buildPrompts, buildArabicPrompts, hasArabic, stripTemplateMarkers, type DescriptionInput } from '@/lib/ai/description-prompts'
 
 export type { DescriptionInput }
@@ -38,12 +39,12 @@ export async function generateDescription(
   template?: string | null,
   opts: { retry?: boolean; deadlineMs?: number } = {},
 ): Promise<string> {
-  const { systemPrompt, prompt, maxTokens, temperature } = buildPrompts(d, template)
+  const { systemPrompt, prompt, maxTokens } = buildPrompts(d, template)
   const messages = [
     { role: 'system' as const, content: systemPrompt },
     { role: 'user' as const, content: prompt },
   ]
-  const call = () => chat(messages, { temperature, max_tokens: maxTokens })
+  const call = () => complete(messages, { maxTokens })
 
   let clean = tidy(await withDeadline(call(), opts.deadlineMs))
   if (!clean && (opts.retry ?? true)) clean = tidy(await withDeadline(call(), opts.deadlineMs))
@@ -65,12 +66,12 @@ export async function generateArabicDescription(
   const source = String(english ?? '').trim()
   if (!source) return ''
 
-  const { systemPrompt, prompt, maxTokens, temperature } = buildArabicPrompts(d, source)
+  const { systemPrompt, prompt, maxTokens } = buildArabicPrompts(d, source)
   const messages = [
     { role: 'system' as const, content: systemPrompt },
     { role: 'user' as const, content: prompt },
   ]
-  const call = () => chat(messages, { temperature, max_tokens: maxTokens })
+  const call = () => complete(messages, { maxTokens })
 
   let clean = tidy(await withDeadline(call(), opts.deadlineMs))
   if (!clean && (opts.retry ?? true)) clean = tidy(await withDeadline(call(), opts.deadlineMs))

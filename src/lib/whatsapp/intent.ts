@@ -1,10 +1,11 @@
 // Intent classification.
 //
 // Deterministic matches run first (see replies.ts) — they're instant, free and
-// can't be misread by a model. Grok is only consulted for genuinely open-ended
+// can't be misread by a model. The model (Haiku, lib/ai/llm.ts) is only consulted
+// for genuinely open-ended
 // messages.
 
-// NB: the xAI client is imported lazily inside classifyIntent rather than at
+// NB: the model client is imported lazily inside classifyIntent rather than at
 // module scope. parseIntentJson is pure and unit-tested by a Node test runner
 // that strips types but does not resolve the "@/" path alias, so a top-level
 // runtime import here would make this whole module unloadable in tests.
@@ -254,17 +255,16 @@ Examples (note the typos and varied phrasing):
 /**
  * How long the model gets before we give up on it.
  *
- * Twilio abandons a webhook at 15 seconds (error 11200). Measured non-model
- * overhead — signature check, profile lookup, pending/flow/reminder queries,
- * the handler's own reads and the reply — is about 1s, and Grok itself
- * typically takes 5-8s. 10s leaves Grok room to finish normally while keeping
- * the worst case near 11s, comfortably inside Twilio's limit.
+ * Sized when Twilio abandoned a webhook at 15 seconds; replies now run in
+ * after() with far more room, but an agent still shouldn't wait longer than
+ * this for the old router. Haiku with thinking off typically answers in 1-3s
+ * (Grok took 5-8s).
  *
  * Sized deliberately: too tight and legitimate classifications are thrown away
  * (7s cut off a valid feedback message during testing); too loose and the reply
  * is lost entirely, which is strictly worse than answering "I didn't understand".
  */
-const GROK_DEADLINE_MS = 10_000
+const MODEL_DEADLINE_MS = 10_000
 
 /** Reject if `promise` hasn't settled within `ms`. */
 function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -275,7 +275,7 @@ function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 /**
- * Ask Grok to classify. Returns { intent: 'unknown' } rather than throwing, so
+ * Ask the model to classify. Returns { intent: 'unknown' } rather than throwing, so
  * the webhook always has something to reply with.
  */
 export async function classifyIntent(message: string): Promise<IntentResult> {
@@ -298,21 +298,18 @@ export async function classifyIntent(message: string): Promise<IntentResult> {
 
   const started = Date.now()
   try {
-    const { chat } = await import('@/lib/xai')
-    // Generous token budget: Grok is a reasoning model and spends a large,
-    // variable number of tokens thinking before it writes. A small cap returns
-    // an empty string (the bug that silently broke AI descriptions).
+    const { complete } = await import('@/lib/ai/llm')
     //
     // The wall-clock deadline is separate and non-negotiable — better to answer
     // "I didn't understand" quickly than to be cut off with no reply at all.
-    let raw = await withDeadline(chat(messages, { temperature: 0.1, max_tokens: 2000 }), GROK_DEADLINE_MS)
+    let raw = await withDeadline(complete(messages, { maxTokens: 2000 }), MODEL_DEADLINE_MS)
 
     // Retry an empty completion only when the first call failed fast enough
     // that a second one can still finish inside the budget. Retrying late is
     // how a request ends up past Twilio's limit with nothing to show for it.
     const elapsed = Date.now() - started
     if ((!raw || !raw.trim()) && elapsed < 2500) {
-      raw = await withDeadline(chat(messages, { temperature: 0.1, max_tokens: 2000 }), GROK_DEADLINE_MS - elapsed)
+      raw = await withDeadline(complete(messages, { maxTokens: 2000 }), MODEL_DEADLINE_MS - elapsed)
     }
     // The prompt tells the model a phone number is not a budget; this makes
     // sure of it. Getting this wrong is expensive and silent — the agent gets a

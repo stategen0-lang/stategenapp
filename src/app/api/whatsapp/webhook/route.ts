@@ -95,7 +95,7 @@ async function optOut(admin: SupabaseClient, profile: Profile): Promise<string> 
  * Resolve the sender, run the router, send the reply, and log both directions.
  * Runs under `after()` — off the response path — because the Cloud API is
  * asynchronous: we ack Meta's webhook with a fast 200 (below) and deliver the
- * answer with a separate Graph call here, so Grok/template latency can't cause a
+ * answer with a separate Graph call here, so model/template latency can't cause a
  * webhook timeout or retry.
  */
 async function handleInbound(

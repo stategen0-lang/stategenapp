@@ -4,7 +4,7 @@ import { getSession } from '@/lib/session'
 
 export async function POST(req: NextRequest) {
   // Require a signed-in user: this calls a paid model, so an open endpoint would
-  // let anyone burn the xAI credits.
+  // let anyone burn the Anthropic credits.
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

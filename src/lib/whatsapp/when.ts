@@ -1,6 +1,6 @@
 // Turning "tomorrow at 3pm" into an actual instant.
 //
-// Deterministic on purpose. Grok can read a date, but this runs on every event
+// Deterministic on purpose. A model can read a date, but this runs on every event
 // an agent adds from their phone, and a model that occasionally puts a viewing
 // on the wrong day is worse than one that admits it didn't understand — the
 // agent turns up at the wrong time and only finds out when nobody's there.

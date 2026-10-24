@@ -7,7 +7,7 @@
 //
 // Unlike Twilio, Cloud API is asynchronous: the webhook is acknowledged with a
 // bare 200 and the reply is sent as a separate Graph API call (see sendText).
-// That removes Twilio's 15-second synchronous-reply limit, so Grok latency and
+// That removes Twilio's 15-second synchronous-reply limit, so model latency and
 // template-generation time no longer risk a timeout.
 
 import crypto from 'node:crypto'

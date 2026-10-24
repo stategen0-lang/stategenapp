@@ -2,7 +2,7 @@
 //
 // Two rules govern everything in this file:
 //
-//   1. A whitelist, never a passthrough. Grok decides *what the agent meant*,
+//   1. A whitelist, never a passthrough. The model decides *what the agent meant*,
 //      but it must never decide *which column gets written*. Anything outside
 //      the maps below is dropped and reported back, so a hallucinated field
 //      name can't reach the database.

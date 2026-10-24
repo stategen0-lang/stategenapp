@@ -3,7 +3,7 @@ import { generateArabicDescription, type DescriptionInput } from '@/lib/ai/prope
 import { getSession } from '@/lib/session'
 
 export async function POST(req: NextRequest) {
-  // Same guard as the English generator: this spends xAI credits, so it is
+  // Same guard as the English generator: this spends Anthropic credits, so it is
   // never open to anyone who is not signed in.
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

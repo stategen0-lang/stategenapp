@@ -4,7 +4,7 @@
 // whatever CRM fields the agent mentioned (a bare "500k" answers the field they
 // were just asked; a rich "for sale, 3 beds, balcony" fills several at once).
 //
-// Lazy xai import (like intent.ts) so parseFieldsJson stays unit-testable under
+// Lazy model-client import (like intent.ts) so parseFieldsJson stays unit-testable under
 // the type-stripping Node runner, which doesn't resolve the "@/" alias.
 
 export type CreateFlow = 'create_property' | 'create_client'
@@ -145,21 +145,21 @@ function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
   ])
 }
 
-/** Ask Grok to pull fields from a free-text reply. Returns {} on any failure so
+/** Ask the model to pull fields from a free-text reply. Returns {} on any failure so
  *  the flow always falls back to direct coercion of the asked field. */
 export async function extractCreateFields(
   flow: CreateFlow, message: string, askedLabel?: string,
 ): Promise<Record<string, ExtractedValue>> {
   if (!message || !message.trim()) return {}
   try {
-    const { chat } = await import('@/lib/xai')
+    const { complete } = await import('@/lib/ai/llm')
     const raw = await withDeadline(
-      chat(
+      complete(
         [
           { role: 'system' as const, content: systemPrompt(flow, askedLabel) },
           { role: 'user' as const, content: message },
         ],
-        { temperature: 0.1, max_tokens: 1500 },
+        { maxTokens: 1500 },
       ),
       9_000,
     )

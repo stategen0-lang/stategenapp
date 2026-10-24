@@ -23,7 +23,7 @@ import https from 'node:https'
 import net from 'node:net'
 import tls from 'node:tls'
 
-export const ALLOWED_HOSTS = new Set(['api.anthropic.com', 'api.x.ai'])
+export const ALLOWED_HOSTS = new Set(['api.anthropic.com'])
 
 /** Per-conversation capture: { calls: [], blocked: [] }. */
 export const scope = new AsyncLocalStorage()
@@ -34,7 +34,7 @@ export const blocked = []
 /** Token usage per model, across everything (bot, persona and judge). */
 export const usage = {}
 
-const KEEP = new Set(['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'XAI_API_KEY', 'WHATSAPP_AGENT_MODEL', 'WHATSAPP_AGENT_EFFORT', 'APP_TIMEZONE'])
+const KEEP = new Set(['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'WHATSAPP_AGENT_MODEL', 'WHATSAPP_AGENT_EFFORT', 'APP_TIMEZONE'])
 const SECRET = /SUPABASE|SMTP|WHATSAPP|VAPID|TWILIO|CRON|ADMIN|SECRET|TOKEN|KEY|PASS/i
 
 function hostOf(input) {

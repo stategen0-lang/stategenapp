@@ -1,7 +1,7 @@
-import { chat } from '@/lib/xai'
+import { complete } from '@/lib/ai/llm'
 import { FIELDS, type ImportKind, type Mapping } from '@/lib/import/mapping'
 
-// Ask Grok to map the sheet's columns to our fields — ONCE, from the headers and
+// Ask the model to map the sheet's columns to our fields — ONCE, from the headers and
 // a few sample rows. The mapping is then applied to every row in code, so cost
 // doesn't grow with the number of rows.
 export async function inferMapping(kind: ImportKind, headers: string[], sampleRows: string[][]): Promise<Mapping> {
@@ -23,9 +23,9 @@ export async function inferMapping(kind: ImportKind, headers: string[], sampleRo
 
   let raw = ''
   try {
-    raw = await chat(
+    raw = await complete(
       [{ role: 'system', content: system }, { role: 'user', content: user }],
-      { temperature: 0, max_tokens: 2000 },
+      { maxTokens: 2000 },
     )
   } catch {
     return Object.fromEntries(keys.map(k => [k, null]))   // AI down → empty mapping, user maps manually

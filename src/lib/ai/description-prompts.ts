@@ -1,14 +1,13 @@
 // Pure prompt-building for AI listing descriptions. No imports, so it can be
-// unit-tested in isolation (the generator that calls Grok lives in
+// unit-tested in isolation (the generator that calls the model lives in
 // property-description.ts and pulls these in).
 //
 // Two modes, branched on whether a template is supplied:
 //   template mode  — reproduce the template's structure, fill its [placeholders]
 //   free-form mode — short marketing copy
 //
-// NB: Grok is a reasoning model — it spends a large, variable number of tokens
-// thinking before it writes, out of the same budget, so the token cap is kept
-// generous (a small cap returns "" silently).
+// The token caps are output caps: the model runs with thinking off (see
+// lib/ai/llm.ts), so every token is description.
 
 export interface DescriptionInput {
   title?: string
@@ -50,7 +49,6 @@ export interface Prompts {
   systemPrompt: string
   prompt: string
   maxTokens: number
-  temperature: number
 }
 
 /** Tick-boxes as a readable list, or '' when there are none. */
@@ -132,7 +130,6 @@ Rules:
 - Never output the "--- BEGIN TEMPLATE ---" / "--- END TEMPLATE ---" lines. They mark the template for you; they are not part of it.
 - Output only the finished description — no preamble, no explanation, no markdown code fences.`,
       maxTokens: 4000,
-      temperature: 0.4,
     }
   }
 
@@ -157,7 +154,6 @@ Rules:
 - Write in English
 - Output the description only, no labels or preamble${d.style ? `\n- The agent asked for this draft: "${String(d.style).replace(/"/g, "'").slice(0, 300)}". Follow it, except where it would add a fact not in PROPERTY DATA — that rule wins` : ''}`,
     maxTokens: 300,
-    temperature: 0.7,
   }
 }
 
@@ -196,7 +192,6 @@ Rules:
 - Never repeat or hint at the agent's internal notes.
 - Output only the Arabic description — no preamble, no English, no explanation, no markdown code fences.`,
     maxTokens: 4000,
-    temperature: 0.4,
   }
 }
 

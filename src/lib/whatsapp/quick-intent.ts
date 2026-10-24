@@ -1,13 +1,13 @@
-// Deterministic intent matching, tried before Grok.
+// Deterministic intent matching, tried before the model.
 //
 // This exists because of a real production failure, not as an optimisation.
-// Twilio abandons a webhook after 15 seconds and reports error 11200. Grok is a
-// reasoning model whose latency is highly variable — measured between 2.3s and
+// Twilio abandoned a webhook after 15 seconds (error 11200), and Grok — the model
+// then — was a reasoning model whose latency is highly variable — measured between 2.3s and
 // 9.4s on identical infrastructure, and 14s on a longer message, which blew the
 // budget and cost the agent their reply even though the answer was correct.
 //
 // The messages agents actually send are overwhelmingly formulaic. Matching those
-// here answers them in milliseconds and leaves Grok for genuinely open-ended
+// here answers them in milliseconds and leaves the model for genuinely open-ended
 // text, where a slower path is acceptable because it's rare.
 //
 // Pure and unit-tested: no network, no database.
@@ -51,7 +51,7 @@ function budgetAndLocation(text: string): { budget?: number; location?: string }
  * not an agent searching existing listings. Keyed on a contact number or on
  * first-person "I'm looking to buy/rent" / "my name is", which an agent's own
  * property search never carries. When true we DON'T let the property-search
- * fast-path claim the message — it falls through to Grok, which extracts the
+ * fast-path claim the message — it falls through to the model, which extracts the
  * client's fields and classifies it create_client.
  */
 function looksLikeClientEnquiry(text: string): boolean {
@@ -77,7 +77,7 @@ const PROPERTY_STATUS_WORDS: Record<string, string> = {
 
 /**
  * Classify without a model call. Returns null when the message isn't one of the
- * recognised shapes, so the caller falls back to Grok rather than guessing.
+ * recognised shapes, so the caller falls back to the model rather than guessing.
  */
 export function quickIntent(raw: string | null | undefined): IntentResult | null {
   const text = (raw ?? '').trim()

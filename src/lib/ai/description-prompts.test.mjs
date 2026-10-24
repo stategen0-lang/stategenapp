@@ -29,15 +29,13 @@ test('buildFacts: rent uses the /month price', () => {
 test('free-form mode (no template): short copy, small token budget', () => {
   const p = buildPrompts(sale)
   assert.equal(p.maxTokens, 300)
-  assert.equal(p.temperature, 0.7)
   assert.match(p.prompt, /2-3 sentences only/)
   assert.equal(/BEGIN TEMPLATE/.test(p.prompt), false)
 })
 test('template mode: reproduces the template, generous token budget', () => {
   const template = 'Rental Price: $ [AMOUNT] /month\n[X] Bedroom(s)'
   const p = buildPrompts(sale, template)
-  assert.equal(p.maxTokens, 4000)          // reasoning tokens need room
-  assert.equal(p.temperature, 0.4)
+  assert.equal(p.maxTokens, 4000)          // a long template needs room
   assert.match(p.prompt, /BEGIN TEMPLATE/)
   assert.match(p.prompt, /\[AMOUNT\]/)     // the template is embedded verbatim
   assert.match(p.prompt, /No square brackets may remain/)
