@@ -253,6 +253,63 @@ async function finishOrPickAgent(
   return FLOWS[flow].finish(admin, profile, context)
 }
 
+// ── Staging a whole record at once (the conversational agent) ─────────────────
+
+export type StageNewResult =
+  | { status: 'staged'; reply: string }
+  | { status: 'missing'; missing: string[] }
+  | { status: 'needs_agent'; agents: AgentChoice[] }
+  | { status: 'unknown_agent'; agents: AgentChoice[] }
+
+/**
+ * Stage a new client or listing from every field the agent extracted, in one
+ * go — the conversational agent reads the whole brief, so there is nothing to
+ * ask for one question at a time.
+ *
+ * Deliberately the same machinery as the forms: the same coercion (seedForm /
+ * seedContext), the same required fields, the same finish and the same
+ * confirm-before-write. A record added by the agent is indistinguishable from
+ * one added through the step-by-step flow, and every rule those already
+ * enforce still applies.
+ *
+ * A manager adding a client must say whose it is, as the flow requires; the
+ * caller gets the list of agents to ask about rather than a silent default.
+ */
+export async function stageNewRecord(
+  admin: SupabaseClient,
+  profile: Profile,
+  flow: FlowName,
+  fields: Record<string, unknown>,
+  ownerAgent?: string | null,
+): Promise<StageNewResult> {
+  const steps = FLOWS[flow].steps
+  const context = flow === 'create_property' ? seedContext(fields, steps) : seedForm(fields, steps)
+
+  const missing = missingMandatory(context, steps)
+  if (missing.length) return { status: 'missing', missing: missing.map(s => s.label) }
+
+  if (flow === 'create_client' && isManager(profile.role)) {
+    const agents = await listCompanyAgents(admin, profile.company_id)
+    if (agents.length) {
+      if (!ownerAgent) return { status: 'needs_agent', agents }
+      // Matched on the code or the name, either way round — "Jad", "jad habchi"
+      // and "JH-655" are all the same person to the manager typing it.
+      const wanted = ownerAgent.trim().toLowerCase()
+      const partial = agents.filter(a => a.name.toLowerCase().includes(wanted))
+      const owner = agents.find(a => a.code.toLowerCase() === wanted)
+        ?? agents.find(a => a.name.toLowerCase() === wanted)
+        // A fragment counts only when it points at exactly one person: two
+        // agents called Nour must not be settled by whichever sorts first.
+        ?? (partial.length === 1 ? partial[0] : undefined)
+      if (!owner) return { status: 'unknown_agent', agents }
+      context.__ownerAgent = owner.code
+      context.__ownerAgentName = owner.name
+    }
+  }
+
+  return { status: 'staged', reply: await FLOWS[flow].finish(admin, profile, context) }
+}
+
 // ── Starting each flow ────────────────────────────────────────────────────────
 
 // Native WhatsApp Flow forms — a pop-up with fields + a Submit button. Enabled

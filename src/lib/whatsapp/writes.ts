@@ -299,7 +299,9 @@ export function appendLog(existingJson: unknown, entry: string, now: Date = new 
  * because a confirmation the agent can't verify is worse than no confirmation.
  */
 export function confirmationText(target: string, changes: string[], rejected: string[] = []): string {
-  const lines = [`About to update ${target}:`, ...changes.map(c => `• ${c}`)]
+  // "About to update a new client" was what agents saw for every new record.
+  const verb = /^a new\b/i.test(target) ? 'add' : 'update'
+  const lines = [`About to ${verb} ${target}:`, ...changes.map(c => `• ${c}`)]
   if (rejected.length) lines.push(`\n(Ignoring: ${rejected.join(', ')} — I can't change that from WhatsApp.)`)
   lines.push('', 'Reply YES to save or NO to cancel.')
   return lines.join('\n')

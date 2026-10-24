@@ -37,6 +37,16 @@ export function fakeDb(tables = {}, opts = {}) {
   /** Every write attempted, in order: { table, op, values, filters }. */
   const writes = []
 
+  // Ids only ever go up, as in Postgres. Deriving them from the row count
+  // reused an id after a delete, so a row deleted and replaced looked unchanged
+  // — exactly what pending_actions does on every stage().
+  const lastId = {}
+  const nextId = (table) => {
+    const highest = data[table].reduce((m, r) => Math.max(m, Number(r.id) || 0), 0)
+    lastId[table] = Math.max(lastId[table] ?? 0, highest) + 1
+    return lastId[table]
+  }
+
   const from = (table) => {
     data[table] ??= []
     const filters = []
@@ -53,6 +63,9 @@ export function fakeDb(tables = {}, opts = {}) {
         filters.every(([kind, col, val]) => {
           if (kind === 'ilike') return String(row[col] ?? '').toLowerCase().includes(String(val).replace(/%/g, '').toLowerCase())
           if (kind === 'in') return val.map(norm).includes(norm(row[col]))
+          if (kind === 'not_null') return row[col] !== null && row[col] !== undefined
+          // ISO timestamps compare correctly as strings, which is all this is used for.
+          if (kind === 'gt') return row[col] != null && String(row[col]) > String(val)
           return norm(row[col]) === norm(val)
         }))
       if (order) {
@@ -87,7 +100,7 @@ export function fakeDb(tables = {}, opts = {}) {
           // merge into it, which is what upsert means.
           const clash = conflict && data[table].find(r => conflict.every(c => norm(r[c]) === norm(v[c])))
           if (clash) { if (!ignoreDuplicates) Object.assign(clash, v); continue }
-          const row = { id: data[table].length + added.length + 1, ...v }
+          const row = { id: nextId(table), ...v }
           data[table].push(row)
           added.push(row)
         }
@@ -128,6 +141,12 @@ export function fakeDb(tables = {}, opts = {}) {
       eq(col, val) { filters.push(['eq', col, val]); return api },
       ilike(col, val) { filters.push(['ilike', col, val]); return api },
       in(col, values) { filters.push(['in', col, values]); return api },
+      gt(col, val) { filters.push(['gt', col, val]); return api },
+      // Only the form the app uses: .not(col, 'is', null).
+      not(col, op, val) {
+        if (op !== 'is' || val !== null) throw new Error(`fake-db: .not(${col}, ${op}, ${val}) is not supported`)
+        filters.push(['not_null', col, null]); return api
+      },
       order(col, o = {}) { order = { col, ascending: o.ascending !== false }; return api },
       limit(n) { limit = n; return api },
       maybeSingle() { const r = run(); return Promise.resolve({ data: r.data?.[0] ?? null, error: r.error }) },

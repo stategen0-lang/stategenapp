@@ -23,6 +23,15 @@ import { findListings, continueListingPick, focusedListing, focusListing, queryF
 import { hasCriteria } from '@/lib/listing-search-core'
 import type { IntentResult } from '@/lib/whatsapp/intent'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { agentReady, answerWithAgent } from '@/lib/whatsapp/agent'
+
+// The reply runs in after(), which the platform stops at this limit. Set
+// explicitly because an agent turn can take several model round-trips; the
+// agent itself stops starting new rounds well before it (TURN_BUDGET_MS).
+export const maxDuration = 120
+
+// The agent's bridge must not start the old step-by-step create flows.
+const USE_AGENT_CREATE_TOOL = 'Adding clients and listings has its own tools (create_client / create_listing) — use those instead.'
 
 // A yes/no with nothing staged. The old wording ("send the change again") was
 // a dead end for the case that actually happens: the agent saying "no, not
@@ -112,12 +121,15 @@ async function withListing(
  * the database, so hoisting one into a const above the branches applies it even
  * when a different branch ends up answering. That bug shipped briefly in Phase 4.
  */
+type Routed = { intent: Intent | 'confirm_pending' | 'send_marketing' | 'agent'; answer: BotReply }
+
 async function route(
   admin: SupabaseClient,
   profile: Profile,
   body: string,
   origin: string,
-): Promise<{ intent: Intent | 'confirm_pending' | 'send_marketing'; answer: BotReply }> {
+  meta: { phone: string; inboundLogId: string | null },
+): Promise<Routed> {
   // A write waiting on "yes" outranks anything a model might infer.
   const { data: pending } = await admin
     .from('pending_actions')
@@ -141,6 +153,33 @@ async function route(
         : pending.action_type === 'send_marketing'
           ? `OK, not sent. Send "send #${(pending.payload as { id?: number } | null)?.id ?? '…'} to marketing" any time.`
           : 'Cancelled — nothing was saved.',
+    }
+  }
+
+  // ── The conversational agent ──────────────────────────────────────────────
+  // Everything below this point in the old router is a hand-written rule for
+  // remembering what the agent was in the middle of — a "which listing?" pick,
+  // a half-filled form, an event waiting on a time. The agent holds the
+  // conversation itself, so for an agency that has it switched on it takes
+  // over from here. The yes/no above stays deterministic: a "yes" commits a
+  // staged change without the model being involved at all.
+  if (agentReady(profile.company_id)) {
+    // Replies to an outstanding follow-up reminder ("done", "snooze 3d") keep
+    // their own handler: it fires only while a reminder is outstanding and
+    // returns null otherwise.
+    const reminder = parseReminderReply(body)
+    if (reminder.action !== 'unknown') {
+      const reminderAnswer = await handleReminderReply(admin, profile, reminder.action, reminder.snoozeDays, body)
+      if (reminderAnswer !== null) return { intent: 'reminder_response', answer: reminderAnswer }
+    }
+    return {
+      intent: 'agent',
+      answer: await answerWithAgent({
+        admin, profile, body, origin,
+        phone: meta.phone,
+        inboundLogId: meta.inboundLogId,
+        legacy: async instruction => (await routeByIntent(admin, profile, instruction, origin, { forAgent: true })).answer,
+      }),
     }
   }
 
@@ -207,6 +246,21 @@ async function route(
     }
   }
 
+  return routeByIntent(admin, profile, body, origin)
+}
+
+/**
+ * Classify one message and run the matching handler. The old router's core,
+ * and the bridge the agent uses (forAgent) for requests it has no native tool
+ * for yet — pipeline moves, offers, bookings, marketing.
+ */
+async function routeByIntent(
+  admin: SupabaseClient,
+  profile: Profile,
+  body: string,
+  origin: string,
+  opts: { forAgent?: boolean } = {},
+): Promise<Routed> {
   const result = await classifyIntent(body)
 
   // Grok is still asked, so any details in the message are extracted and the
@@ -241,8 +295,10 @@ async function route(
     case 'update_deal':    return { intent, answer: await stageDealMove(admin, profile, result) }
     case 'query_pipeline': return { intent, answer: await handleQueryPipeline(admin, profile, result) }
     // Starts the multi-step flow, which finishes at the same confirmation step.
-    case 'create_property':return { intent, answer: await startCreatePropertyFlow(admin, profile, result) }
-    case 'create_client':  return { intent, answer: await startCreateClientFlow(admin, profile, result) }
+    // Never for the agent: it has create tools, and starting a flow here would
+    // leave a half-filled form in conversation_state that it never resumes.
+    case 'create_property':return { intent, answer: opts.forAgent ? USE_AGENT_CREATE_TOOL : await startCreatePropertyFlow(admin, profile, result) }
+    case 'create_client':  return { intent, answer: opts.forAgent ? USE_AGENT_CREATE_TOOL : await startCreateClientFlow(admin, profile, result) }
     case 'feedback':       return { intent, answer: await stageFeedback(admin, profile, result, body) }
     // Only reached for phrasings the local matcher missed ("go on then").
     case 'confirm':
@@ -412,9 +468,9 @@ async function handleInbound(
   }
 
   let answer: BotReply
-  let intent: Intent | 'confirm_pending' | 'send_marketing' = 'unknown'
+  let intent: Routed['intent'] = 'unknown'
   try {
-    const routed = await route(admin, profile, body, origin)
+    const routed = await route(admin, profile, body, origin, { phone, inboundLogId })
     intent = routed.intent
     answer = routed.answer
   } catch (err) {
