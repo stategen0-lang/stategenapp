@@ -295,3 +295,13 @@ test('"no, cancel that, I meant 1,200,000": a cancel leaves the turn free to pre
   assert.match(r.reply, /1,200,000/)
   assert.doesNotMatch(r.reply, /Cancelled/)
 })
+
+test('composeReply drops "I\'ve updated…" over a card that still needs YES', async () => {
+  const { composeReply } = await import('./loop.ts')
+  const card = 'About to update Lara:\n• Budget: $1,100\n\nReply YES to save or NO to cancel.'
+  assert.equal(composeReply("I've updated Lara's budget to $1,100 a month.", card), card)
+  assert.equal(composeReply("I've updated the budget to $1,300 and prepared the change. She stays a renter.", card), `She stays a renter.\n\n${card}`)
+  // Prepared wording is kept; a saved confirmation is left alone.
+  assert.equal(composeReply("I've prepared the change.", card), `I've prepared the change.\n\n${card}`)
+  assert.equal(composeReply("I've updated her file.", 'Saved — Lara updated.'), "I've updated her file.\n\nSaved — Lara updated.")
+})

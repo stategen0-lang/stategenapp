@@ -52,6 +52,22 @@ export function parsePhotoTarget(text: string | null | undefined): number | null
 }
 
 /**
+ * A typed command to start sending photos for a listing — "photos for #56",
+ * "add pics to 23". Only a short message that IS the command: the simulator
+ * caught "send me the full details and photos for #56" opening the upload
+ * window, after which every message mentioning "photos for #56" — including
+ * "YES, please change his status…" — was answered "📸 Send the photos now",
+ * and the change it approved was never saved. Anything longer, or asking for
+ * photos rather than offering them, goes to the agent to read.
+ */
+export function parsePhotoCommand(text: string | null | undefined): number | null {
+  const s = String(text ?? '').trim()
+  if (s.split(/\s+/).length > 8) return null
+  if (/\b(send|show|give|share|forward)\s+(me|us|him|her|them)\b|^(can|could|do|does|did)\s+(you|u)\b/i.test(s)) return null
+  return parsePhotoTarget(s)
+}
+
+/**
  * The listing a photo's own caption names: a bare "#23" or "23", or any of the
  * text forms above. Lets an agent attach photos without opening a window first.
  */

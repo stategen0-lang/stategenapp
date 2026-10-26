@@ -20,7 +20,7 @@ import type { Property } from '@/lib/data'
 import { generateDescription, generateArabicDescription, type DescriptionInput } from '@/lib/ai/property-description'
 import {
   buildUpdate, buildNewProperty, confirmationText, hasChanges,
-  mergeExtras, appendLog, CLIENT_FIELDS, PROPERTY_FIELDS, expandListingFeatures,
+  mergeExtras, appendLog, appendReqNote, CLIENT_FIELDS, PROPERTY_FIELDS, expandListingFeatures,
 } from '@/lib/whatsapp/writes'
 import { reminderOutcome } from '@/lib/whatsapp/reminders'
 import { splitClientRef } from '@/lib/whatsapp/client-ref'
@@ -82,6 +82,8 @@ export interface Payload {
   blobColumn?: 'notes' | 'Amenities'
   /** Free-text note to append to the client's log (feedback flow). */
   logEntry?: string
+  /** A line for the client's request notes — the Notes the app shows (add_client_note). */
+  reqNote?: string
   label: string
 }
 
@@ -463,6 +465,35 @@ export async function stageFeedback(
   })
 }
 
+// ── "note on Reem's file: #24 and #60 pending a viewing" ────────────────────
+// Goes into the client's Notes — what the app shows — not the activity log,
+// which nothing displays.
+export async function stageClientNote(
+  admin: SupabaseClient,
+  profile: Profile,
+  clientName: string,
+  note: string,
+): Promise<string> {
+  const text = String(note ?? '').trim()
+  if (!text) return 'What should the note say?'
+  const found = await resolveClient(admin, profile, clientName)
+  if (!found.ok) return found.message
+  const row = found.row
+  if (!canEditClient(toSession(profile), agentOf(row, 'notes'))) {
+    return `${clientLabel(profile, row)} belongs to another agent, so I can't add notes to that record.`
+  }
+  const summary = confirmationText(row['Client Name'] as string, [`Add note: "${text.slice(0, 300)}"`], [])
+  return stage(admin, profile, 'client_note', summary, {
+    table: 'client_requests',
+    id: Number(row.id),
+    columns: {},
+    extras: {},
+    blobColumn: 'notes',
+    reqNote: text,
+    label: row['Client Name'] as string,
+  })
+}
+
 // ── Reminder replies (Phase 4) ──────────────────────────────────────────────
 
 /** How long after sending a reminder a bare "done" still refers to it. */
@@ -660,7 +691,10 @@ export async function applyPendingAction(
     // Only tables that carry a JSON blob get the merge treatment.
     const blob = p.blobColumn
     if (blob) {
-      if (p.logEntry) {
+      if (p.reqNote) {
+        // Appended to the notes as they are NOW, not as they were when staged.
+        columns[blob] = mergeExtras(appendReqNote(row[blob], p.reqNote), p.extras)
+      } else if (p.logEntry) {
         // Feedback merges the note into the same blob as any field changes.
         const withLog = appendLog(row[blob], p.logEntry)
         columns[blob] = mergeExtras(withLog, p.extras)

@@ -28,9 +28,10 @@ import { downloadMedia, type BotReply, type InboundMessage } from '@/lib/whatsap
 import { storePhotoBytes } from '@/lib/upload-server'
 import { canEditProperty } from '@/lib/permissions'
 import {
-  isPhotoDone, isPhotoChatter, isPhotoRequest, parsePhotoTarget, parseCaptionTarget, appendPhoto, photoCount,
+  isPhotoDone, isPhotoChatter, isPhotoRequest, parsePhotoCommand, parseCaptionTarget, appendPhoto, photoCount,
 } from '@/lib/whatsapp/photo-intent'
 import { offerMarketing } from '@/lib/whatsapp/marketing-handlers'
+import { parseBareConfirmation } from '@/lib/whatsapp/replies'
 
 type Row = Record<string, unknown>
 const WINDOW_MS = 24 * 3600_000
@@ -313,7 +314,7 @@ export async function continuePhotoCollection(
   }
 
   // ── "photos for #23": open (or switch) the window ─────────────────────────
-  const target = parsePhotoTarget(text)
+  const target = parsePhotoCommand(text)
   if (target) return startWindow(admin, profile, target, io)
 
   // ── Answering "which listing are these for?" with just "#250" / "250" ─────
@@ -327,6 +328,17 @@ export async function continuePhotoCollection(
     return null
   }
   if (!open || !windowId) return null
+
+  // A yes/no while a change is waiting answers THAT — "yes" also reads as photo
+  // small talk ("👍 Go ahead — send the photos"), and the change it approved
+  // was never saved. The router decides it.
+  if (parseBareConfirmation(text) !== 'unknown') {
+    const { data: waiting } = await admin
+      .from('pending_actions').select('id')
+      .eq('profile_id', profile.id).gt('expires_at', new Date().toISOString())
+      .limit(1).maybeSingle()
+    if (waiting) return null
+  }
 
   // Nothing to read — the empty event WhatsApp sends at the head of an album,
   // a reaction. It used to fall through to "a real request: end the window",

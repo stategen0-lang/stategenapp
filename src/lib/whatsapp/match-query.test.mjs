@@ -253,3 +253,14 @@ test('prices, sizes and years are not phone numbers', () => {
     'what matches 500000 in Beirut',
   ]) assert.equal(containsPhoneNumber(t), false, t)
 })
+
+import { budgetNote } from './match-query.ts'
+
+test('each match says how its price sits against the budget — worked out in code', () => {
+  // Live (simulator): the agent called $1,200,000 "within budget" for $1,125,000.
+  assert.equal(budgetNote(listing(1, { price: 1200000 }), 1125000), 'USD 75,000 over budget')
+  assert.equal(budgetNote(listing(1, { price: 1100000 }), 1125000), 'within budget')
+  assert.equal(budgetNote(listing(1, { transaction: 'For Rent', rent: 1650 }), 1500), 'USD 150/mo over budget')
+  assert.equal(budgetNote(listing(1, { price: 500000 }), 0), '')
+  assert.match(listingLines(listing(9, { price: 1200000, beds: 2 }), '', 80, 1125000), /2 bed · USD 75,000 over budget · 80% match/)
+})

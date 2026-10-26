@@ -209,6 +209,17 @@ export async function handleQueryClient(
     c.req.beds ? `Bedrooms: ${c.req.beds}` : null,
     c.req.baths ? `Bathrooms: ${c.req.baths}` : null,
     c.req.parkings ? `Parking: ${c.req.parkings}` : null,
+    // The rest of the request — "send me X's request" means all of it.
+    c.req.size ? `Min size: ${c.req.size} m²` : null,
+    c.req.furnishing ? `Furnishing: ${c.req.furnishing}` : null,
+    c.req.view ? `View: ${c.req.view}` : null,
+    c.req.floor ? `Floor: ${c.req.floor}` : null,
+    [c.req.garden && 'garden', c.req.balcony && 'balcony', c.req.terrace && 'terrace'].filter(Boolean).length
+      ? `Outdoor: ${[c.req.garden && 'garden', c.req.balcony && 'balcony', c.req.terrace && 'terrace'].filter(Boolean).join(', ')}` : null,
+    [...(c.req.amenities ?? []), ...(c.req.buildingFeatures ?? [])].length
+      ? `Must-haves: ${[...(c.req.amenities ?? []), ...(c.req.buildingFeatures ?? [])].join(', ')}` : null,
+    // Free text can hold contact details, so only for a client they may see.
+    visible && c.req.notes?.trim() ? `Notes: ${c.req.notes.trim()}` : null,
     `Status: ${c.status}`,
     row.lead_score != null ? `Lead score: ${row.lead_score}/100` : null,
     ownerName ? `Agent: ${ownerName}` : null,
@@ -277,7 +288,7 @@ export async function handleQueryProperty(
 
   return [
     `${matches.length} match${matches.length > 1 ? 'es' : ''} for ${wanted}:`,
-    ...matchLines(matches, origin),
+    ...matchLines(matches, origin, brief.budget),
   ].join('\n')
 }
 

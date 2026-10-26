@@ -15,6 +15,10 @@ export function rng(seed) {
 const pick = (r, a) => a[Math.floor(r() * a.length)]
 const digits = s => String(s ?? '').replace(/\D/g, '')
 const json = v => { try { return typeof v === 'string' ? JSON.parse(v || '{}') : (v ?? {}) } catch { return {} } }
+// Area names compared loosely: accents dropped, sh/ch, ou/u and doubled letters
+// folded, so the bot's standard spelling (Achrafieh) satisfies the agent's (Ashrafieh).
+const fold = s => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/sh/g, 'ch').replace(/ou/g, 'u').replace(/[^a-z]/g, '').replace(/(.)\1+/g, '$1')
+const sameArea = (haystack, area) => fold(haystack).includes(fold(String(area).split(' ')[0]))
 const near = (a, b) => Math.abs(Number(a) - Number(b)) <= Math.max(1, Number(b) * 0.001)
 const money = n => n >= 1000 && n % 1000 === 0 && n < 1_000_000 ? `${n / 1000}k` : String(n)
 
@@ -44,7 +48,8 @@ function editableClient(r, snapshot, profile) {
   // Unique even as a search: "Rana" also finds "Rana Haddad".
   const all = snapshot.client_requests.map(c => String(c['Client Name'] ?? '').toLowerCase())
   const unique = name => all.filter(n => n.includes(String(name).toLowerCase())).length === 1
-  const list = owned(snapshot.client_requests, profile, clientAgent).filter(c => c['Client Name'] && names.get(c['Client Name']) === 1 && unique(c['Client Name']))
+  const list = owned(snapshot.client_requests, profile, clientAgent).filter(c => c['Client Name'] && names.get(c['Client Name']) === 1 && unique(c['Client Name'])
+    && !/(apartment|villa|studio|duplex|office|shop|land|chalet|furnished|unfurnished)/i.test(c['Client Name']))
   return list.length ? pick(r, list) : null
 }
 
@@ -55,6 +60,14 @@ function editableClientsWithDeal(snapshot, profile) {
   return owned(snapshot.client_requests, profile, clientAgent)
     .filter(c => c['Client Name'] && names.get(c['Client Name']) === 1 && deals.has(Number(c.id)) && !deals.get(Number(c.id)).outcome)
     .map(c => ({ client: c, deal: deals.get(Number(c.id)) }))
+}
+
+/** Does the text state this amount, in any of the usual ways ($1,200 · 1200 · 1.2k · $350k · 1.2M)? */
+function amountsMention(text, n) {
+  const forms = new Set([String(n), n.toLocaleString('en-US')])
+  if (n >= 1000) { forms.add(`${n / 1000}k`); forms.add(`${n / 1000}K`) }
+  if (n >= 1_000_000) { forms.add(`${n / 1_000_000}M`); forms.add(`${n / 1_000_000}m`); forms.add(`${n / 1_000_000} million`) }
+  return [...forms].some(f => text.includes(f))
 }
 
 const clientRow = (db, id) => db.table('client_requests').find(c => Number(c.id) === Number(id))
@@ -114,7 +127,7 @@ export const GOAL_KINDS = {
         if (String(c['Client Name']).toLowerCase() !== name.toLowerCase()) bad.push(`name "${c['Client Name']}"`)
         if (!digits(c['client phone']).endsWith(digits(tel).slice(-7))) bad.push(`phone "${c['client phone']}"`)
         if (!near(c.budget_max, budget) && !near(c.budget_min, budget)) bad.push(`budget ${c.budget_min}/${c.budget_max}`)
-        if (!String(c['prefered-location'] ?? '').toLowerCase().includes(area.toLowerCase().split(' ')[0])) bad.push(`area "${c['prefered-location']}"`)
+        if (!sameArea(c['prefered-location'], area)) bad.push(`area "${c['prefered-location']}"`)
         if (Number(c.bedrooms) !== beds) bad.push(`beds ${c.bedrooms}`)
         const type = json(c.notes).clientType ?? json(c.notes).type ?? ''
         if (type && !String(type).toLowerCase().startsWith(renter ? 'rent' : 'buy')) bad.push(`type ${type}`)
@@ -144,7 +157,7 @@ export const GOAL_KINDS = {
         if (beds && Number(p.Bedrooms) !== beds) bad.push(`beds ${p.Bedrooms}`)
         if (a.transaction !== (rent ? 'For Rent' : 'For Sale')) bad.push(`transaction ${a.transaction}`)
         const where = `${p.Location} ${p.Neighborhood} ${p.Title}`.toLowerCase()
-        if (!where.includes(area.toLowerCase().split(' ')[0])) bad.push(`area "${p.Location}/${p.Neighborhood}"`)
+        if (!sameArea(where, area)) bad.push(`area "${p.Location}/${p.Neighborhood}"`)
         return bad.length ? `wrong fields: ${bad.join(', ')}` : null
       },
     }
@@ -275,6 +288,75 @@ export const GOAL_KINDS = {
     return { writes: false, goal: pick(r, ['Ask how your agents are doing this week.', 'Ask what is new in the agency today.', 'Ask which follow-ups are overdue across the team.']) }
   },
 
+  // ── More editing ──────────────────────────────────────────────────────────
+
+  update_listing_details(r, s, profile) {
+    const list = owned(s.Properties, profile, listingAgent).filter(p => p.Bedrooms != null)
+    if (!list.length) return null
+    const p = pick(r, list)
+    const field = pick(r, ['beds', 'size', 'furnished'])
+    if (field === 'beds') {
+      const beds = pick(r, [1, 2, 3, 4].filter(b => b !== Number(p.Bedrooms)))
+      return {
+        writes: true, goal: `Listing #${p.id} (${p.Title}) actually has ${beds} bedrooms — fix it.`,
+        verify: db => Number(listingRow(db, p.id)?.Bedrooms) === beds ? null : `Bedrooms ${listingRow(db, p.id)?.Bedrooms}, wanted ${beds}`,
+      }
+    }
+    if (field === 'size') {
+      const size = pick(r, [95, 140, 185, 230].filter(x => x !== Number(p.size)))
+      return {
+        writes: true, goal: `The size of listing #${p.id} (${p.Title}) is ${size} m², not what's on file — update it.`,
+        verify: db => Number(listingRow(db, p.id)?.size) === size ? null : `size ${listingRow(db, p.id)?.size}, wanted ${size}`,
+      }
+    }
+    return {
+      writes: true, goal: `Listing #${p.id} (${p.Title}) is now fully furnished — update it.`,
+      verify: db => /^furnished$/i.test(String(json(listingRow(db, p.id)?.Amenities).furnishing ?? '')) ? null : `furnishing "${json(listingRow(db, p.id)?.Amenities).furnishing}", wanted Furnished`,
+    }
+  },
+
+  update_client_details(r, s, profile) {
+    const c = editableClient(r, s, profile); if (!c) return null
+    if (r() < 0.5) {
+      const tel = phone(r)
+      return {
+        writes: true, goal: `Your client ${c['Client Name']} has a new phone number: ${tel}. Update it.`,
+        verify: db => digits(clientRow(db, c.id)?.['client phone']).endsWith(digits(tel).slice(-7)) ? null : `phone "${clientRow(db, c.id)?.['client phone']}", wanted ${tel}`,
+      }
+    }
+    const area = pick(r, areasOf(s))
+    return {
+      writes: true, goal: `Your client ${c['Client Name']} now wants to look in ${area} instead — change their area.`,
+      verify: db => sameArea(clientRow(db, c.id)?.['prefered-location'], area) ? null : `area "${clientRow(db, c.id)?.['prefered-location']}", wanted ${area}`,
+    }
+  },
+
+  // "send me Charbel Helou's request" — the most common lookup. The reply must
+  // carry the client's real brief: checked against the record, not judged.
+  client_request(r, s, profile) {
+    const c = editableClient(r, s, profile); if (!c) return null
+    const phrasing = pick(r, [
+      `send me ${c['Client Name']}'s request`,
+      `what is ${c['Client Name']} looking for`,
+      `pull up ${c['Client Name']}`,
+      `${c['Client Name']} request pls`,
+      `remind me what ${c['Client Name']} wants and their budget`,
+    ])
+    const budget = Number(c.budget_max) || Number(c.budget_min) || 0
+    const area = String(c['prefered-location'] ?? '').split(/[,/]/)[0].trim()
+    return {
+      writes: false,
+      goal: `Ask the assistant, in roughly these words: "${phrasing}". You want their request (what they want, where, budget).`,
+      checkReplies: (turns) => {
+        const text = turns.map(t => t.reply).join('\n')
+        const bad = []
+        if (budget && !amountsMention(text, budget)) bad.push(`budget ${budget} not in the reply`)
+        if (area && !text.toLowerCase().includes(area.toLowerCase())) bad.push(`area "${area}" not in the reply`)
+        return bad.length ? bad.join('; ') : null
+      },
+    }
+  },
+
   // ── Questions — checked by the literal checks and the judge ───────────────
 
   search(r, s) {
@@ -320,10 +402,26 @@ export const GOAL_KINDS = {
   },
 }
 
-/** n goals, cycling through every kind, deterministic for a seed. */
-export function makeGoals(snapshot, profile, n, seed = 1) {
+/**
+ * How often each kind comes up, roughly as agents use the bot: adding clients
+ * and listings, matching, editing, and pulling up a client's request dominate.
+ * Kinds not listed (descriptions, marketing, manager overviews) appear once
+ * per cycle.
+ */
+export const COMMON_WEIGHTS = {
+  add_client: 4, add_listing: 4, matches_for_client: 4, client_request: 4,
+  update_budget: 2, update_listing_price: 2, update_listing_status: 2, update_listing_details: 2, update_client_details: 2,
+  update_status: 1, update_client_beds: 1, correct_before_saving: 2, cancel: 1, search: 2, listing_info: 1,
+  find_by_phone: 1, other_agents_client: 1, deal_move: 1, book_viewing: 1, small_talk: 1,
+  describe_listing: 0, send_to_marketing: 0, team_overview: 1,
+}
+
+/** n goals, cycling through the kinds (weighted, if given), deterministic for a seed. */
+export function makeGoals(snapshot, profile, n, seed = 1, weights = null) {
   const r = rng(seed)
-  const kinds = Object.keys(GOAL_KINDS)
+  const kinds = weights
+    ? Object.keys(GOAL_KINDS).flatMap(k => Array(weights[k] ?? 1).fill(k))
+    : Object.keys(GOAL_KINDS)
   const goals = []
   for (let i = 0; goals.length < n && i < n * 4; i++) {
     const kind = kinds[i % kinds.length]

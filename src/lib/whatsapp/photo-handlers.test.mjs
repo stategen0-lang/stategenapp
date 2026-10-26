@@ -116,3 +116,16 @@ test('photos sent while the new listing waits on YES are kept for it', async () 
   assert.equal(await attachHeldPhotos(db.client, RAMI, 250, io), 1)
   assert.equal(photosOn(db, 250).length, 1)
 })
+
+test('a YES to a waiting change is never eaten by an open photo window', async () => {
+  const { db, io } = world({
+    conversation_state: [{ profile_id: RAMI.id, company_id: COMPANY, current_flow: 'collecting_photos', step: 'photos', context: { propertyId: 250 }, updated_at: new Date().toISOString() }],
+    pending_actions: [{ id: 9, profile_id: RAMI.id, action_type: 'update_client', expires_at: new Date(Date.now() + 600_000).toISOString(), created_at: ago(1) }],
+  })
+  // null: the photo step stands aside, so the router commits the change.
+  assert.equal(await send(db, io, text('yes')), null)
+  assert.equal(await send(db, io, text('YES')), null)
+  // With nothing waiting, "ok" is still photo small talk.
+  db.table('pending_actions').length = 0
+  assert.match(await send(db, io, text('ok')), /send the photos for #250/)
+})

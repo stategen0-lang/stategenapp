@@ -279,6 +279,25 @@ export function mergeExtras(existingJson: unknown, extras: Record<string, unknow
   return JSON.stringify(merged)
 }
 
+/**
+ * Add a dated line to the client's request notes (notes blob → req.notes) —
+ * the Notes the app shows on the client. Everything else in the request is
+ * kept: only req.notes changes. Read and applied at save time, so an edit made
+ * on the web while the note waited on "yes" isn't overwritten.
+ */
+export function appendReqNote(existingJson: unknown, note: string, now: Date = new Date()): string {
+  let base: Record<string, unknown> = {}
+  try {
+    const parsed = JSON.parse(String(existingJson || '{}'))
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) base = parsed
+  } catch { /* corrupt blob: start clean rather than fail the write */ }
+  const req = (base.req && typeof base.req === 'object' && !Array.isArray(base.req)) ? base.req as Record<string, unknown> : {}
+  const day = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Beirut', day: 'numeric', month: 'short' }).format(now)
+  const line = `${day}: ${note.trim().slice(0, 500)}`
+  const before = typeof req.notes === 'string' ? req.notes.trim() : ''
+  return JSON.stringify({ ...base, req: { ...req, notes: before ? `${before}\n${line}` : line } })
+}
+
 /** Append a dated entry to the client's activity log inside its notes blob. */
 export function appendLog(existingJson: unknown, entry: string, now: Date = new Date()): string {
   let base: Record<string, unknown> = {}

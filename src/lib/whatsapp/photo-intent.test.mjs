@@ -94,3 +94,15 @@ test('isPhotoRequest: asking to add photos without naming a listing', () => {
     assert.equal(isPhotoRequest(s), false, s)
   }
 })
+
+import { parsePhotoCommand } from './photo-intent.ts'
+
+test('parsePhotoCommand: only a short message that is the command', () => {
+  assert.equal(parsePhotoCommand('photos for #56'), 56)
+  assert.equal(parsePhotoCommand('add pics to 23'), 23)
+  assert.equal(parsePhotoCommand('#23 photos'), 23)
+  // Live (simulator): these opened the upload window and swallowed a YES.
+  assert.equal(parsePhotoCommand('could you please send me the full details and photos for #56'), null)
+  assert.equal(parsePhotoCommand('send me photos for #56'), null)
+  assert.equal(parsePhotoCommand("YES, please change his status to Searching. Also, I'll send the photos for #56 from my side shortly"), null)
+})

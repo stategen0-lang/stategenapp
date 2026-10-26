@@ -202,12 +202,26 @@ export function listingPrice(p: Property): string {
  * The link is the app's own deep link, not a public share link: this list is for
  * the agent, and a share link would expose the listing to anyone it reached.
  */
-export function matchLines(matches: PropertyMatch[], origin: string): string[] {
-  return matches.map(({ property, score }) => listingLines(property, origin, Math.round(score.total)))
+export function matchLines(matches: PropertyMatch[], origin: string, budget = 0): string[] {
+  return matches.map(({ property, score }) => listingLines(property, origin, Math.round(score.total), budget))
+}
+
+/**
+ * How a listing's price sits against the client's budget, worked out here so
+ * nobody has to: the agent model called a $1,200,000 listing "within budget"
+ * for a $1,125,000 client. Within 1% counts as within. '' without a budget.
+ */
+export function budgetNote(p: Property, budget: number): string {
+  if (!budget || budget <= 0) return ''
+  const price = p.transaction === 'For Rent' ? Number(p.rent) || 0 : Number(p.price) || 0
+  if (!price) return ''
+  const over = price - budget
+  if (over <= budget * 0.01) return 'within budget'
+  return `${formatPrice(over)}${p.transaction === 'For Rent' ? '/mo' : ''} over budget`
 }
 
 /** One listing as a bullet, with its tappable link underneath. */
-export function listingLines(p: Property, origin: string, scorePct?: number): string {
+export function listingLines(p: Property, origin: string, scorePct?: number, budget = 0): string {
   const where = [p.district, p.city].filter(Boolean)[0] ?? ''
   const head = [
     `• #${p.id} ${p.title} — ${listingPrice(p)}`,
@@ -215,6 +229,7 @@ export function listingLines(p: Property, origin: string, scorePct?: number): st
     // Without it the agent model, asked for 2 bedrooms, called a 1- and a
     // 4-bedroom listing "2-bedroom rentals" — it can't check what it isn't shown.
     p.beds > 0 ? `${p.beds} bed` : null,
+    budgetNote(p, budget) || null,
     scorePct != null ? `${scorePct}% match` : null,
   ].filter(Boolean).join(' · ')
   return origin ? `${head}\n  ${origin}/properties?open=${p.id}` : head

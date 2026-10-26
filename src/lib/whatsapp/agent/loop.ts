@@ -118,14 +118,28 @@ function textOf(message: ModelMessage): string {
     .trim()
 }
 
+const ALREADY_DONE = /\b(I'?ve|I have)\s+(updated|added|saved|changed|set|recorded|booked|logged)\b|\b(has|have) been (saved|updated|added|changed)\b|\bis (now )?(saved|updated)\b/i
+
 /**
  * The reply the agent receives. When a change is staged it ends with the
  * canonical confirmation, whatever the model wrote — the model may add a short
  * note ("Sarba isn't in my area list, so I used Jounieh"), never the summary.
  */
 export function composeReply(modelText: string, confirmation: string | null): string {
-  const text = modelText.trim()
+  let text = modelText.trim()
   if (!confirmation) return text
+  // The model was told not to repeat the details; if it pasted the summary
+  // anyway, don't show it twice.
+  if (text.includes(confirmation.trim())) return confirmation
+  // Waiting on YES: a sentence saying it's already done is false, whatever the
+  // prompt asked — Haiku kept writing "I've updated the budget to $1,300" over a
+  // card that still needed a yes. The card says what will happen; the claim goes.
+  if (/Reply YES/i.test(confirmation)) {
+    for (const sentence of text.match(/[^.!?\n]+[.!?]*/g) ?? []) {
+      if (ALREADY_DONE.test(sentence)) text = text.replace(sentence, '')
+    }
+    text = text.replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim()
+  }
   // The model was told not to repeat the details; if it pasted the summary
   // anyway, don't show it twice.
   if (!text || text.includes(confirmation.trim())) return confirmation

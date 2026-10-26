@@ -21,7 +21,9 @@ const digits = s => String(s ?? '').replace(/\D/g, '')
 /** "$1.2M", "USD 980,000", "1,450", "$980k" → numbers found in a line. */
 export function amountsIn(line) {
   const out = []
-  for (const m of line.matchAll(/(?:\$|USD\s?|US\$)\s?([\d][\d,.]*)\s?(k|K|m|M|million)?\b|([\d][\d,.]*)\s?(k|K|m|M)?\s?(?:\$|USD)/g)) {
+  // A trailing "1,450$" form must end in a digit and not be a "#161" listing
+  // number — "#161, $10k over" read as a $161 price.
+  for (const m of line.matchAll(/(?:\$|USD\s?|US\$)\s?([\d][\d,.]*)\s?(k|K|m|M|million)?\b|(?<![#\d,.])(\d(?:[\d,.]*\d)?)\s?(k|K|m|M)?\s?(?:\$|USD)/g)) {
     const raw = (m[1] ?? m[3] ?? '').replace(/,/g, '')
     const unit = (m[2] ?? m[4] ?? '').toLowerCase()
     let n = Number(raw)
@@ -128,8 +130,11 @@ export function checkTurn(turn, ctx) {
 
   // An agent never sees another agent's client's phone — unless they typed it.
   if (ctx.profile.role === 'agent') {
-    const replyDigits = digits(reply)
-    const typed = digits(turn.message) + digits(turn.history ?? '')
+    // Phone-shaped runs only ("+961 3 455 354", "70-123456"), each on its own —
+    // all the reply's digits strung together made phones out of listing numbers.
+    const phonesIn = (s) => [...String(s ?? '').matchAll(/\+?\d[\d\s\/-]{5,}\d/g)].map(m => digits(m[0]))
+    const replyDigits = phonesIn(reply).join('|')
+    const typed = [...phonesIn(turn.message), ...phonesIn(turn.history)].join('|')
     for (const c of ctx.db.table('client_requests')) {
       const owner = ownerOf(c)
       const phone = digits(c['client phone']).slice(-7)

@@ -37,6 +37,8 @@ const CONCURRENCY = Number(arg('concurrency', '6'))
 const BUDGET = Number(arg('budget', '1'))
 const SEED = Number(arg('seed', String(Date.now() % 100000)))
 const ONLY = arg('only', '')           // comma-separated goal kinds
+const ENGLISH = process.argv.includes('--english')     // English-only personas
+const WEIGHTED = process.argv.includes('--weighted')   // the common tasks, more often
 const MAX_TURNS = Number(arg('turns', '8'))
 const JUDGE = !process.argv.includes('--no-judge')
 const CONFIRMED = process.argv.includes('--yes')
@@ -54,13 +56,13 @@ lockdown({ companyId: COMPANY })
 // credentials lockdown removed.
 const { route } = await import('../src/lib/whatsapp/router.ts')
 const { converse, toolEvidence } = await import('./sim/converse.mjs')
-const { makeGoals, rng } = await import('./sim/goals.mjs')
-const { personaSays, STYLES } = await import('./sim/persona.mjs')
+const { makeGoals, rng, COMMON_WEIGHTS } = await import('./sim/goals.mjs')
+const { personaSays, STYLES, ENGLISH_STYLES } = await import('./sim/persona.mjs')
 const { judge } = await import('./sim/judge.mjs')
 
-let goals = makeGoals(snapshot, profile, ONLY ? COUNT * 20 : COUNT, SEED)
+let goals = makeGoals(snapshot, profile, ONLY ? COUNT * 20 : COUNT, SEED, WEIGHTED ? COMMON_WEIGHTS : null)
 if (ONLY) goals = goals.filter(g => ONLY.split(',').includes(g.kind)).slice(0, COUNT)
-const styles = Object.keys(STYLES)
+const styles = ENGLISH ? ENGLISH_STYLES : Object.keys(STYLES)
 const r = rng(SEED + 7)
 
 console.log(`${snapshot.Companies[0].Name} as ${profile.Full_name} (${profile.role}) — ${goals.length} conversations, ${CONCURRENCY} at a time, budget $${BUDGET}, seed ${SEED}`)
@@ -100,6 +102,10 @@ async function runOne(goal) {
     const wrong = goal.verify(db)
     if (wrong) problems.push({ check: 'goal_not_met', detail: wrong })
   }
+  if (goal.checkReplies) {
+    const wrong = goal.checkReplies(turns)
+    if (wrong) problems.push({ check: 'answer_wrong', detail: wrong })
+  }
   if (JUDGE) {
     const verdicts = await Promise.all(turns.map((t, i) => judge({ history: turns.slice(0, i), turn: { ...t, writes: t.writes.map(w => `${w.op} ${w.table}`) }, evidence: toolEvidence(t), agentName: profile.Full_name })))
     for (const [i, v] of verdicts.entries()) {
@@ -135,13 +141,20 @@ const byKind = {}
 for (const res of results) { const k = (byKind[res.goal.kind] ??= { n: 0, clean: 0 }); k.n++; if (!res.problems.length) k.clean++ }
 const turnCount = results.reduce((n, res) => n + res.turns.length, 0)
 
+// Speed: how long the agent took per reply (Claude's own turns, not yes/no).
+const pct = (a, p) => { const x = [...a].sort((m, n) => m - n); return x.length ? x[Math.min(x.length - 1, Math.floor(x.length * p))] : 0 }
+const msByKind = {}
+for (const res of results) for (const t of res.turns) if (t.intent === 'agent') (msByKind[res.goal.kind] ??= []).push(t.ms)
+const allMs = Object.values(msByKind).flat()
+
 const lines = [
   `# Simulation — ${snapshot.Companies[0].Name} as ${profile.Full_name}`,
   `${results.length} conversations, ${turnCount} bot turns, seed ${SEED}${stoppedForBudget ? ' — STOPPED AT BUDGET' : ''}`,
   `Cost: $${costSoFar().toFixed(3)}  ${JSON.stringify(usage)}`,
   `Clean conversations: ${results.filter(x => !x.problems.length).length}/${results.length}`,
   blocked.length ? `Network calls blocked (would have happened in production): ${[...new Set(blocked.map(b => `${b.where}→${b.host}`))].join(', ')}` : 'No network calls blocked.',
-  '', '## By goal kind', ...Object.entries(byKind).map(([k, v]) => `- ${k}: ${v.clean}/${v.n} clean`),
+  `Speed: median ${(pct(allMs, 0.5) / 1000).toFixed(1)}s, slowest 10% over ${(pct(allMs, 0.9) / 1000).toFixed(1)}s (${allMs.length} agent replies)`,
+  '', '## By goal kind', ...Object.entries(byKind).map(([k, v]) => `- ${k}: ${v.clean}/${v.n} clean · median ${((pct(msByKind[k] ?? [], 0.5)) / 1000).toFixed(1)}s`),
   '', '## Problems by check',
   ...Object.entries(byCheck).sort((a, b) => b[1].length - a[1].length).flatMap(([k, v]) => [`### ${k} (${v.length})`, ...v.slice(0, 12).map(x => `- ${x.replace(/\s+/g, ' ').slice(0, 300)}`)]),
 ]

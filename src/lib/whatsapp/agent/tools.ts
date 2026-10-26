@@ -20,7 +20,7 @@ import type { BotReply } from '../cloud.ts'
 import type { IntentResult } from '../intent.ts'
 import type { ToolOutcome, TurnState } from './loop.ts'
 import { replyText } from '../cloud.ts'
-import { stageClientUpdate, stagePropertyUpdate, applyPendingAction, stageDescribeProperty, stageArabicDescription, handleReminderReply } from '../write-handlers.ts'
+import { stageClientUpdate, stagePropertyUpdate, applyPendingAction, stageDescribeProperty, stageArabicDescription, handleReminderReply, stageClientNote } from '../write-handlers.ts'
 import { stageEvent, whenAt } from '../calendar-handlers.ts'
 import { stageDealMove } from '../pipeline-handlers.ts'
 import { requestMarketing } from '../marketing-handlers.ts'
@@ -243,6 +243,15 @@ export const TOOLS: Tool[] = [
     input_schema: object({ listing_id: must('integer', 'The listing number.') }),
   },
   {
+    name: 'add_client_note',
+    description: `Add a note to a client's file — "log that she's only free on weekends", "note on Reem's file: #24 and #60 pending a viewing", "he saw #45 and didn't like the kitchen". Appended with today's date to the Notes the agent sees in the app; nothing else on the client changes. ${ONE_CHANGE_NOTE}`,
+    input_schema: object({
+      client_name: must('string', "The client's name, phone number, or #number."),
+      client_area: text('Only when two clients share the name: one area of the one meant.'),
+      note: must('string', "The note, in the agent's words, cleaned up into one clear sentence or two."),
+    }),
+  },
+  {
     name: 'attach_photos',
     description: 'Attach the photos the agent sent that are waiting for a listing (the conversation shows "📷 photo … — waiting for a listing" and you asked which listing) to the one they mean. Work out the listing from what they say — "the Achrafieh one I just added", "Khoury\'s flat" — with find_listings if needed. Also opens the listing for more photos. Saved straight away, like photos sent for a listing.',
     input_schema: object({ listing_id: must('integer', 'The listing number.') }),
@@ -274,7 +283,7 @@ export const TOOLS: Tool[] = [
 
 export const WRITE_TOOLS = new Set([
   'create_client', 'create_listing', 'update_client', 'update_listing',
-  'book_event', 'move_deal', 'write_description', 'send_to_marketing', 'follow_up_reminder',
+  'book_event', 'move_deal', 'write_description', 'send_to_marketing', 'follow_up_reminder', 'add_client_note',
   'other_request', 'confirm_waiting_change', 'cancel_waiting_change',
 ])
 
@@ -591,6 +600,14 @@ export async function executeTool(ctx: ToolContext, name: string, rawInput: unkn
       const propertyId = num(input, 'listing_id')
       if (!propertyId) return { content: 'Which listing? Give its number.', isError: true }
       return staging(ctx, async () => replyText(await requestMarketing(ctx.admin, ctx.profile, propertyId, ctx.origin)))
+    }
+
+    case 'add_client_note': {
+      const name = str(input, 'client_name')
+      const note = str(input, 'note')
+      if (!name || !note) return { content: 'Which client, and what should the note say?', isError: true }
+      const area = str(input, 'client_area')
+      return staging(ctx, () => stageClientNote(ctx.admin, ctx.profile, area ? `${name} in ${area}` : name, note))
     }
 
     case 'attach_photos': {

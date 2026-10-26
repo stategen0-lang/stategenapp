@@ -67,6 +67,7 @@ export async function judge({ history, turn, evidence, agentName }) {
   const facts = [
     `The agent is ${agentName}. Today is ${new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Beirut', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date())} in Beirut (the assistant is told this too).`,
     turn.intent === 'confirm_pending' ? 'This message was a plain yes/no, handled by code rather than the assistant: it saved or cancelled the waiting change, and the reply is the system\'s own confirmation.' : null,
+    turn.intent === 'collect_photo' ? 'This reply is the system\'s own photo step, sent by code: after a listing is saved it collects photos, and on "done" it offers to email the listing to the agency\'s configured marketing address (from the agency\'s settings). Grade it as correct unless it contradicts the conversation.' : null,
     commits.length ? `This turn really wrote to the database: ${commits.join(', ')}.` : 'This turn wrote nothing to the agency\'s records.',
     'By design the assistant never messages clients itself; drafting a message for the agent to forward is correct.',
   ].filter(Boolean).join(' ')

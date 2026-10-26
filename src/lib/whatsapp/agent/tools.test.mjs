@@ -502,3 +502,24 @@ test('a client is found under another spelling of their name — and updated', a
   const none = await executeTool(ctx, 'find_client', call('find_client', { name: 'Rana Ziade' }), fresh())
   assert.match(none.content, /No client/)
 })
+
+test('add_client_note: the note lands in the Notes the app shows, the rest of the request untouched', async () => {
+  // Live (simulator): "log a note on Reem's file" — the agent had no way to,
+  // and the old feedback log it could have used is shown nowhere in the app.
+  const reem = { id: 88, company_id: COMPANY, 'Client Name': 'Reem Frangieh', 'prefered-location': 'Beirut', budget_max: 1000000,
+    notes: JSON.stringify({ agentId: 'JH-655', req: { notes: 'Wants a sea view.', locations: ['Beirut'], size: 120 } }) }
+  const { db, ctx } = setup(AGENT, { client_requests: [reem] })
+  const staged = await executeTool(ctx, 'add_client_note', call('add_client_note', { client_name: 'Reem Frangieh', note: '#24 and #60 both pending a viewing.' }), fresh())
+  assert.ok(staged.confirmation, staged.content)
+  assert.match(staged.confirmation, /Add note: "#24 and #60 both pending a viewing\."/)
+  // Someone edits the notes on the web while the note waits on "yes".
+  const row = db.table('client_requests')[0]
+  row.notes = JSON.stringify({ ...JSON.parse(row.notes), req: { ...JSON.parse(row.notes).req, notes: 'Wants a sea view. Has a dog.' } })
+  const saved = await executeTool(ctx, 'confirm_waiting_change', {}, fresh())
+  assert.match(saved.confirmation, /Saved/)
+  const req = JSON.parse(db.table('client_requests')[0].notes).req
+  assert.match(req.notes, /^Wants a sea view\. Has a dog\.\n\d{1,2} [A-Z][a-z]{2}: #24 and #60 both pending a viewing\.$/)
+  assert.deepEqual(req.locations, ['Beirut'])
+  assert.equal(req.size, 120)
+  assert.equal(JSON.parse(db.table('client_requests')[0].notes).agentId, 'JH-655')
+})

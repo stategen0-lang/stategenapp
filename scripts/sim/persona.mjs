@@ -17,7 +17,11 @@ export const STYLES = {
   mixed_typos: 'A mix of English and Arabizi, frequent typos and missing spaces, lowercase.',
   chatty: 'Friendly and wordy English, greetings, extra context the bot does not need, several things in one message.',
   forwarded: 'Paste details like a forwarded note: lines like "name: … / phone: … / budget: …", or a client message you received, then a short instruction.',
+  english_typos: 'Fast, lowercase English with typos and missing letters ("apt", "bdrm", "achrafie", "budjet"), little punctuation.',
 }
+
+/** The agency's agents write English to the bot (the user's spec, 26 Oct 2026). */
+export const ENGLISH_STYLES = ['english_clear', 'english_terse', 'chatty', 'forwarded', 'english_typos']
 
 const SYSTEM = (goal, style, who) => `You are ${who.name}, ${who.role} at a real-estate agency in Lebanon, texting the agency's WhatsApp assistant (a bot that manages the agency's clients and listings). The assistant knows who you are: when it says "you" or "${who.name}", that's you.
 
