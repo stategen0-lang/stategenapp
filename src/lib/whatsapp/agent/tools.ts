@@ -115,6 +115,7 @@ export const TOOLS: Tool[] = [
       areas: list('Every area the client would consider.'),
       budget: number('Budget in USD. For rentals, the monthly rent.'),
       beds: integer('Bedrooms wanted.'),
+      size: integer('Size in m² the agent asked for ("130 sqm"). Results stay within ±10%, so 130 also finds 120 and 140.'),
       furnishing: FURNISHING,
       features: FEATURES,
     }),
@@ -244,6 +245,11 @@ export const TOOLS: Tool[] = [
     input_schema: object({ listing_id: must('integer', 'The listing number.') }),
   },
   {
+    name: 'queue_next_change',
+    description: 'When the agent asks for more than one change at once ("add notes to #165 and #162", "mark #12 sold and #13 rented"): prepare the FIRST with its tool, then call this once for each of the others. Each is prepared automatically, one after another, as the one before it is approved — the agent never has to ask again. Only after preparing a change in this same reply.',
+    input_schema: object({ instruction: must('string', 'The next change as one complete instruction with every detail, e.g. "add note to listing #162: confirm floor, main road and parking with the owner".') }),
+  },
+  {
     name: 'add_client_note',
     description: `Add a note to a client's file — "log that she's only free on weekends", "note on Reem's file: #24 and #60 pending a viewing", "he saw #45 and didn't like the kitchen". Appended with today's date to the Notes the agent sees in the app; nothing else on the client changes. ${ONE_CHANGE_NOTE}`,
     input_schema: object({
@@ -355,6 +361,7 @@ export function matchIntent(raw: unknown): IntentResult {
       beds: num(input, 'beds'),
       furnishing: str(input, 'furnishing'),
       features: strs(input, 'features'),
+      sizeAround: num(input, 'size'),
     }) as unknown as IntentResult['fields'],
   }
 }
@@ -420,7 +427,31 @@ function stagedOutcome(
 
 // ── The dispatcher ──────────────────────────────────────────────────────────
 
+/** The changes queued behind a pending one (payload.next). */
+export function queueOf(payload: unknown): string[] {
+  const next = (payload as { next?: unknown } | null)?.next
+  return Array.isArray(next) ? next.filter((x): x is string => typeof x === 'string' && x.trim() !== '') : []
+}
+
+/**
+ * Run a tool — and when it prepares a change while an earlier queue is being
+ * worked through, put the rest of the queue on the new change, so each approval
+ * brings up the next.
+ */
 export async function executeTool(ctx: ToolContext, name: string, rawInput: unknown, state: TurnState): Promise<ToolOutcome> {
+  const out = await runTool(ctx, name, rawInput, state)
+  const prepared = out.confirmation && !out.leavesTurnOpen && name !== 'follow_up_reminder'
+  if (prepared && state.queue?.length) {
+    const pending = await waitingChange(ctx.admin, ctx.profile.id)
+    if (pending) {
+      await ctx.admin.from('pending_actions').update({ payload: { ...(pending.payload as Record<string, unknown>), next: state.queue } }).eq('id', pending.id)
+    }
+    state.queue = []
+  }
+  return out
+}
+
+async function runTool(ctx: ToolContext, name: string, rawInput: unknown, state: TurnState): Promise<ToolOutcome> {
   const input = conform(name, asInput(rawInput))
 
   // stage() keeps one live action per agent, so a second write in the same
@@ -643,18 +674,44 @@ export async function executeTool(ctx: ToolContext, name: string, rawInput: unkn
       if (!pending) return { content: NOTHING_WAITING, isError: true }
       await ctx.admin.from('pending_actions').delete().eq('id', pending.id)
       const saved = replyText(await applyPendingAction(ctx.admin, ctx.profile, pending.action_type, pending.payload as never))
-      return { content: `Done. The agent is shown this automatically, so don't repeat it:\n${saved}`, confirmation: saved }
+      const queued = queueOf(pending.payload)
+      if (!queued.length) return { content: `Done. The agent is shown this automatically, so don't repeat it:\n${saved}`, confirmation: saved }
+      // The next change they asked for, prepared in this same reply; whatever
+      // follows it rides along on that one (executeTool attaches it).
+      state.queue = queued.slice(1)
+      return {
+        content: `Done. The agent is shown this automatically, so don't repeat it:\n${saved}\n\nThey also asked for this, so prepare it now with the right tool: "${queued[0]}"`,
+        confirmation: saved,
+        leavesTurnOpen: true,
+        keepWithNext: true,
+      }
     }
 
     case 'cancel_waiting_change': {
       const pending = await waitingChange(ctx.admin, ctx.profile.id)
       if (!pending) return { content: NOTHING_WAITING, isError: true }
       await ctx.admin.from('pending_actions').delete().eq('id', pending.id)
+      const queued = queueOf(pending.payload)
       return {
-        content: 'Cancelled — nothing was saved. The agent is shown this automatically. If they also said what they want instead, prepare that now.',
+        content: 'Cancelled — nothing was saved. The agent is shown this automatically. If they also said what they want instead, prepare that now.'
+          + (queued.length ? ` They had also asked for: "${queued.join('"; "')}" — ask whether they still want it rather than assuming.` : ''),
         confirmation: 'Cancelled — nothing was saved.',
         leavesTurnOpen: true,
       }
+    }
+
+    // "update both" — the second waits on the first. Not a write itself: it
+    // rides on the change just prepared, and is prepared once that's approved
+    // (by the router for a bare "yes", by confirm_waiting_change otherwise).
+    case 'queue_next_change': {
+      const instruction = str(input, 'instruction')
+      if (!instruction) return { content: 'What is the next change?', isError: true }
+      if (!state.staged) return { content: 'Prepare the first change first, then queue the others.', isError: true }
+      const pending = await waitingChange(ctx.admin, ctx.profile.id)
+      if (!pending) return { content: 'Nothing is waiting to queue it behind.', isError: true }
+      const payload = { ...(pending.payload as Record<string, unknown>), next: [...queueOf(pending.payload), instruction] }
+      await ctx.admin.from('pending_actions').update({ payload }).eq('id', pending.id)
+      return { content: `Queued — it is prepared automatically once they approve the current change. Tell them so in a few words ("reply YES and I'll prepare the next one").` }
     }
 
     default:

@@ -27,6 +27,46 @@ import type { IntentResult } from '@/lib/whatsapp/intent'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { agentReady, answerWithAgent, type AgentFallback } from '@/lib/whatsapp/agent'
 import { describeError } from '@/lib/whatsapp/agent/loop'
+import { queueOf } from '@/lib/whatsapp/agent/tools'
+import { replyText } from '@/lib/whatsapp/cloud'
+
+/**
+ * After a "yes", prepare the next change the agent queued with it — the agent
+ * never has to ask again. Whatever remains rides on the change prepared now,
+ * so each approval brings up the next.
+ */
+async function prepareQueued(
+  admin: SupabaseClient, profile: Profile, origin: string,
+  meta: { phone: string; inboundLogId: string | null }, queued: string[], saved: string,
+): Promise<string> {
+  let answer: string | AgentFallback
+  try {
+    answer = await answerWithAgent({
+      admin, profile, origin, phone: meta.phone, inboundLogId: meta.inboundLogId,
+      // Not the agent's words — a note from the system, written so the model
+      // neither re-confirms (it's saved) nor re-queues (the rest is handled).
+      // Names what was saved: "the change above" read, to the model, as the
+      // card it had just shown, and it warned that card had been "replaced".
+      body: `[System: the agent replied YES and this is now saved: "${saved.split('\n')[0]}". Nothing is waiting any more — don't confirm, re-check or mention it. Prepare only the next change they asked for, now, with the right tool, and don't queue anything: ${queued[0]}]`,
+      legacy: async instruction => (await routeByIntent(admin, profile, instruction, origin, { forAgent: true })).answer,
+    })
+  } catch {
+    answer = { fallback: 'crash' }
+  }
+  if (typeof answer !== 'string') return `Next you asked for: ${queued[0]} — send it again and I'll prepare it.`
+  const rest = queued.slice(1)
+  if (rest.length) {
+    const { data: next } = await admin
+      .from('pending_actions').select('id, payload')
+      .eq('profile_id', profile.id).gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false }).limit(1).maybeSingle()
+    if (next) await admin.from('pending_actions').update({ payload: { ...(next.payload as Record<string, unknown>), next: rest } }).eq('id', next.id)
+    // Nothing prepared (a listing not found…): say what's still to do rather
+    // than drop it.
+    else return `${answer}\n\nStill to do after that: ${rest.join('; ')}. Send them again when you're ready.`
+  }
+  return answer
+}
 
 // The agent's bridge must not start the old step-by-step create flows.
 const USE_AGENT_CREATE_TOOL = 'Adding clients and listings has its own tools (create_client / create_listing) — use those instead.'
@@ -118,13 +158,20 @@ export async function route(
     // Consume the action first, whichever way it goes: a pending write must
     // never be applicable twice.
     await admin.from('pending_actions').delete().eq('id', pending.id)
+    // Changes the agent asked for in the same breath, queued behind this one.
+    const queued = queueOf(pending.payload)
+    if (confirmation === 'confirm') {
+      const saved = await applyPendingAction(admin, profile, pending.action_type, pending.payload)
+      if (!queued.length || !agentOn) return { intent: 'confirm_pending', answer: saved }
+      return { intent: 'confirm_pending', answer: `${replyText(saved)}\n\n${await prepareQueued(admin, profile, origin, meta, queued, replyText(saved))}` }
+    }
+    const declined = pending.action_type === 'send_marketing'
+      ? `OK, not sent. Send "send #${(pending.payload as { id?: number } | null)?.id ?? '…'} to marketing" any time.`
+      : 'Cancelled — nothing was saved.'
+    // A no to this one isn't a no to the rest — ask rather than assume.
     return {
       intent: 'confirm_pending',
-      answer: confirmation === 'confirm'
-        ? await applyPendingAction(admin, profile, pending.action_type, pending.payload)
-        : pending.action_type === 'send_marketing'
-          ? `OK, not sent. Send "send #${(pending.payload as { id?: number } | null)?.id ?? '…'} to marketing" any time.`
-          : 'Cancelled — nothing was saved.',
+      answer: queued.length ? `${declined}\n\nYou also asked me to: ${queued[0]}. Still want that? Say yes and I'll prepare it.` : declined,
     }
   }
 

@@ -538,3 +538,67 @@ test('a client can switch from buying to renting — both places the app keeps i
   assert.equal(JSON.parse(row.notes).req.notes, 'x', 'the rest of the blob is kept')
   assert.equal(Number(row.budget_max), 1200)
 })
+
+test('"130 sqm apartments in Achrafieh": a ±10% range, sizes shown, nearest sizes when none fit', async () => {
+  const apt = (id, size, price, extra = {}) => ({ id, company_id: COMPANY, Title: `Apt ${id}`, Location: 'Beirut', Neighborhood: 'Achrafieh', Price: price, Bedrooms: 2, size, Status: 'Available',
+    Amenities: JSON.stringify({ agentId: 'a1', transaction: 'For Sale', type: 'Apartment' }), ...extra })
+  const { ctx } = setup(AGENT, { Properties: [apt(1, 100, 250000), apt(2, 120, 300000), apt(3, 130, 310000), apt(4, 140, 320000), apt(5, 160, 400000)] })
+  const out = await executeTool(ctx, 'match_listings', call('match_listings', { areas: ['Achrafieh'], property_type: 'Apartment', size: 130 }), fresh())
+  assert.match(out.content, /between 117 and 143 m²/)
+  for (const id of [2, 3, 4]) assert.match(out.content, new RegExp(`#${id} .*1[234]0 m²`))
+  for (const id of [1, 5]) assert.doesNotMatch(out.content, new RegExp(`#${id} `))
+  assert.match(out.content, /properties\?open=3/, 'each with its link')
+  // Nothing in range: say so, and show the nearest sizes instead.
+  const none = await executeTool(ctx, 'match_listings', call('match_listings', { areas: ['Achrafieh'], property_type: 'Apartment', size: 300 }), fresh())
+  assert.match(none.content, /No .* between 270 and 330 m²\. Nearest sizes:/)
+  assert.match(none.content.split('\n')[1], /#5 /, 'the 160 m² one is nearest to 300')
+})
+
+// ── Several changes in one message: queued, each prepared as the last is approved ──
+
+import { queueOf } from './tools.ts'
+
+test('queue_next_change rides on the change just prepared; refused with nothing prepared', async () => {
+  const { db, ctx } = setup(AGENT, { client_requests: [{ ...RITA_145 }] })
+  const lonely = await executeTool(ctx, 'queue_next_change', call('queue_next_change', { instruction: 'mark #12 sold' }), fresh())
+  assert.equal(lonely.isError, true)
+  const state = fresh()
+  const staged = await executeTool(ctx, 'update_client', call('update_client', { client_name: 'Rita Haddad', budget: 1000 }), state)
+  state.staged = true   // what the loop does
+  assert.ok(staged.confirmation)
+  await executeTool(ctx, 'queue_next_change', call('queue_next_change', { instruction: 'add note to Rita Haddad: prefers a high floor' }), state)
+  await executeTool(ctx, 'queue_next_change', call('queue_next_change', { instruction: 'mark Rita Haddad as Viewing' }), state)
+  assert.deepEqual(queueOf(db.table('pending_actions').at(-1).payload), ['add note to Rita Haddad: prefers a high floor', 'mark Rita Haddad as Viewing'])
+})
+
+test('approving in words saves, prepares the next queued change, and carries the rest onto it', async () => {
+  const { db, ctx } = setup(AGENT, { client_requests: [{ ...RITA_145 }] })
+  const s1 = fresh()
+  await executeTool(ctx, 'update_client', call('update_client', { client_name: 'Rita Haddad', budget: 1000 }), s1)
+  s1.staged = true
+  await executeTool(ctx, 'queue_next_change', call('queue_next_change', { instruction: 'set Rita Haddad to Viewing' }), s1)
+  await executeTool(ctx, 'queue_next_change', call('queue_next_change', { instruction: 'Rita Haddad wants 3 bedrooms' }), s1)
+  // Next message: "yes save it".
+  const s2 = fresh()
+  const saved = await executeTool(ctx, 'confirm_waiting_change', {}, s2)
+  assert.equal(Number(db.table('client_requests')[0].budget_max), 1000)
+  assert.equal(saved.keepWithNext, true)
+  assert.equal(saved.leavesTurnOpen, true)
+  assert.match(saved.content, /prepare it now.*set Rita Haddad to Viewing/s)
+  assert.deepEqual(s2.queue, ['Rita Haddad wants 3 bedrooms'])
+  // The model prepares it; the rest of the queue is attached to it.
+  const next = await executeTool(ctx, 'update_client', call('update_client', { client_name: 'Rita Haddad', status: 'Viewing' }), s2)
+  assert.ok(next.confirmation)
+  assert.deepEqual(queueOf(db.table('pending_actions').at(-1).payload), ['Rita Haddad wants 3 bedrooms'])
+  assert.deepEqual(s2.queue, [])
+})
+
+test('a no to the first change asks about the queued ones instead of dropping them', async () => {
+  const { ctx } = setup(AGENT, { client_requests: [{ ...RITA_145 }] })
+  const s1 = fresh()
+  await executeTool(ctx, 'update_client', call('update_client', { client_name: 'Rita Haddad', budget: 1000 }), s1)
+  s1.staged = true
+  await executeTool(ctx, 'queue_next_change', call('queue_next_change', { instruction: 'set Rita Haddad to Viewing' }), s1)
+  const out = await executeTool(ctx, 'cancel_waiting_change', {}, fresh())
+  assert.match(out.content, /also asked for: "set Rita Haddad to Viewing".*ask whether they still want it/s)
+})

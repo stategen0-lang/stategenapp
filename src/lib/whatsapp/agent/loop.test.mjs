@@ -311,3 +311,19 @@ test('composeReply drops a leftover "Reply YES to save it." above the card', asy
   const card = 'About to add a new client:\n• Budget: $1,300\n\nReply YES to save or NO to cancel.'
   assert.equal(composeReply("I've updated the budget to $1,300. Reply YES to save it.", card), card)
 })
+
+test('a saved change and the next queued card are both shown, in that order', async () => {
+  const calls = [
+    { content: [{ type: 'tool_use', id: 'a', name: 'confirm_waiting_change', input: {} }, { type: 'tool_use', id: 'b', name: 'update_client', input: {} }], stop_reason: 'tool_use' },
+    { content: [{ type: 'text', text: '' }], stop_reason: 'end_turn' },
+  ]
+  let i = 0
+  const r = await runAgentTurn({
+    call: async () => ({ id: 'm', type: 'message', role: 'assistant', model: 'x', usage: {}, ...calls[i++] }),
+    execute: async (name) => name === 'confirm_waiting_change'
+      ? { content: 'done', confirmation: 'Saved — Rita Haddad updated.', leavesTurnOpen: true, keepWithNext: true }
+      : { content: 'prepared', confirmation: 'About to update Rita Haddad:\n• Status: Viewing\n\nReply YES to save or NO to cancel.' },
+    messages: [{ role: 'user', content: 'yes save it' }],
+  })
+  assert.match(r.reply, /^Saved — Rita Haddad updated\.\n\nAbout to update Rita Haddad:/)
+})

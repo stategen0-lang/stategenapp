@@ -19,6 +19,9 @@ import { TOOLS, executeTool, type ToolContext } from './tools.ts'
 import { SYSTEM_PROMPT, contextBlock } from './prompt.ts'
 import { loadHistory } from './history.ts'
 import { createCaller, claudeConfigured, agentModel, type AgentModel } from './client.ts'
+import { mentionedIds, withListingLinks } from './links.ts'
+
+const SEARCH_TOOLS = new Set(['match_listings', 'find_listings', 'get_listing'])
 
 /** Whether WHATSAPP_AGENT names this agency. Pure, for testing. */
 export function agentEnabledFor(companyId: number, setting: string | undefined = process.env.WHATSAPP_AGENT): boolean {
@@ -123,6 +126,22 @@ export async function answerWithAgent(input: AgentInput): Promise<string | Agent
     const reason = result.ended === 'refusal' ? 'refusal' : (result.error ?? 'error')
     console.warn('[whatsapp-agent] Claude unavailable on the first call — the old router answers instead:', reason)
     return { fallback: reason }
+  }
+  // Changes queued behind this one: say so, so the agent knows they're coming.
+  const queued = result.toolCalls.filter(t => t.name === 'queue_next_change' && t.ok).length
+  if (queued && result.confirmation) {
+    return `${result.reply}\n\nThen I'll prepare the other ${queued === 1 ? 'change' : `${queued} changes`} you asked for, one at a time.`
+  }
+
+  // After a search, every listing named in the reply comes with its link — not
+  // under a confirmation card, which is about one change, not a list.
+  if (!result.confirmation && result.toolCalls.some(t => SEARCH_TOOLS.has(t.name))) {
+    const ids = mentionedIds(result.reply)
+    if (ids.length) {
+      const { data } = await admin.from('Properties').select('id').eq('company_id', profile.company_id).in('id', ids)
+      const real = new Set(((data ?? []) as { id: number }[]).map(r => Number(r.id)))
+      return withListingLinks(result.reply, real, input.origin)
+    }
   }
   return result.reply
 }

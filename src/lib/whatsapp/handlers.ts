@@ -275,6 +275,12 @@ export async function handleQueryProperty(
     ].join('\n')
   }
 
+  // "130 sqm apartments": a size is a range, not a floor — ±10%, so 130 also
+  // finds 120 and 140. Without this the agent model opened listings one by one
+  // to read their sizes (7s) and listed 60 to 220 m².
+  const sizeAround = Number((intent.fields as Record<string, unknown> | undefined)?.sizeAround) || 0
+  if (sizeAround > 0) return sizeSearch(brief, properties, areas, sizeAround, origin)
+
   const matches = searchBrief(brief, properties, areas).slice(0, 5)
   const wanted = describeBrief(brief)
 
@@ -289,6 +295,37 @@ export async function handleQueryProperty(
   return [
     `${matches.length} match${matches.length > 1 ? 'es' : ''} for ${wanted}:`,
     ...matchLines(matches, origin, brief.budget),
+  ].join('\n')
+}
+
+/** Listings around a size (±10%), ranked by the matcher; the nearest sizes when none fit. */
+function sizeSearch(
+  brief: ReturnType<typeof briefFromIntent>,
+  properties: Property[],
+  areas: Awaited<ReturnType<typeof companyAreaIndex>> | null,
+  size: number,
+  origin: string,
+): string {
+  const lo = Math.round(size * 0.9), hi = Math.round(size * 1.1)
+  // With nothing else to go on, every available listing is a candidate.
+  const pool = hasBrief(brief)
+    ? searchBrief(brief, properties, areas)
+    : properties.filter(isMatchable).map(property => ({ property, score: { total: 0 } }) as ReturnType<typeof searchBrief>[number])
+  const wanted = hasBrief(brief) ? describeBrief(brief) : 'listings'
+  const inBand = pool.filter(m => m.property.size >= lo && m.property.size <= hi)
+  if (inBand.length) {
+    return [
+      `${inBand.length} ${wanted} between ${lo} and ${hi} m²:`,
+      ...matchLines(inBand.slice(0, 8), origin, brief.budget),
+    ].join('\n')
+  }
+  const nearest = pool.filter(m => m.property.size > 0)
+    .sort((a, b) => Math.abs(a.property.size - size) - Math.abs(b.property.size - size))
+    .slice(0, 5)
+  if (!nearest.length) return `Nothing matches ${wanted} around ${size} m².`
+  return [
+    `No ${wanted} between ${lo} and ${hi} m². Nearest sizes:`,
+    ...matchLines(nearest, origin, brief.budget),
   ].join('\n')
 }
 

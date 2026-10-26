@@ -228,6 +228,7 @@ export function listingLines(p: Property, origin: string, scorePct?: number, bud
     where || null,
     // Without it the agent model, asked for 2 bedrooms, called a 1- and a
     // 4-bedroom listing "2-bedroom rentals" — it can't check what it isn't shown.
+    p.size > 0 ? `${p.size} m²` : null,
     p.beds > 0 ? `${p.beds} bed` : null,
     budgetNote(p, budget) || null,
     scorePct != null ? `${scorePct}% match` : null,

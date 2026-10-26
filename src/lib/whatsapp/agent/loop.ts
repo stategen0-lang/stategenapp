@@ -44,11 +44,22 @@ export interface ToolOutcome {
    * one message. Its confirmation is still shown unless a later one replaces it.
    */
   leavesTurnOpen?: boolean
+  /**
+   * Keep this confirmation when a later one arrives in the same turn, rather
+   * than replacing it: "Saved — #165 updated." followed by the next queued
+   * change's card.
+   */
+  keepWithNext?: boolean
 }
 
 export interface TurnState {
   /** Set once a write is staged; later write tools in the same turn refuse. */
   staged: boolean
+  /**
+   * Changes still to come after the next one is approved — carried from a
+   * change just saved onto the one prepared after it (queue_next_change).
+   */
+  queue?: string[]
 }
 
 export interface AgentTurn {
@@ -152,6 +163,7 @@ export async function runAgentTurn(turn: AgentTurn): Promise<AgentResult> {
   const state: TurnState = { staged: false }
   const toolCalls: AgentResult['toolCalls'] = []
   let confirmation: string | null = null
+  let keepPrevious = false
   let error: string | null = null
   const maxRounds = turn.maxRounds ?? DEFAULT_MAX_ROUNDS
 
@@ -219,7 +231,8 @@ export async function runAgentTurn(turn: AgentTurn): Promise<AgentResult> {
       }
       if (out.confirmation) {
         if (!out.leavesTurnOpen) state.staged = true
-        confirmation = out.confirmation
+        confirmation = keepPrevious && confirmation ? `${confirmation}\n\n${out.confirmation}` : out.confirmation
+        keepPrevious = !!out.keepWithNext
       }
       toolCalls.push({ name: use.name, ok: !out.isError })
       results.push({
