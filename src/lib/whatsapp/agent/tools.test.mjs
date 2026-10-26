@@ -523,3 +523,18 @@ test('add_client_note: the note lands in the Notes the app shows, the rest of th
   assert.equal(req.size, 120)
   assert.equal(JSON.parse(db.table('client_requests')[0].notes).agentId, 'JH-655')
 })
+
+test('a client can switch from buying to renting — both places the app keeps it', async () => {
+  // Live (simulator): "I can't switch her from buyer to renter here", twice.
+  const manale = { id: 61, company_id: COMPANY, 'Client Name': 'Manale', payment_terms: 'For Sale', budget_max: 250000,
+    notes: JSON.stringify({ agentId: 'JH-655', type: 'Buyer', req: { notes: 'x' } }) }
+  const { db, ctx } = setup(AGENT, { client_requests: [manale] })
+  const staged = await executeTool(ctx, 'update_client', call('update_client', { client_name: 'Manale', client_type: 'renter', budget: 1200 }), fresh())
+  assert.ok(staged.confirmation, staged.content)
+  await executeTool(ctx, 'confirm_waiting_change', {}, fresh())
+  const row = db.table('client_requests')[0]
+  assert.equal(row.payment_terms, 'For Rent')
+  assert.equal(JSON.parse(row.notes).type, 'Renter')
+  assert.equal(JSON.parse(row.notes).req.notes, 'x', 'the rest of the blob is kept')
+  assert.equal(Number(row.budget_max), 1200)
+})

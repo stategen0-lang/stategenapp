@@ -305,3 +305,9 @@ test('composeReply drops "I\'ve updated…" over a card that still needs YES', a
   assert.equal(composeReply("I've prepared the change.", card), `I've prepared the change.\n\n${card}`)
   assert.equal(composeReply("I've updated her file.", 'Saved — Lara updated.'), "I've updated her file.\n\nSaved — Lara updated.")
 })
+
+test('composeReply drops a leftover "Reply YES to save it." above the card', async () => {
+  const { composeReply } = await import('./loop.ts')
+  const card = 'About to add a new client:\n• Budget: $1,300\n\nReply YES to save or NO to cancel.'
+  assert.equal(composeReply("I've updated the budget to $1,300. Reply YES to save it.", card), card)
+})

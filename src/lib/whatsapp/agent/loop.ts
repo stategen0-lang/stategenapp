@@ -136,7 +136,8 @@ export function composeReply(modelText: string, confirmation: string | null): st
   // card that still needed a yes. The card says what will happen; the claim goes.
   if (/Reply YES/i.test(confirmation)) {
     for (const sentence of text.match(/[^.!?\n]+[.!?]*/g) ?? []) {
-      if (ALREADY_DONE.test(sentence)) text = text.replace(sentence, '')
+      // Also a bare "Reply YES to save it." — the card ends with the same line.
+      if (ALREADY_DONE.test(sentence) || /^\s*reply yes\b/i.test(sentence)) text = text.replace(sentence, '')
     }
     text = text.replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim()
   }

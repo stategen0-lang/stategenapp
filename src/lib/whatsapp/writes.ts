@@ -170,6 +170,8 @@ export const CLIENT_FIELDS: Record<string, FieldSpec> = {
   bedrooms: { column: 'bedrooms',          label: 'Bedrooms',  coerce: toCount },
   phone:    { column: 'client phone',      label: 'Phone',     coerce: toText },
   rating:   { column: 'agent_rating',      label: 'Rating',    coerce: toCount },
+  clientType:  { column: 'extras.type',    label: 'Client',    coerce: toEnum(['Buyer', 'Renter']) },
+  transaction: { column: 'payment_terms',  label: 'Looking',   coerce: toEnum(['For Sale', 'For Rent']) },
 }
 
 export const PROPERTY_FIELDS: Record<string, FieldSpec> = {

@@ -175,7 +175,7 @@ export const TOOLS: Tool[] = [
   },
   {
     name: 'update_client',
-    description: `Change an existing client: budget, status, area, bedrooms, phone or rating. ${ONE_CHANGE_NOTE}`,
+    description: `Change an existing client: budget, status, area, bedrooms, phone, rating, or whether they're buying or renting. ${ONE_CHANGE_NOTE}`,
     input_schema: object({
       client_name: must('string', 'The client\'s name as the agent wrote it.'),
       client_area: text('Only when two clients share the name: one area of the one meant, as find_client or the error listed it (e.g. Achrafieh).'),
@@ -185,6 +185,7 @@ export const TOOLS: Tool[] = [
       beds: integer('Bedrooms.'),
       phone: text('New phone number.'),
       rating: integer('The agent\'s 1–5 star rating of the client.'),
+      client_type: choice(['buyer', 'renter'], 'Only when they switch between buying and renting. Change the budget with it if it\'s now monthly rent (or the other way).'),
     }),
   },
   {
@@ -525,6 +526,12 @@ export async function executeTool(ctx: ToolContext, name: string, rawInput: unkn
         beds: num(input, 'beds'),
         phone: str(input, 'phone'),
         rating: num(input, 'rating'),
+        // Buyer/renter lives in two places — the type in the notes blob and the
+        // deal in payment_terms — and the app writes both, so this does too.
+        ...(str(input, 'client_type') ? {
+          clientType: str(input, 'client_type') === 'renter' ? 'Renter' : 'Buyer',
+          transaction: str(input, 'client_type') === 'renter' ? 'For Rent' : 'For Sale',
+        } : {}),
       }) as IntentResult['fields']
       return staging(ctx, () => stageClientUpdate(ctx.admin, ctx.profile, { intent: 'update_client', clientName, fields }))
     }
