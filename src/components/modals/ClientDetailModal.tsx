@@ -2,15 +2,14 @@
 
 import { useState, useRef } from 'react'
 import { Star, FileText, Upload, X, Loader2, ExternalLink } from 'lucide-react'
-import { Client, Agent, Property, ClientStatus, ClosingDocument, statusStyle, CLIENT_TYPE_STYLE, CLOSING_DOC_PRESETS, CLOSING_ID_PARTS, formatPrice, getAgent } from '@/lib/data'
+import { Client, Agent, Property, ClientStatus, ClosingDocument, statusStyle, CLIENT_TYPE_STYLE, CLOSING_DOC_PRESETS, CLOSING_ID_PARTS, formatPrice } from '@/lib/data'
 import { closingProgress } from '@/lib/pipeline'
 import { scoreBand, BAND_STYLE } from '@/lib/scoring'
 import { useLockBodyScroll } from '@/hooks/use-lock-body-scroll'
 import { usePullToClose } from '@/hooks/use-pull-to-close'
 import MatchCards from '@/components/matching/MatchCards'
-import PropertyDetailModal from './PropertyDetailModal'
-import { useSession } from '@/hooks/use-session'
-import { isManager } from '@/lib/permissions'
+import MatchedListingModal from './MatchedListingModal'
+import { formatAddedAt } from '@/lib/added-at'
 
 const CLIENT_STATUSES: ClientStatus[] = ['Searching', 'Viewing', 'Negotiation', 'Signed']
 
@@ -26,9 +25,6 @@ interface Props {
 
 export default function ClientDetailModal({ client: c, agent, onClose, onStatusChange, onEdit, onReferred }: Props) {
   useLockBodyScroll()
-  // Who is looking — a matched listing opened from here shows its owner's
-  // details only to that listing's own agent, or to a manager.
-  const { session } = useSession()
   // Pull down at the top of the sheet to go back to the list — the mobile
   // gesture equivalent of tapping ✕.
   const { scrollRef: pullScrollRef, panelRef: pullPanelRef, pulling, progress } = usePullToClose(onClose)
@@ -262,6 +258,9 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
                   )}
                 </div>
                 {statusError && <p className="text-xs mt-1" style={{ color: '#A23434' }}>{statusError}</p>}
+                {formatAddedAt(c.createdAt) && (
+                  <p className="text-xs mt-1" style={{ color: '#9AA3B2' }}>Added {formatAddedAt(c.createdAt)}</p>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -561,12 +560,7 @@ export default function ClientDetailModal({ client: c, agent, onClose, onStatusC
 
       {/* Stacked property modal — comes later in DOM so renders above at same z-index */}
       {stackedProperty && (
-        <PropertyDetailModal
-          property={stackedProperty}
-          canSeePrivate={isManager(session?.role) || (session?.agentCode != null && stackedProperty.agentId === session.agentCode)}
-          agent={getAgent(stackedProperty.agentId) ?? { id: stackedProperty.agentId as Agent['id'], name: stackedProperty.agentId, initials: stackedProperty.agentId.slice(0,2).toUpperCase(), color: '#9AA3B2', shortName: stackedProperty.agentId }}
-          onClose={() => setStackedProperty(null)}
-        />
+        <MatchedListingModal property={stackedProperty} onClose={() => setStackedProperty(null)} />
       )}
     </>
   )

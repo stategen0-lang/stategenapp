@@ -447,9 +447,10 @@ export const MATCHABLE_STATUSES = ['Available', 'Pending', 'Under Construction']
 
 export function isMatchable(property: Pick<Property, 'status'>): boolean {
   // An empty status is an older or imported listing, and those are on the
-  // market until somebody says otherwise.
+  // market until somebody says otherwise. So is 'active', the column's default,
+  // which callers reading the raw row still see (see dbRowToProperty).
   const s = String(property.status ?? '').trim()
-  return !s || MATCHABLE_STATUSES.includes(s)
+  return !s || s === 'active' || MATCHABLE_STATUSES.includes(s)
 }
 
 /**

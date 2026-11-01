@@ -147,7 +147,7 @@ export function rankCandidates(
       price: Number(row.Price) || 0,
       rent: Number(ex.rent) || 0,
       transaction: String(ex.transaction ?? row.Payment_terms ?? ''),
-      status: String(row.Status ?? 'Available'),
+      status: row.Status === 'active' ? 'Available' : String(row.Status ?? 'Available'),
       beds: Number(row.Bedrooms) || 0,
       type: String(ex.type ?? ''),
       ownerName: allowed && ex.ownerName ? String(ex.ownerName) : undefined,

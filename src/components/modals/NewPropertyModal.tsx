@@ -402,7 +402,7 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
     }
     // The same object the server just stored, handed back to the list so the
     // card appears without waiting for a refetch.
-    onSaved({ id: savedId, ...payload, agentId } as unknown as Property)
+    onSaved({ id: savedId, createdAt: initial?.createdAt ?? new Date().toISOString(), ...payload, agentId } as unknown as Property)
   }
 
   const inp = 'w-full rounded-xl px-3 py-2 text-sm outline-none'

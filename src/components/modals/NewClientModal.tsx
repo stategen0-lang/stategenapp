@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import {
-  Client, ClientType, ClientStatus, ClientReq,
+  Client, ClientType, ClientStatus, ClientReq, Property,
   PROPERTIES, CURRENT_AGENT_ID, formatPrice, CLIENT_TAG_PRESETS, tagStyle,
   PROPERTY_TYPES, PropertyType, propertyTypeLabel, FURNISHINGS, FLOORS, propertyLocation, amenitiesFor, BUILDING_FEATURES
 } from '@/lib/data'
@@ -10,6 +10,8 @@ import { matchProperties, MATCH_THRESHOLD, PropertyMatch } from '@/lib/matching'
 import { dbRowToProperty } from '@/lib/db-mappers'
 import { useSession } from '@/hooks/use-session'
 import { useLockBodyScroll } from '@/hooks/use-lock-body-scroll'
+import { useBackCloses } from '@/hooks/use-back-closes'
+import MatchedListingModal from './MatchedListingModal'
 import AreaInput from '@/components/form/AreaInput'
 import { loadCompanyAreas } from '@/lib/lebanon/areas'
 import { hasField, type ListingField } from '@/lib/property-fields'
@@ -43,6 +45,12 @@ export default function NewClientModal({ onClose, onSaved, onDeleted, matchThres
   const [step, setStep] = useState<1 | 2>(1)
   const [matches, setMatches] = useState<PropertyMatch[]>([])
   const [finding, setFinding] = useState(false)
+  // A match opened from the results. It sits on top of them, so everything
+  // typed so far and the place in the list are still there when it closes.
+  const [openListing, setOpenListing] = useState<Property | null>(null)
+  // The phone's back button on the results returns to the form; the client
+  // isn't saved yet, and leaving the page would lose all of it.
+  useBackCloses(step === 2, () => setStep(1))
 
   const [name, setName] = useState(initial?.name ?? '')
   const [email, setEmail] = useState(initial?.email ?? '')
@@ -231,7 +239,7 @@ export default function NewClientModal({ onClose, onSaved, onDeleted, matchThres
     // database is ~230ms from Lebanon, and the agent has nothing to decide in
     // the meantime. A failed save takes the row back out and says so.
     const provisionalId = initial?.id ?? ++_nextId
-    const provisional: Client = { id: provisionalId, ...payload, agentId, status }
+    const provisional: Client = { id: provisionalId, createdAt: initial?.createdAt ?? new Date().toISOString(), ...payload, agentId, status }
     onSaved(provisional)
     onClose()
 
@@ -257,6 +265,7 @@ export default function NewClientModal({ onClose, onSaved, onDeleted, matchThres
   const labelStyle = { color: '#6A7488' }
 
   return (
+    <>
     <div
       className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-4"
       style={{ background: 'rgba(14,31,61,0.45)' }}
@@ -532,7 +541,15 @@ export default function NewClientModal({ onClose, onSaved, onDeleted, matchThres
                     { label: 'Beds',     v: s.bedroomScore },
                   ]
                   return (
-                    <div key={p.id} className="rounded-xl p-4" style={{ border: '1.5px solid #EEF0F4', background: '#FAFBFC' }}>
+                    <div
+                      key={p.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setOpenListing(p)}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenListing(p) } }}
+                      className="rounded-xl p-4 cursor-pointer"
+                      style={{ border: '1.5px solid #EEF0F4', background: '#FAFBFC' }}
+                    >
                       <div className="flex items-start gap-3 mb-3">
                         {/* Ring gauge */}
                         <div className="shrink-0">
@@ -555,6 +572,7 @@ export default function NewClientModal({ onClose, onSaved, onDeleted, matchThres
                             {p.transaction === 'For Rent' ? `${formatPrice(p.rent)}/mo` : formatPrice(p.price)}
                           </p>
                         </div>
+                        <span className="text-xs font-semibold shrink-0" style={{ color: '#2E5288' }}>View →</span>
                       </div>
                       {/* Sub-score chips */}
                       <div className="flex flex-wrap gap-1">
@@ -609,5 +627,10 @@ export default function NewClientModal({ onClose, onSaved, onDeleted, matchThres
         )}
       </div>
     </div>
+
+    {/* After the form in the DOM, so it renders above it at the same z-index.
+        A sibling, not a child: a tap on its backdrop must not close the form. */}
+    {openListing && <MatchedListingModal property={openListing} onClose={() => setOpenListing(null)} />}
+    </>
   )
 }

@@ -5,6 +5,8 @@ import { MessageCircle, Link2, MapPin, FileText, Phone } from 'lucide-react'
 import { Property, Agent, Client, TYPE_GRADIENTS, statusStyle, formatPrice, buildDesc, getAgent, propertyLocation } from '@/lib/data'
 import { useLockBodyScroll } from '@/hooks/use-lock-body-scroll'
 import { usePullToClose } from '@/hooks/use-pull-to-close'
+import { useBackCloses } from '@/hooks/use-back-closes'
+import { formatAddedAt } from '@/lib/added-at'
 import MatchCards from '@/components/matching/MatchCards'
 import OffersSection from '@/components/offers/OffersSection'
 import ClientDetailModal from './ClientDetailModal'
@@ -45,6 +47,7 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
   // Which facts this kind of listing has at all.
   const has = (field: ListingField) => hasField(p.type, field)
   const [stackedClient, setStackedClient] = useState<Client | null>(null)
+  useBackCloses(stackedClient !== null, () => setStackedClient(null))
   const [shareOpen, setShareOpen] = useState(false)
   const [shareBusy, setShareBusy] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -204,19 +207,24 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
 
           {/* ── Scrollable body ── */}
           <div ref={pullScrollRef} className="overflow-y-auto flex-1 p-5 space-y-4" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
-            <div className="flex items-center justify-between">
-              <p className="text-2xl font-extrabold" style={{ color: '#14223F', letterSpacing: '-0.5px' }}>
-                {p.transaction === 'For Rent' ? `${formatPrice(p.rent)}/mo` : formatPrice(p.price)}
-              </p>
-              <div className="flex items-center gap-1.5 shrink-0">
-                {/* Beside the status, because "already advertised" is read the
-                    same way — and here it shows for every colleague, not only
-                    the people who can send it. */}
-                <ListedBadge property={p} />
-                <span className="text-xs font-semibold px-3 py-1 rounded-full" style={{ background: sc.bg, color: sc.color }}>
-                  {p.status}
-                </span>
+            <div>
+              <div className="flex items-center justify-between">
+                <p className="text-2xl font-extrabold" style={{ color: '#14223F', letterSpacing: '-0.5px' }}>
+                  {p.transaction === 'For Rent' ? `${formatPrice(p.rent)}/mo` : formatPrice(p.price)}
+                </p>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {/* Beside the status, because "already advertised" is read the
+                      same way — and here it shows for every colleague, not only
+                      the people who can send it. */}
+                  <ListedBadge property={p} />
+                  <span className="text-xs font-semibold px-3 py-1 rounded-full" style={{ background: sc.bg, color: sc.color }}>
+                    {p.status}
+                  </span>
+                </div>
               </div>
+              {formatAddedAt(p.createdAt) && (
+                <p className="text-xs mt-0.5" style={{ color: '#9AA3B2' }}>Added {formatAddedAt(p.createdAt)}</p>
+              )}
             </div>
 
             {/* pre-wrap: template descriptions are multi-line with headings and

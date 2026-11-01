@@ -89,6 +89,7 @@ export function propertyTypeLabel(t: PropertyType): string {
 
 export interface Property {
   id: number
+  createdAt?: string      // when it was added — the row's created_at
   title: string
   type: PropertyType
   transaction: Transaction
@@ -228,6 +229,7 @@ export const CLOSING_ID_PARTS = ['Front', 'Back', 'Passport photo page', 'Passpo
 
 export interface Client {
   id: number
+  createdAt?: string     // when it was added — the row's created_at
   name: string
   type: ClientType
   email: string

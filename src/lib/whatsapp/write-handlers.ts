@@ -425,7 +425,9 @@ export async function stageCreateProperty(
   const summary = confirmationText('a new listing', built.changes)
   return stage(admin, profile, 'create_property', summary, {
     table: 'Properties',
-    columns: { ...built.columns, company_id: profile.company_id },
+    // Status spelled out: left off, the column's default is 'active', which is
+    // none of the app's statuses, and matching read it as off the market.
+    columns: { Status: 'Available', ...built.columns, company_id: profile.company_id },
     extras,
     blobColumn: 'Amenities',
     label: String(built.columns.Title ?? 'new listing'),

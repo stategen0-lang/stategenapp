@@ -31,6 +31,7 @@ export function dbRowToProperty(row: Record<string, unknown>, idx: number): Prop
   try { extras = JSON.parse(row.Amenities as string || '{}') } catch {}
   return {
     id: (row.id as number) ?? idx,
+    createdAt: row.created_at as string | undefined,
     title: (row.Title as string) ?? '',
     type: propertyType(extras.type),
     // Normalise to the app's transaction enum so 'sale'/'rent' (e.g. imported
@@ -46,7 +47,9 @@ export function dbRowToProperty(row: Record<string, unknown>, idx: number): Prop
     garden: !!(extras.garden),
     balcony: !!(extras.balcony),
     view: (extras.view as string) ?? '',
-    status: (row.Status as Property['status']) ?? 'Available',
+    // 'active' is the column's default: listings the WhatsApp bot added before
+    // it set a status. They are on the market like any other.
+    status: (row.Status === 'active' ? 'Available' : row.Status as Property['status']) ?? 'Available',
     agentId: (extras.agentId as Property['agentId']) ?? 'a1',
     advancedPayment: extras.advancedPayment as import('@/lib/data').AdvancedPayment | undefined,
     notes: extras.notes as string | undefined,
@@ -121,6 +124,7 @@ export function dbRowToClient(row: Record<string, unknown>, idx: number): Client
   }
   return {
     id: (row.id as number) ?? idx,
+    createdAt: row.created_at as string | undefined,
     name: (row['Client Name'] as string) ?? '',
     // Normalise casing/synonyms → the app's ClientType ('Buyer' | 'Renter'), so
     // imported or externally-written rows never break the UI's style lookup.
