@@ -147,6 +147,8 @@ function PropertiesPageInner() {
   // Mine / All switch in the header.
   const [fAgent, setFAgent] = useState('')
   const [fArea, setFArea] = useState('')
+  // Sent to marketing or not — on the agent's own listings only (Mine).
+  const [fMarketing, setFMarketing] = useState<'' | 'sent' | 'not_sent'>('')
   // Price, size and bedrooms. Kept behind a toggle: five more controls in the
   // top bar pushed the listings below the fold on a phone, and most searches
   // never use them.
@@ -203,8 +205,10 @@ function PropertiesPageInner() {
     priceMin: Number(fPriceMin), priceMax: Number(fPriceMax),
     sizeMin: Number(fSizeMin), sizeMax: Number(fSizeMax),
     bedsMin: Number(fBeds),
-  }), [scoped, q, fType, fTxn, fStatus, fAgent, fArea, fPriceMin, fPriceMax, fSizeMin, fSizeMax, fBeds])
-  const activeFilters = !!(q || fType || fTxn || fStatus || fAgent || fArea || fPriceMin || fPriceMax || fSizeMin || fSizeMax || fBeds)
+    marketing: scope === 'me' ? fMarketing : '',
+  }), [scoped, q, fType, fTxn, fStatus, fAgent, fArea, fPriceMin, fPriceMax, fSizeMin, fSizeMax, fBeds, scope, fMarketing])
+  const marketingOn = scope === 'me' && !!fMarketing
+  const activeFilters = !!(q || fType || fTxn || fStatus || fAgent || fArea || fPriceMin || fPriceMax || fSizeMin || fSizeMax || fBeds || marketingOn)
   // Only the ones in the panel, so the toggle can show a count without
   // double-counting what is already visible in the bar.
   const moreCount = [fPriceMin, fPriceMax, fSizeMin, fSizeMax, fBeds].filter(Boolean).length
@@ -236,7 +240,7 @@ function PropertiesPageInner() {
             {(['me','company'] as const).map(s => (
               <button
                 key={s}
-                onClick={() => setScope(s)}
+                onClick={() => { setScope(s); if (s !== 'me') setFMarketing('') }}
                 className="px-3 py-1.5 text-xs md:text-sm font-semibold transition-colors"
                 style={scope === s ? { background: '#0E1F3D', color: '#fff' } : { background: 'transparent', color: '#6A7488' }}
               >
@@ -299,6 +303,21 @@ function PropertiesPageInner() {
           <option value="">Any status</option>
           {['Available', 'Pending', 'Reserved', 'Sold', 'Rented', 'Under Construction'].map(s => <option key={s} value={s}>{s}</option>)}
         </select>
+        {/* Which of my listings are already out with marketing. Mine only: it
+            is the agent's to-do list ("what haven't I sent yet?"). */}
+        {scope === 'me' && (
+          <select
+            value={fMarketing}
+            onChange={e => setFMarketing(e.target.value as '' | 'sent' | 'not_sent')}
+            aria-label="Sent to marketing"
+            className="flex-1 md:flex-none rounded-xl px-2.5 py-2 text-sm outline-none"
+            style={{ border: '1.5px solid #EEF0F4', background: '#fff', color: fMarketing ? '#14223F' : '#6A7488' }}
+          >
+            <option value="">Posted or not</option>
+            <option value="sent">📣 Sent to marketing</option>
+            <option value="not_sent">Not sent yet</option>
+          </select>
+        )}
         {/* Whose listings. Only a manager sees it: an agent's own answer to
             this question is the Mine / All switch in the header above. */}
         {isManager(session?.role) && Object.keys(agents).length > 0 && (
@@ -327,7 +346,7 @@ function PropertiesPageInner() {
         </button>
         {activeFilters && (
           <button
-            onClick={() => { setQ(''); setFType(''); setFTxn(''); setFStatus(''); setFAgent(''); setFArea('')
+            onClick={() => { setQ(''); setFType(''); setFTxn(''); setFStatus(''); setFAgent(''); setFArea(''); setFMarketing('')
               setFPriceMin(''); setFPriceMax(''); setFSizeMin(''); setFSizeMax(''); setFBeds('') }}
             className="flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-semibold"
             style={{ border: '1.5px solid #EEF0F4', background: '#F7F8FB', color: '#6A7488' }}

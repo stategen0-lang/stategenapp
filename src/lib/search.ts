@@ -40,6 +40,11 @@ export interface PropertyFilters {
   bedsMin?: number
   /** An area key from areaOptions(), or '' for anywhere. */
   area?: string
+  /**
+   * Whether it has been emailed to the marketing team (the "📣 Listed" badge):
+   * 'sent', 'not_sent', or '' for either. Offered on an agent's own listings.
+   */
+  marketing?: '' | 'sent' | 'not_sent'
 }
 
 /**
@@ -142,6 +147,10 @@ export function filterProperties(list: Property[], f: PropertyFilters): Property
     if (f.transaction && p.transaction !== f.transaction) return false
     if (f.status && p.status !== f.status) return false
     if (f.area && !listingAreaKeys(p).includes(f.area)) return false
+    if (f.marketing) {
+      const sent = !!p.marketingSentAt?.trim()
+      if (f.marketing === 'sent' ? !sent : sent) return false
+    }
 
     if (priceMin != null || priceMax != null) {
       const price = listingPrice(p)

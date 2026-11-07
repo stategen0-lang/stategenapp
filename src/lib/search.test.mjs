@@ -220,3 +220,14 @@ test('filterProperties: area combines with the other filters', () => {
   )
   assert.deepEqual(filterProperties(areaStock, { area: byLabel('Rabweh').key, bedsMin: 2 }).map(p => p.id), [])
 })
+
+test('filterProperties: sent to marketing, or not yet', () => {
+  const list = [
+    { id: 1, title: 'A', type: 'Apartment', transaction: 'For Sale', status: 'Available', marketingSentAt: '2026-11-05T18:33:25.284Z' },
+    { id: 2, title: 'B', type: 'Apartment', transaction: 'For Sale', status: 'Available' },
+    { id: 3, title: 'C', type: 'Apartment', transaction: 'For Sale', status: 'Available', marketingSentAt: '  ' },
+  ]
+  assert.deepEqual(filterProperties(list, { marketing: 'sent' }).map(p => p.id), [1])
+  assert.deepEqual(filterProperties(list, { marketing: 'not_sent' }).map(p => p.id), [2, 3])
+  assert.deepEqual(filterProperties(list, { marketing: '' }).map(p => p.id), [1, 2, 3])
+})
