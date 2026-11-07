@@ -278,6 +278,8 @@ function describeInput(p: Property): DescriptionInput {
     furnishing: p.furnishing, floor: p.floor,
     amenities: p.amenities, buildingFeatures: p.buildingFeatures,
     publicNotes: p.publicNotes,
+    // Was missing: a rental written from WhatsApp never mentioned it.
+    advancedPayment: p.transaction === 'For Rent' ? p.advancedPayment : undefined,
   }
 }
 

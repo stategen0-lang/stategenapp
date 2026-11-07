@@ -224,3 +224,50 @@ test("an agent's rewrite request reaches the writer, but can't override the fact
   assert.match(prompt, /PROPERTY DATA — that rule wins/)
   assert.doesNotMatch(buildPrompts({ title: 'Studio', type: 'Apartment', price: 750 }).prompt, /The agent asked for this draft/)
 })
+
+// ── Rentals written from a sale example (Equity's template) ──────────────────
+
+test('template mode tells a rental to use rental wording and carry the advance payment', async () => {
+  const { buildPrompts } = await import('./description-prompts.ts')
+  const rent = buildPrompts({ type: 'Apartment', transaction: 'For Rent', rent: 500, city: 'Sarba', advancedPayment: '3 months' }, 'Own this 135 SQM apartment in Sarba. Price: 135,000$ + 2.5% Commission')
+  assert.match(rent.prompt, /FOR RENT/)
+  assert.match(rent.prompt, /Never "Own this"/)
+  assert.match(rent.prompt, /3 months advanced payment/)
+  assert.match(rent.prompt, /finished listing for a different property/)
+  const sale = buildPrompts({ type: 'Apartment', transaction: 'For Sale', price: 175000, city: 'Naccache' }, 'Own this …')
+  assert.match(sale.prompt, /FOR SALE/)
+  assert.doesNotMatch(sale.prompt, /advanced payment"/)
+})
+
+test('fitToListing: drops the model talking about the template (the real #286 opening)', async () => {
+  const { fitToListing } = await import('./description-prompts.ts')
+  const out = fitToListing("The template is for a sale apartment, but the property is a shop for rent. I'll adapt the template's structure.\n\nRent this 120 SQM Shop in Kaslik.\n\nRent: 600$/month + 3 months advanced payment", { transaction: 'For Rent', advancedPayment: '3 months' })
+  assert.match(out, /^Rent this 120 SQM Shop/)
+  assert.doesNotMatch(out, /template/i)
+})
+
+test('fitToListing: a rental never opens "Own this" or keeps the sale commission', async () => {
+  const { fitToListing } = await import('./description-prompts.ts')
+  const out = fitToListing('Own this 70 SQM apartment in Zouk Mikael. Now available for sale.\n\nPrice: 500$/month + 2.5% Commission\n\nBook a viewing today!', { transaction: 'For Rent' })
+  assert.match(out, /^Rent this 70 SQM/)
+  assert.match(out, /available for rent/)
+  assert.match(out, /^Price: 500\$\/month$/m)
+})
+
+test('fitToListing: the advance payment is added to the price line when the model left it out', async () => {
+  const { fitToListing } = await import('./description-prompts.ts')
+  assert.match(fitToListing('Rent this flat.\n\nPrice: 900$ per month\n\nBook a viewing today!', { transaction: 'For Rent', advancedPayment: '3 months' }), /^Price: 900\$ per month \+ 3 months advanced payment$/m)
+  // Already there: left alone, not doubled.
+  const once = fitToListing('Rent this flat.\n\nPrice: 500$/month + 3 months advanced payment', { transaction: 'For Rent', advancedPayment: '3 months' })
+  assert.equal(once.match(/advance/gi).length, 1)
+  // No price line at all: it still gets said.
+  assert.match(fitToListing('A lovely flat in Sarba.', { transaction: 'For Rent', advancedPayment: '6 months' }), /Advanced payment: 6 months$/)
+})
+
+test('fitToListing: a sale is left as the agency wrote it', async () => {
+  const { fitToListing } = await import('./description-prompts.ts')
+  const sale = 'Own this 145 SQM Apartment in Naccache. Now available for sale.\n\nPrice: 175,000$ + 2.5% Commission'
+  assert.equal(fitToListing(sale, { transaction: 'For Sale' }), sale)
+  // One paragraph is never dropped, even if it says "template".
+  assert.equal(fitToListing('Template-quality finishes throughout.', { transaction: 'For Sale' }), 'Template-quality finishes throughout.')
+})

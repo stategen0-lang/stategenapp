@@ -8,7 +8,7 @@
 // and deadline.
 
 import { complete } from '@/lib/ai/llm'
-import { buildPrompts, buildArabicPrompts, hasArabic, stripTemplateMarkers, type DescriptionInput } from '@/lib/ai/description-prompts'
+import { buildPrompts, buildArabicPrompts, hasArabic, stripTemplateMarkers, fitToListing, type DescriptionInput } from '@/lib/ai/description-prompts'
 
 export type { DescriptionInput }
 export { buildFacts, buildPrompts } from '@/lib/ai/description-prompts'
@@ -48,7 +48,7 @@ export async function generateDescription(
 
   let clean = tidy(await withDeadline(call(), opts.deadlineMs))
   if (!clean && (opts.retry ?? true)) clean = tidy(await withDeadline(call(), opts.deadlineMs))
-  return clean
+  return clean ? fitToListing(clean, d) : clean
 }
 
 /**

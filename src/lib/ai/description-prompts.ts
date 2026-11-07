@@ -102,13 +102,22 @@ export function buildPrompts(d: DescriptionInput, template?: string | null): Pro
   const facts = buildFacts(d)
 
   if (template && String(template).trim()) {
+    const rental = d.transaction === 'For Rent'
     // Template mode — the template dictates structure AND length; no sentence cap.
+    //
+    // Agencies write two kinds of template: one with [placeholders], and — far
+    // more often — a finished listing for some other property, pasted as the
+    // example. Equity's is a SALE apartment ("Own this 135 SQM … available for
+    // sale … Price: 135,000$ + 2.5% Commission"). Told to keep everything but the
+    // placeholders, the model kept "Own this" on every rental, the sale
+    // commission, and the example's rooms, and dropped facts the example had no
+    // line for — the advance payment among them.
     return {
       systemPrompt:
-        'You fill in real estate listing templates. You reproduce the given template exactly — same sections, ' +
-        'headings, line breaks, bullet points and ordering — replacing only the placeholders with real property data. ' +
-        'You never add commentary, and you never leave placeholder brackets in the output.',
-      prompt: `TEMPLATE (reproduce this structure exactly):
+        'You write real estate listings in an agency\'s house style. The agency gives you a template — either a form ' +
+        'with [placeholders] or a finished listing for another property — and you write THIS property\'s listing in ' +
+        'the same layout, voice and formatting. You output only the listing, never a remark about it.',
+      prompt: `TEMPLATE (the agency's house style):
 --- BEGIN TEMPLATE ---
 ${template}
 --- END TEMPLATE ---
@@ -117,18 +126,26 @@ PROPERTY DATA:
 - ${facts}
 
 Rules:
-- Follow the template's structure verbatim: keep its section headings, line breaks, bullet lists and their order.
-- Replace every [placeholder] with the matching value from PROPERTY DATA. No square brackets may remain.
-- Where a placeholder offers a choice (e.g. [Rent / Sale], [Own / Rent]), keep only the option that applies.
-- If a line's data is missing or zero (e.g. no parking spaces), omit that whole line. Never invent facts or use "N/A".
-- If the template separates master and regular bedrooms but only a total is known, list the total as bedrooms and drop the master line.
-- Keep the template's fixed wording as-is; only placeholders change. Choose natural adjectives where the template asks for one.
-- Use the real figures for price and size, formatted as in the template.
-- Work the agent's selling points into the description naturally, in the template's own voice.
+- Follow the template's layout: its sections, headings, line breaks, bullet style and order.
+- The template may be a finished listing for a different property. Every specific detail in it — size, area, view, rooms, floor, features, price, the property type, sale or rent — belongs to that example. Replace each with THIS property's data, and drop any line this property has no data for. Never carry an example's detail over.
+- Keep the agency's fixed lines exactly as written: the call to action, the contact number, the closing headings.
+- Replace every [placeholder] with the matching value from PROPERTY DATA; where one offers a choice ([Own / Rent], [Rent / Sale]) keep the one that applies. No square brackets may remain.
+- This property is ${rental ? 'FOR RENT' : 'FOR SALE'}. ${rental
+        ? 'Use rental wording throughout: "Rent this …", "available for rent", the price per month. Never "Own this", "for sale" or "buy".'
+        : 'Use sale wording throughout: "Own this …", "available for sale". Never "Rent this" or "per month".'}
+- Put EVERY fact from PROPERTY DATA in the listing (except the agent's internal notes). When the template has no line for one, add it as a bullet in its features section.${rental && d.advancedPayment ? `\n- The advance payment goes on the price line, after the rent: "… /month + ${d.advancedPayment} advanced payment".` : ''}
+- A commission in the template's price line is for ${rental ? 'sales: leave it off this rental unless PROPERTY DATA gives one' : 'sales: keep it'}.
+- Use this property's type everywhere (a shop is never "this apartment").
+- Rooms: list the bedrooms, bathrooms, balconies and terrace from PROPERTY DATA, and any room the agent's selling points name. A home may also list a living room and kitchen; never a dining room, maid's room or any other room the data doesn't name, and no rooms at all for a shop, office or plot beyond what the data names.
+- Descriptive lines in the example ("Located in a Calm Neighborhood", "Spacious and decorated", "Elevator 24/24") are claims about that other property. Write one only when PROPERTY DATA supports it, and never one that contradicts the data (a "very crowded area" is not a calm neighborhood).
+- If a line's data is missing or zero, leave the whole line out. Never invent facts or write "N/A".
+- If the template separates master and regular bedrooms but only a total is known, list the total as bedrooms.
+- Use the real figures for price and size, formatted the way the template formats them.
+- Work the agent's selling points in, in the template's own voice.
 - Never repeat or hint at the agent's internal notes.
 - Name the location exactly as given — no country, no added city ("in Ashrafieh", never "in Ashrafieh, Lebanon").
-- Never output the "--- BEGIN TEMPLATE ---" / "--- END TEMPLATE ---" lines. They mark the template for you; they are not part of it.
-- Output only the finished description — no preamble, no explanation, no markdown code fences.`,
+- Never output the "--- BEGIN TEMPLATE ---" / "--- END TEMPLATE ---" lines.
+- Output only the finished listing. Never explain what you did or mention the template — the text is published as it stands.`,
       maxTokens: 4000,
     }
   }
@@ -193,6 +210,44 @@ Rules:
 - Output only the Arabic description — no preamble, no English, no explanation, no markdown code fences.`,
     maxTokens: 4000,
   }
+}
+
+/**
+ * The last word on a finished English description, applied in code because
+ * agents publish the text as it stands and the prompt alone did not hold:
+ *
+ *  • a paragraph of the model talking about its work ("The template is for a
+ *    sale apartment… I'll adapt…") went out as the opening of a real listing;
+ *  • rentals opened "Own this …" and carried the sale commission;
+ *  • the advance payment, the second thing a renter asks, was left out.
+ */
+export function fitToListing(text: string, d: DescriptionInput): string {
+  const paragraphs = String(text ?? '').split(/\n{2,}/)
+  const remark = (p: string) =>
+    /\btemplate\b/i.test(p) || /^\s*(I'?ll|I will|I have|I've|Here is|Here's|Note:|Below is)\b/i.test(p)
+  // Only from the top: a remark is a preamble, never the body of a listing.
+  while (paragraphs.length > 1 && remark(paragraphs[0])) paragraphs.shift()
+  let out = paragraphs.join('\n\n').trim()
+
+  if (d.transaction === 'For Rent') {
+    out = out
+      .replace(/^(\s*)Own this\b/gim, '$1Rent this')
+      .replace(/\b(available|offered) for sale\b/gi, '$1 for rent')
+      // A percentage commission is the sale commission in the agency's example.
+      .replace(/[ \t]*\+[ \t]*\d+(?:\.\d+)?[ \t]*%[ \t]*commission\b/gi, '')
+
+    const adv = String(d.advancedPayment ?? '').trim()
+    if (adv && !/advance/i.test(out)) {
+      // "Price: …" / "Rent: …" — the colon matters: "Rent this flat" is not it.
+      const priceLine = /^([ \t]*(?:price|rent|rental price)[ \t]*:[^\n]*)$/im
+      out = priceLine.test(out)
+        ? out.replace(priceLine, `$1 + ${adv} advanced payment`)
+        : `${out}\n\nAdvanced payment: ${adv}`
+    }
+  } else if (d.transaction === 'For Sale') {
+    out = out.replace(/^(\s*)Rent this\b/gim, '$1Own this').replace(/\b(available|offered) for rent\b/gi, '$1 for sale')
+  }
+  return out
 }
 
 /** Does this text contain Arabic script at all? Guards against a model that answers in English. */
