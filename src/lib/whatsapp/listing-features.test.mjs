@@ -62,6 +62,14 @@ test('extractFeaturesFromNotes: moves only clauses that are just features', () =
   assert.equal(r.notes, 'heating system, owner wants cash only')
 })
 
+test('extractFeaturesFromNotes: a number with a thousands comma stays whole', () => {
+  const r = extractFeaturesFromNotes('150,000$ in cash and 100,000$ esken, parking')
+  assert.equal(r.notes, '150,000$ in cash and 100,000$ esken')
+  assert.equal(extractFeaturesFromNotes('Budget 1,250,000 negotiable').notes, 'Budget 1,250,000 negotiable')
+  // A comma between words still separates clauses.
+  assert.equal(extractFeaturesFromNotes('owner abroad,cash only').notes, 'owner abroad, cash only')
+})
+
 test('extractFeaturesFromNotes: a mixed clause is left alone', () => {
   const r = extractFeaturesFromNotes('elevator broken since March')
   assert.deepEqual(r.fields, {})

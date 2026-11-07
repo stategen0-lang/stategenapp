@@ -131,6 +131,11 @@ function textOf(message: ModelMessage): string {
 
 const ALREADY_DONE = /\b(I'?ve|I have)\s+(updated|added|saved|changed|set|recorded|booked|logged)\b|\b(has|have) been (saved|updated|added|changed)\b|\bis (now )?(saved|updated)\b/i
 
+// A sentence that only points at the card: "The confirmation above has the
+// details." The card is right there; the sentence is noise. Narrow on purpose —
+// "she wants to be above the highway" is a fact, not a pointer.
+const POINTS_AT_CARD = /\b(shown|see|listed|details|confirmation|card|summary)\b[^.!?\n]*\b(above|below)\b|\b(above|below)\b[^.!?\n]*\b(confirmation|card|summary)\b/i
+
 /**
  * The reply the agent receives. When a change is staged it ends with the
  * canonical confirmation, whatever the model wrote — the model may add a short
@@ -148,7 +153,7 @@ export function composeReply(modelText: string, confirmation: string | null): st
   if (/Reply YES/i.test(confirmation)) {
     for (const sentence of text.match(/[^.!?\n]+[.!?]*/g) ?? []) {
       // Also a bare "Reply YES to save it." — the card ends with the same line.
-      if (ALREADY_DONE.test(sentence) || /^\s*reply yes\b/i.test(sentence)) text = text.replace(sentence, '')
+      if (ALREADY_DONE.test(sentence) || POINTS_AT_CARD.test(sentence) || /^\s*reply yes\b/i.test(sentence)) text = text.replace(sentence, '')
     }
     text = text.replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim()
   }

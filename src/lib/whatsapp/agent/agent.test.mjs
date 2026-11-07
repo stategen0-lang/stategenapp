@@ -185,19 +185,18 @@ test('a staged change then "yes" is not the agent\'s job — but the card always
 
 // ── The switch ──────────────────────────────────────────────────────────────
 
-test('WHATSAPP_AGENT switches agencies on by id, all, or not at all', () => {
-  // On for everyone unless narrowed or switched off.
+test('WHATSAPP_AGENT can only switch the agent off, never narrow it', () => {
   assert.equal(agentEnabledFor(7, undefined), true)
   assert.equal(agentEnabledFor(7, ''), true)
   assert.equal(agentEnabledFor(42, undefined), true, 'a new agency gets it too')
+  assert.equal(agentEnabledFor(7, 'all'), true)
+  // The trial value left in production kept every other agency on the old bot.
+  assert.equal(agentEnabledFor(7, '1'), true)
+  assert.equal(agentEnabledFor(3, '1,7'), true)
+  // The kill switch still works.
   assert.equal(agentEnabledFor(7, 'off'), false)
   assert.equal(agentEnabledFor(7, 'OFF'), false)
-  assert.equal(agentEnabledFor(7, 'all'), true)
-  assert.equal(agentEnabledFor(7, '1,7'), true)
-  assert.equal(agentEnabledFor(7, ' 1 , 7 '), true)
-  assert.equal(agentEnabledFor(3, '1,7'), false)
-  // "17" must not switch on 7.
-  assert.equal(agentEnabledFor(7, '17'), false)
+  assert.equal(agentEnabledFor(7, 'false'), false)
 })
 
 test('effort can be tuned, and falls back to medium on nonsense', () => {

@@ -162,7 +162,9 @@ export function extractFeaturesFromNotes(notes: unknown): { fields: ListingFeatu
   const fields: ListingFeatureFields = {}
   if (!text) return { fields, notes: '' }
   const kept: string[] = []
-  for (const clause of text.split(/[,;\n•]+|\.\s+|\.$/)) {
+  // A comma inside a number ("150,000") is not a clause break: splitting there
+  // and joining back with ", " left notes reading "pays $150, 000 cash".
+  for (const clause of text.split(/(?:(?<!\d),|,(?!\d{3}(?!\d)))+|[;\n•]+|\.\s+|\.$/)) {
     const c = clause.trim()
     if (!c) continue
     // "parking and elevator" — move only if EVERY part is a feature.

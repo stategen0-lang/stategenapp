@@ -1,10 +1,14 @@
 // The conversational WhatsApp agent — the entry point the webhook calls.
 //
-// On for every agency by default (since 24 Oct 2026, after 762 simulated
-// conversations — scripts/agent-sim.mjs). WHATSAPP_AGENT narrows or stops it:
-//   unset / "" / "all" → on for every agency, new ones included
-//   "1,7"              → on for those company ids only
-//   "off"              → off everywhere: the kill switch (the old router answers)
+// On for every agency (since 24 Oct 2026, after 762 simulated conversations —
+// scripts/agent-sim.mjs). WHATSAPP_AGENT can only stop it:
+//   "off" → off everywhere: the kill switch (the old router answers)
+//   anything else, or unset → on for every agency, new ones included
+//
+// It used to take a list of company ids too. Production was left on "1" from
+// the trial, so every agency but the test one kept the old step-by-step bot for
+// two weeks — the one agents complained couldn't add a client. A list is now
+// ignored rather than trusted.
 //
 // It also needs a Claude credential. Without one it stays off rather than
 // leaving agents with no replies — the old router keeps answering, as it does
@@ -23,12 +27,10 @@ import { mentionedIds, withListingLinks } from './links.ts'
 
 const SEARCH_TOOLS = new Set(['match_listings', 'find_listings', 'get_listing'])
 
-/** Whether WHATSAPP_AGENT names this agency. Pure, for testing. */
+/** Whether the agent answers this agency: always, unless WHATSAPP_AGENT is "off". Pure, for testing. */
 export function agentEnabledFor(companyId: number, setting: string | undefined = process.env.WHATSAPP_AGENT): boolean {
   const s = String(setting ?? '').trim().toLowerCase()
-  if (s === 'off' || s === 'false' || s === '0') return false
-  if (!s || s === 'all' || s === 'on' || s === 'true') return true
-  return s.split(',').map(x => x.trim()).filter(Boolean).includes(String(companyId))
+  return !(s === 'off' || s === 'false' || s === '0')
 }
 
 /** On for this agency, and able to reach Claude. */

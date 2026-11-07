@@ -312,6 +312,15 @@ test('composeReply drops a leftover "Reply YES to save it." above the card', asy
   assert.equal(composeReply("I've updated the budget to $1,300. Reply YES to save it.", card), card)
 })
 
+test('composeReply drops a sentence that only points at the card, keeps facts', async () => {
+  const { composeReply } = await import('./loop.ts')
+  const card = 'About to add a new client:\n• Name: Lina Hadad\n\nReply YES to save or NO to cancel.'
+  assert.equal(composeReply('The confirmation above has the details.', card), card)
+  assert.equal(composeReply('Details below. The view type wasn\'t given.', card), `The view type wasn't given.\n\n${card}`)
+  // "above" as a fact about the flat is not a pointer.
+  assert.equal(composeReply('She wants to be above the highway.', card), `She wants to be above the highway.\n\n${card}`)
+})
+
 test('a saved change and the next queued card are both shown, in that order', async () => {
   const calls = [
     { content: [{ type: 'tool_use', id: 'a', name: 'confirm_waiting_change', input: {} }, { type: 'tool_use', id: 'b', name: 'update_client', input: {} }], stop_reason: 'tool_use' },
