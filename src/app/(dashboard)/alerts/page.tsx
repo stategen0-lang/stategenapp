@@ -1,8 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { Suspense, useCallback, useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Bell, Check, MessageCircle, TrendingDown } from 'lucide-react'
 import type { AlertView } from '@/lib/alerts'
+import MatchDetailModal from '@/components/modals/MatchDetailModal'
 import { dropLine } from '@/lib/price-drop-format'
 import { useSession } from '@/hooks/use-session'
 import { isManager } from '@/lib/permissions'
@@ -28,11 +30,36 @@ function scoreStyle(score: number) {
   return { bg: '#FBEFD6', color: '#9A6516' }
 }
 
+// useSearchParams() — for the ?property=&client= link a phone notification
+// carries — needs a Suspense boundary above it.
 export default function AlertsPage() {
+  return (
+    <Suspense fallback={null}>
+      <AlertsView />
+    </Suspense>
+  )
+}
+
+function AlertsView() {
   const { session } = useSession()
   const manager = isManager(session?.role)
   const [alerts, setAlerts] = useState<AlertView[]>([])
   const [loading, setLoading] = useState(true)
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
+  // Which match is open: a tapped card, or the pair a notification named.
+  const [match, setMatch] = useState<{ propertyId: number; clientId: number } | null>(() => {
+    const p = Number(searchParams.get('property'))
+    const c = Number(searchParams.get('client'))
+    return Number.isInteger(p) && Number.isInteger(c) && searchParams.get('property') && searchParams.get('client')
+      ? { propertyId: p, clientId: c } : null
+  })
+  function closeMatch() {
+    setMatch(null)
+    // Drop the notification's query so a refresh doesn't reopen it.
+    if (searchParams.get('property')) router.replace('/alerts')
+  }
 
   const load = useCallback(async () => {
     try {
@@ -118,12 +145,15 @@ export default function AlertsPage() {
           return (
             <div
               key={a.id}
-              onClick={() => !a.seen && markOne(a.id)}
+              onClick={() => {
+                if (!a.seen) markOne(a.id)
+                if (a.propertyId && a.clientId) setMatch({ propertyId: a.propertyId, clientId: a.clientId })
+              }}
               className="rounded-xl p-3 flex items-start gap-3 transition-colors"
               style={{
                 border: `1.5px solid ${a.seen ? LINE : '#CFE0F5'}`,
                 background: a.seen ? '#fff' : '#F5F9FE',
-                cursor: a.seen ? 'default' : 'pointer',
+                cursor: 'pointer',
               }}
             >
               {/* Unseen dot */}
@@ -175,6 +205,8 @@ export default function AlertsPage() {
           )
         })}
       </div>
+
+      {match && <MatchDetailModal propertyId={match.propertyId} clientId={match.clientId} onClose={closeMatch} />}
     </div>
   )
 }

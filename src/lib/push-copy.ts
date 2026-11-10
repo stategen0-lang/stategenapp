@@ -19,6 +19,14 @@ export interface PushPayload {
   tag: string
 }
 
+/**
+ * Tapping a match notification opens the Alerts page with that listing and that
+ * client's request side by side — the alert is the (listing, client) pair, so
+ * both ids go in the link. The page checks the pair against the viewer's own
+ * alerts, so the ids alone reveal nothing.
+ */
+const matchUrl = (propertyId: number, clientId: number) => `/alerts?property=${propertyId}&client=${clientId}`
+
 const money = (n: number) => `$${Math.round(Number(n) || 0).toLocaleString('en-US')}`
 
 /** "87%" — the number an agent decides on. */
@@ -33,11 +41,12 @@ export function newListingPush(o: {
   clientName: string
   score: number
   propertyId: number
+  clientId: number
 }): PushPayload {
   return {
     title: 'New listing matches your client',
     body: `${o.listingTitle} — ${pct(o.score)} match for ${o.clientName}`,
-    url: `/properties?open=${o.propertyId}`,
+    url: matchUrl(o.propertyId, o.clientId),
     tag: `listing-${o.propertyId}`,
   }
 }
@@ -50,13 +59,14 @@ export function priceDropPush(o: {
   clientName: string
   score: number
   propertyId: number
+  clientId: number
   oldPrice: number
   newPrice: number
 }): PushPayload {
   return {
     title: 'Price drop — now in budget',
     body: `${o.listingTitle}: ${money(o.oldPrice)} → ${money(o.newPrice)} — ${pct(o.score)} for ${o.clientName}`,
-    url: `/properties?open=${o.propertyId}`,
+    url: matchUrl(o.propertyId, o.clientId),
     tag: `listing-${o.propertyId}`,
   }
 }
@@ -72,11 +82,12 @@ export function newClientPush(o: {
   listingTitle: string
   score: number
   propertyId: number
+  clientId: number
 }): PushPayload {
   return {
     title: 'A new client matches your listing',
     body: `${o.listingTitle} — ${pct(o.score)} match. Open to see who.`,
-    url: `/properties?open=${o.propertyId}`,
+    url: matchUrl(o.propertyId, o.clientId),
     tag: `client-for-${o.propertyId}`,
   }
 }

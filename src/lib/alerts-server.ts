@@ -23,8 +23,8 @@ import { newListingPush, priceDropPush, newClientPush } from '@/lib/push-copy'
 async function notifyBest(
   admin: SupabaseClient,
   companyId: number,
-  drafts: { agent_code: string | null; score: number; clientName: string }[],
-  payloadFor: (d: { agent_code: string | null; score: number; clientName: string }) => ReturnType<typeof newListingPush>,
+  drafts: { agent_code: string | null; score: number; clientName: string; client_id: number }[],
+  payloadFor: (d: { agent_code: string | null; score: number; clientName: string; client_id: number }) => ReturnType<typeof newListingPush>,
 ): Promise<void> {
   const best = new Map<string, typeof drafts[number]>()
   for (const d of drafts) {
@@ -78,7 +78,7 @@ export async function createListingAlerts(
     // four clients who all fit should get a phone that buzzes once. The best
     // match is the one worth naming.
     await notifyBest(admin, companyId, drafts, d =>
-      newListingPush({ listingTitle: property.title, clientName: d.clientName, score: d.score, propertyId: property.id }))
+      newListingPush({ listingTitle: property.title, clientName: d.clientName, score: d.score, propertyId: property.id, clientId: d.client_id }))
 
     return insert.length
   } catch (err) {
@@ -137,7 +137,7 @@ export async function createPriceDropAlerts(
 
     await notifyBest(admin, companyId, drafts, d => priceDropPush({
       listingTitle: property.title, clientName: d.clientName, score: d.score,
-      propertyId: property.id, oldPrice, newPrice: askingPrice(property),
+      propertyId: property.id, clientId: d.client_id, oldPrice, newPrice: askingPrice(property),
     }))
 
     return insert.length
@@ -211,7 +211,7 @@ export async function createClientAlerts(
     }
     await Promise.all([...best.entries()].map(([agentCode, m]) =>
       pushToAgents(admin, companyId, [agentCode], newClientPush({
-        listingTitle: m.property.title, score: m.score.total, propertyId: m.property.id,
+        listingTitle: m.property.title, score: m.score.total, propertyId: m.property.id, clientId: client.id,
       }))))
 
     return insert.length

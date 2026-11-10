@@ -46,22 +46,20 @@ self.addEventListener('push', (event) => {
   )
 })
 
-// Tapping it opens the record it is about — and focuses the tab that is already
-// open rather than launching a second copy of the app.
+// Tapping it opens the record it is about — and reuses the tab that is already
+// open rather than launching a second copy of the app. An open tab is always
+// sent to the notification's own address: the link carries WHICH match to show
+// (?property=&client=), so merely focusing a tab that is already on /alerts
+// would leave the agent looking at the list instead of the match they tapped.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
   const url = (event.notification.data && event.notification.data.url) || '/'
+  const target = new URL(url, self.location.origin).href
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
-      for (const client of windows) {
-        if (client.url.includes(new URL(url, self.location.origin).pathname) && 'focus' in client) {
-          return client.focus()
-        }
-      }
-      if (windows.length && 'navigate' in windows[0]) {
-        return windows[0].focus().then((c) => c.navigate(url))
-      }
-      return self.clients.openWindow(url)
+      const open = windows.find((w) => 'focus' in w)
+      if (!open) return self.clients.openWindow(url)
+      return open.focus().then((c) => (c && c.url !== target && 'navigate' in c ? c.navigate(target) : c))
     }),
   )
 })
