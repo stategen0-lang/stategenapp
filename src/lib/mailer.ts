@@ -23,6 +23,8 @@ export interface MailInput {
   /** Display name shown in the inbox, e.g. "Haddad Realty via StateGen". */
   fromName?: string
   replyTo?: string
+  /** Hidden copies — the main recipients don't see these addresses. */
+  bcc?: string | string[]
   /** Files to attach (shown in the recipient's attachment list). */
   attachments?: { filename: string; content: Buffer; contentType?: string }[]
 }
@@ -69,6 +71,7 @@ export async function sendMail(input: MailInput): Promise<MailResult> {
       text: input.text,
       html: input.html,
       replyTo: input.replyTo,
+      bcc: input.bcc && (Array.isArray(input.bcc) ? input.bcc.length : true) ? input.bcc : undefined,
       attachments: input.attachments,
     })
     return { ok: true }

@@ -2,7 +2,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseRecipients, renderMarketingEmail, priceLine, photoDownloadUrl, htmlText, htmlArabic, MAX_MARKETING_RECIPIENTS } from './marketing-email.ts'
+import { parseRecipients, renderMarketingEmail, priceLine, photoDownloadUrl, htmlText, htmlArabic, MAX_MARKETING_RECIPIENTS, marketingCopyRecipients } from './marketing-email.ts'
 import { publicListing } from './share.ts'
 
 const property = {
@@ -302,4 +302,28 @@ test('htmlArabic: only a long run of digits is turned around', () => {
   assert.equal(htmlArabic('غرفتا نوم 2'), 'غرفتا نوم 2')
   assert.equal(htmlArabic('الطابق 3'), 'الطابق 3')
   assert.ok(htmlArabic('+961 76 884 433').startsWith('<span dir="ltr">'))
+})
+
+// ── A copy for the agent ─────────────────────────────────────────────────────
+
+test('marketingCopyRecipients: the sender and the listing agent, only when switched on', () => {
+  const profiles = [
+    { id: 'u1', agent_code: 'JH-655', copy_email: 'Jad@Example.com', marketing_copy: true },   // the listing's agent
+    { id: 'u2', agent_code: 'EM-305', copy_email: 'owner@example.com', marketing_copy: true }, // the manager who sent it
+    { id: 'u3', agent_code: 'RK-719', copy_email: 'ramy@example.com', marketing_copy: true },  // not involved
+    { id: 'u4', agent_code: 'KB-767', copy_email: 'kavin@example.com', marketing_copy: false },
+  ]
+  assert.deepEqual(marketingCopyRecipients(profiles, 'u2', 'JH-655', ['team@agency.com']), ['jad@example.com', 'owner@example.com'])
+  // Switched off, or no listing agent match: nobody else.
+  assert.deepEqual(marketingCopyRecipients(profiles, 'u4', 'KB-767', ['team@agency.com']), [])
+})
+
+test('marketingCopyRecipients: no bad address, no duplicate of the marketing list', () => {
+  const profiles = [
+    { id: 'u1', agent_code: 'A', copy_email: 'not-an-email', marketing_copy: true },
+    { id: 'u2', agent_code: 'B', copy_email: 'team@agency.com', marketing_copy: true },
+    { id: 'u3', agent_code: 'C', copy_email: '', marketing_copy: true },
+  ]
+  assert.deepEqual(marketingCopyRecipients(profiles, 'u1', 'B', ['Team@Agency.com']), [])
+  assert.deepEqual(marketingCopyRecipients(profiles, 'u3', null, []), [])
 })

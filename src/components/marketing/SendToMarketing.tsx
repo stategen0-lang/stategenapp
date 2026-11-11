@@ -50,14 +50,14 @@ export function useCanSendToMarketing(p: Pick<Property, 'agentId'>) {
   return { ready: config !== undefined && !loading, canSend: allowed && !!config?.configured, to: config?.email ?? null }
 }
 
-async function send(id: number): Promise<{ ok: true; sentAt: string } | { ok: false; error: string }> {
+async function send(id: number): Promise<{ ok: true; sentAt: string; copied: boolean } | { ok: false; error: string }> {
   try {
     const r = await fetch('/api/properties/marketing', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }),
     })
     const d = await r.json().catch(() => ({}))
     if (!r.ok) return { ok: false, error: d.error ?? 'Could not send. Please try again.' }
-    return { ok: true, sentAt: d.sentAt }
+    return { ok: true, sentAt: d.sentAt, copied: d.copiedToSender === true }
   } catch {
     return { ok: false, error: 'Could not reach the server. Check your connection and try again.' }
   }
@@ -160,6 +160,8 @@ export function SendToMarketingButton({ property: p }: { property: Property }) {
   const [busy, setBusy] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState('')
+  // A copy went to the sender's own email (Settings → My email).
+  const [copied, setCopied] = useState(false)
 
   if (!canSend) return null
 
@@ -167,7 +169,7 @@ export function SendToMarketingButton({ property: p }: { property: Property }) {
     setBusy(true); setError('')
     const res = await send(p.id)
     setBusy(false); setConfirming(false)
-    if (res.ok) { setSentAt(res.sentAt); setSentBy(undefined) } else setError(res.error)
+    if (res.ok) { setSentAt(res.sentAt); setSentBy(undefined); setCopied(res.copied) } else setError(res.error)
   }
 
   return (
@@ -177,7 +179,7 @@ export function SendToMarketingButton({ property: p }: { property: Property }) {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold" style={{ color: H }}>Marketing</p>
           <p className="text-xs truncate" style={{ color: SUB }}>
-            {sentAt ? sentLabel(sentAt, sentBy) : 'Email it to the team for OLX, Instagram & Facebook'}
+            {sentAt ? `${sentLabel(sentAt, sentBy)}${copied ? ' · copy sent to you' : ''}` : 'Email it to the team for OLX, Instagram & Facebook'}
           </p>
         </div>
         {confirming ? (

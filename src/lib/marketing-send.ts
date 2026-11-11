@@ -12,7 +12,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { canEditProperty, type Session } from '@/lib/permissions'
 import { dbRowToProperty } from '@/lib/db-mappers'
 import { makeShareToken, shareSecret, publicListing, publicOrigin } from '@/lib/share'
-import { parseRecipients, renderMarketingEmail } from '@/lib/marketing-email'
+import { parseRecipients, renderMarketingEmail, marketingCopyRecipients } from '@/lib/marketing-email'
 import { mergeExtras } from '@/lib/whatsapp/writes'
 import { sendMail, mailConfigured } from '@/lib/mailer'
 import { isStoredPhoto } from '@/lib/upload'
@@ -43,7 +43,7 @@ const EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', '
 export type MarketingActor = Pick<Session, 'userId' | 'companyId' | 'role' | 'agentCode' | 'fullName'>
 
 export type SendOutcome =
-  | { ok: true; sentAt: string; to: string[]; title: string }
+  | { ok: true; sentAt: string; to: string[]; title: string; copiedToSender: boolean }
   | { ok: false; status: number; error: string }
 
 /**
@@ -189,8 +189,17 @@ export async function sendListingToMarketing(
     ? (await admin.auth.admin.getUserById((owner as { id: string }).id)).data?.user?.email ?? undefined
     : undefined
 
+  // A copy for the agent, as a hidden copy of the same email (photos included),
+  // when they asked for one in Settings. select('*') so a missing migration 035
+  // reads as "nobody asked" rather than failing the send.
+  const { data: team } = await admin.from('Profiles').select('*').eq('company_id', actor.companyId)
+  const bcc = marketingCopyRecipients((team ?? []) as Record<string, unknown>[], actor.userId, p.agentId, eligible.to)
+  const me = ((team ?? []) as Record<string, unknown>[]).find(t => t.id === actor.userId)
+  const copiedToSender = !!me && bcc.includes(String(me.copy_email ?? '').trim().toLowerCase())
+
   const sent = await sendMail({
     to: eligible.to,
+    bcc,
     subject: email.subject,
     html: email.html,
     text: email.text,
@@ -209,5 +218,5 @@ export async function sendListingToMarketing(
     .update({ Amenities: mergeExtras(r.Amenities, { marketingSentAt: sentAt, marketingSentBy: actor.fullName }) })
     .eq('id', propertyId).eq('company_id', actor.companyId)
 
-  return { ok: true, sentAt, to: eligible.to, title: p.title }
+  return { ok: true, sentAt, to: eligible.to, title: p.title, copiedToSender }
 }

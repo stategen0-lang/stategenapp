@@ -598,7 +598,7 @@ export async function applyPendingAction(
         return `Couldn't send #${p.id} to marketing — the email didn't go out. Try again in a moment, or send it from the web app.`
       }
       return sent.ok
-        ? `📧 Sent #${p.id} to marketing (${sent.to.join(', ')}). Photos are attached to the email.`
+        ? `📧 Sent #${p.id} to marketing (${sent.to.join(', ')}). Photos are attached to the email.${sent.copiedToSender ? ' A copy went to your email too.' : ''}`
         : sent.error
     }
 

@@ -41,6 +41,31 @@ export function parseRecipients(raw: unknown): { ok: true; emails: string[] } | 
   return { ok: true, emails }
 }
 
+/**
+ * Who gets a copy of a listing sent to marketing: the person who pressed send
+ * and the listing's own agent (a manager may send an agent's listing), each
+ * only if they switched copies on in Settings and saved a valid address.
+ * Nobody already on the marketing list is copied twice. Pure, for testing.
+ */
+export function marketingCopyRecipients(
+  profiles: { id?: unknown; agent_code?: unknown; copy_email?: unknown; marketing_copy?: unknown }[],
+  senderId: string,
+  listingAgentCode: string | null | undefined,
+  to: string[],
+): string[] {
+  const already = new Set(to.map(e => e.toLowerCase()))
+  const out: string[] = []
+  for (const p of profiles) {
+    const involved = p.id === senderId || (!!listingAgentCode && p.agent_code === listingAgentCode)
+    if (!involved || p.marketing_copy !== true) continue
+    const email = String(p.copy_email ?? '').trim().toLowerCase()
+    if (!EMAIL.test(email) || already.has(email)) continue
+    already.add(email)
+    out.push(email)
+  }
+  return out
+}
+
 export interface MarketingEmailInput {
   listing: PublicListing
   listingId: number

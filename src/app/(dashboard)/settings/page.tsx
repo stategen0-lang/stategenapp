@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronRight, Plus, Trash2, Check, Download, MessageCircle, ExternalLink, KeyRound, Palette, Megaphone, LogOut, ArrowLeftRight } from 'lucide-react'
+import { ChevronRight, Plus, Trash2, Check, Download, MessageCircle, ExternalLink, KeyRound, Palette, Megaphone, LogOut, ArrowLeftRight, Mail } from 'lucide-react'
 import { AGENTS } from '@/lib/data'
 import { createClient } from '@/lib/supabase/client'
 import { useSession } from '@/hooks/use-session'
@@ -168,6 +168,33 @@ export default function ProfilePage() {
     })
       .then(async r => { if (!r.ok) setTemplatesMsg((await r.json().catch(() => ({})))?.error ?? 'Could not save for the team — please try again.') })
       .catch(() => setTemplatesMsg('Could not reach the server — saved on this device only.'))
+  }
+
+  // ── My email: a copy of every listing sent to marketing (per person) ─────
+  const [myEmail, setMyEmail] = useState('')
+  const [myEmailSaved, setMyEmailSaved] = useState('')
+  const [myCopy, setMyCopy] = useState(false)
+  const [myBusy, setMyBusy] = useState(false)
+  const [myMsg, setMyMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  useEffect(() => {
+    fetch('/api/me/email').then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) { setMyEmail(d.email ?? ''); setMyEmailSaved(d.email ?? ''); setMyCopy(!!d.marketingCopy) } })
+      .catch(() => {})
+  }, [])
+
+  async function saveMyEmail(patch: { email?: string; marketingCopy?: boolean }) {
+    setMyBusy(true); setMyMsg(null)
+    const r = await fetch('/api/me/email', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch),
+    }).catch(() => null)
+    const d = r ? await r.json().catch(() => ({})) : {}
+    setMyBusy(false)
+    if (!r || !r.ok) { setMyMsg({ ok: false, text: d.error ?? 'Could not save. Please try again.' }); return }
+    setMyEmail(d.email ?? ''); setMyEmailSaved(d.email ?? ''); setMyCopy(!!d.marketingCopy)
+    setMyMsg({ ok: true, text: 'email' in patch
+      ? (d.email ? 'Saved.' : 'Removed.')
+      : (d.marketingCopy ? 'On. You\'ll get a copy of every listing sent to marketing.' : 'Off.') })
   }
 
   // ── Phone notifications (per device) ────────────────────────────────────
@@ -767,6 +794,65 @@ export default function ProfilePage() {
               </button>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* My email — everyone's own. Where a copy of a listing sent to marketing
+          goes, when they turn that on. */}
+      <div className="rounded-2xl bg-white overflow-hidden" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #EEF0F4' }}>
+        <div className="px-5 py-4 flex items-center gap-2.5" style={{ borderBottom: '1px solid #EEF0F4' }}>
+          <Mail className="h-5 w-5" style={{ color: '#2E5288' }} />
+          <div>
+            <p className="text-sm font-bold" style={{ color: H }}>My email</p>
+            <p className="text-xs mt-0.5" style={{ color: SUB }}>Get your own copy of the listings you send to marketing, photos included</p>
+          </div>
+        </div>
+        <div className="p-5 space-y-4">
+          {myMsg && (
+            <p className="text-xs px-3 py-2 rounded-lg" style={myMsg.ok ? { background: '#E3F4EA', color: '#1F7A4D' } : { background: '#FBE7E7', color: '#A23434' }}>{myMsg.text}</p>
+          )}
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              type="email" inputMode="email" autoComplete="email" spellCheck={false}
+              value={myEmail}
+              onChange={e => setMyEmail(e.target.value)}
+              placeholder="you@gmail.com"
+              className="flex-1 min-w-0 rounded-xl px-3 py-2.5 text-base sm:text-sm outline-none"
+              style={{ border: '1.5px solid #EEF0F4', color: H }}
+            />
+            <button
+              onClick={() => saveMyEmail({ email: myEmail })}
+              disabled={myBusy || myEmail.trim() === myEmailSaved.trim()}
+              className="rounded-xl px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50 whitespace-nowrap"
+              style={{ background: H }}
+            >
+              {myBusy ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold" style={{ color: H }}>Send me a copy</p>
+              <p className="text-xs mt-0.5" style={{ color: SUB }}>
+                {myEmailSaved
+                  ? 'When one of your listings is sent to marketing — by you or a manager — the same email comes to you.'
+                  : 'Save your email above first.'}
+              </p>
+            </div>
+            <button
+              onClick={() => saveMyEmail({ marketingCopy: !myCopy })}
+              disabled={myBusy || !myEmailSaved}
+              aria-pressed={myCopy}
+              aria-label="Send me a copy"
+              className="shrink-0 rounded-full transition-colors disabled:opacity-50"
+              style={{ width: 52, height: 30, background: myCopy ? '#1F7A4D' : '#D8DEE8', position: 'relative' }}
+            >
+              <span style={{
+                position: 'absolute', top: 3, left: myCopy ? 25 : 3,
+                width: 24, height: 24, borderRadius: 999, background: '#fff',
+                transition: 'left .15s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+              }} />
+            </button>
+          </div>
         </div>
       </div>
 

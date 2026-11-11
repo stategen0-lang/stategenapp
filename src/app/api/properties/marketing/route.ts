@@ -17,5 +17,5 @@ export async function POST(req: NextRequest) {
 
   const result = await sendListingToMarketing(createAdminClient(), session, id)
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
-  return NextResponse.json({ ok: true, sentAt: result.sentAt, to: result.to })
+  return NextResponse.json({ ok: true, sentAt: result.sentAt, to: result.to, copiedToSender: result.copiedToSender })
 }
