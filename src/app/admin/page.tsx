@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { Building2, Lock, CheckCircle2, XCircle, Clock, ChevronDown, ChevronRight, User, Calendar, Plus, X } from 'lucide-react'
-import { PLANS } from '@/lib/stripe-plans'
+import { PLANS, periodDiscountPct } from '@/lib/stripe-plans'
 
 
 const QUICK = [
@@ -122,6 +122,17 @@ export default function AdminPage() {
     const r = await fetch(`/api/admin/invoices?companyId=${company.id}`).then(x => x.ok ? x.json() : null).catch(() => null)
     setInvoices(r?.invoices ?? [])
     setInvLoading(false)
+  }
+  // Choosing 6 or 12 months fills in the standard discount (pay for 5 / pay for
+  // 10). A discount typed by hand is left alone — only an empty box or the
+  // previous standard one is replaced.
+  function setMonths(raw: string) {
+    setInvForm(f => {
+      const auto = (m: string) => periodDiscountPct(Number(m) || 0)
+      const wasAuto = f.discountPct === '' || Number(f.discountPct) === auto(f.months)
+      const next = auto(raw)
+      return { ...f, months: raw, discountPct: wasAuto ? (next > 0 ? String(next) : '') : f.discountPct }
+    })
   }
   // subtotal field = price per month; the period length multiplies it.
   function invMonths() { return Math.max(1, Number(invForm.months) || 1) }
@@ -712,7 +723,7 @@ export default function AdminPage() {
                   </select>
                 </label>
                 <label className="text-xs" style={{ color: '#6A7488' }}>Months
-                  <input type="number" min="1" value={invForm.months} onChange={e => setInvForm(f => ({ ...f, months: e.target.value }))} className="mt-1 w-full rounded-lg px-2 py-1.5 text-sm" style={{ border: '1.5px solid #D7DCE5', color: '#1A2B4A' }} />
+                  <input type="number" min="1" value={invForm.months} onChange={e => setMonths(e.target.value)} className="mt-1 w-full rounded-lg px-2 py-1.5 text-sm" style={{ border: '1.5px solid #D7DCE5', color: '#1A2B4A' }} />
                 </label>
                 <label className="text-xs" style={{ color: '#6A7488' }}>Price / month (USD)
                   <input type="number" value={invForm.subtotal} onChange={e => setInvForm(f => ({ ...f, subtotal: e.target.value }))} className="mt-1 w-full rounded-lg px-2 py-1.5 text-sm" style={{ border: '1.5px solid #D7DCE5', color: '#1A2B4A' }} />

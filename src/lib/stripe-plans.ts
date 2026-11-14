@@ -27,7 +27,7 @@ export const PLANS = [
   {
     id: 'team' as const,
     name: 'Team',
-    price: 200 as number | null,
+    price: 250 as number | null,
     agentLimit: 9 as number | null,
     agents: '0–9 users',
     tagline: 'Full access — for a small, boutique agency',
@@ -65,6 +65,38 @@ export const PLANS = [
     features: FULL_ACCESS,
   },
 ]
+
+/**
+ * Paying for longer costs less: six months is billed as five, a year as ten.
+ * Both come to the same 16.67% off, so the offer is easy to say out loud —
+ * "pay for 5, get 6" — and applies to every priced plan alike.
+ */
+export const PERIOD_OFFERS = [
+  { months: 6, payMonths: 5 },
+  { months: 12, payMonths: 10 },
+] as const
+
+/** The discount, as a percentage, for a period of this many months (0 when there is none). */
+export function periodDiscountPct(months: number): number {
+  const offer = PERIOD_OFFERS.find(o => o.months === months)
+  // Four decimals, so 16.6667% of six months comes back to a whole-dollar total
+  // once the invoice rounds to cents.
+  return offer ? Math.round((1 - offer.payMonths / offer.months) * 100 * 1e4) / 1e4 : 0
+}
+
+/** What a period costs in total at a monthly price, after its discount. */
+export function periodTotal(monthlyPrice: number, months: number): number {
+  const offer = PERIOD_OFFERS.find(o => o.months === months)
+  return offer ? monthlyPrice * offer.payMonths : monthlyPrice * months
+}
+
+/** "6 months $1,250 · 1 year $2,500" — what a manager sees under the monthly price. */
+export function periodOfferText(monthlyPrice: number): string {
+  const usd = (n: number) => `$${n.toLocaleString('en-US')}`
+  return PERIOD_OFFERS
+    .map(o => `${o.months === 12 ? '1 year' : `${o.months} months`} ${usd(periodTotal(monthlyPrice, o.months))}`)
+    .join(' · ')
+}
 
 export type PlanId = (typeof PLANS)[number]['id']
 

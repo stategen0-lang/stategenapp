@@ -4,12 +4,37 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { PLANS, planFor, agentLimitFor, TRIAL_DAYS } from './stripe-plans.ts'
+import { PLANS, planFor, agentLimitFor, TRIAL_DAYS, periodDiscountPct, periodTotal, periodOfferText } from './stripe-plans.ts'
+
+test('paying ahead: 6 months is billed as 5, a year as 10 — the same 16.67% off', () => {
+  assert.equal(periodTotal(250, 1), 250)
+  assert.equal(periodTotal(250, 6), 1250)    // saves $250
+  assert.equal(periodTotal(250, 12), 2500)   // saves $500
+  assert.equal(periodDiscountPct(6), 16.6667)
+  assert.equal(periodDiscountPct(12), 16.6667)
+  assert.equal(periodDiscountPct(1), 0)
+  assert.equal(periodDiscountPct(3), 0)      // no offer in between
+})
+
+test('the discount percentage, applied the way the invoice does, lands on the whole total', () => {
+  // The invoice route rounds subtotal × (1 − pct/100) to cents; the stored pct
+  // must reproduce the "pay for 5 / pay for 10" totals exactly.
+  for (const price of [250, 350, 450]) {
+    for (const months of [6, 12]) {
+      const amount = Math.round(price * months * (1 - periodDiscountPct(months) / 100) * 100) / 100
+      assert.equal(amount, periodTotal(price, months), `${price} × ${months}`)
+    }
+  }
+})
+
+test('the offer line a manager reads', () => {
+  assert.equal(periodOfferText(250), '6 months $1,250 · 1 year $2,500')
+})
 
 test('the four tiers exist at the agreed monthly prices', () => {
   const byId = Object.fromEntries(PLANS.map(p => [p.id, p]))
   assert.deepEqual(PLANS.map(p => p.id), ['team', 'business', 'company', 'unlimited'])
-  assert.equal(byId.team.price, 200)
+  assert.equal(byId.team.price, 250)
   assert.equal(byId.business.price, 350)
   assert.equal(byId.company.price, 450)
   assert.equal(byId.unlimited.price, null)   // Enterprise: custom, "talk to us"

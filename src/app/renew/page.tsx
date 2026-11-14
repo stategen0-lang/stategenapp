@@ -8,6 +8,7 @@ import { useSession } from '@/hooks/use-session'
 import { isManager } from '@/lib/permissions'
 import { accessMessage, companyHasAccess } from '@/lib/billing'
 import { renewalInfo } from '@/lib/plan-card'
+import { periodOfferText } from '@/lib/stripe-plans'
 import Logo from '@/components/brand/Logo'
 
 const CONTACT = 'stategen0@gmail.com'
@@ -69,9 +70,12 @@ export default function RenewPage() {
                   {plan.usersLabel ? `${plan.usersLabel} · ` : ''}Full access to every feature
                 </p>
               </div>
-              <p className="text-sm font-bold tabular-nums shrink-0" style={{ color: '#1A2B4A' }}>
-                {plan.price != null ? <>${plan.price}<span className="font-medium" style={{ color: '#7A8499' }}> / month</span></> : 'Custom pricing'}
-              </p>
+              <div className="text-right shrink-0">
+                <p className="text-sm font-bold tabular-nums" style={{ color: '#1A2B4A' }}>
+                  {plan.price != null ? <>${plan.price}<span className="font-medium" style={{ color: '#7A8499' }}> / month</span></> : 'Custom pricing'}
+                </p>
+                {plan.price != null && <p className="text-[11px] mt-0.5" style={{ color: '#7A8499' }}>Pay ahead and save: {periodOfferText(plan.price)}</p>}
+              </div>
             </div>
             {ended && ending.text.startsWith('Ended') && (
               <p className="text-xs mt-3 pt-3 font-semibold" style={{ borderTop: '1px solid #EEF0F4', color: '#A23434' }}>{ending.text}</p>

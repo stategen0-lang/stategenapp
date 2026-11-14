@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { CreditCard } from 'lucide-react'
 import { renewalInfo, seatState, TONE_STYLE } from '@/lib/plan-card'
+import { periodOfferText } from '@/lib/stripe-plans'
 
 // "Your plan" on Settings, for managers: plan, price, users used against the
 // limit, and the paid-through date. Read-only — StateGen sets all of it.
@@ -85,9 +86,12 @@ export default function PlanCard() {
             </p>
           </div>
           {hasPlan && (
-            <p className="text-sm font-bold tabular-nums" style={{ color: H }}>
-              {d.price != null ? <>${d.price}<span className="font-medium" style={{ color: SUB }}> / month</span></> : 'Custom pricing'}
-            </p>
+            <div className="text-right">
+              <p className="text-sm font-bold tabular-nums" style={{ color: H }}>
+                {d.price != null ? <>${d.price}<span className="font-medium" style={{ color: SUB }}> / month</span></> : 'Custom pricing'}
+              </p>
+              {d.price != null && <p className="text-[11px] mt-0.5" style={{ color: SUB }}>Pay ahead and save: {periodOfferText(d.price)}</p>}
+            </div>
           )}
         </div>
 
