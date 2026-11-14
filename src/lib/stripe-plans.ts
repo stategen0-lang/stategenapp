@@ -5,9 +5,9 @@
 // free trial, and a promo code can be entered at checkout.
 //
 // Longer commitments are a manual arrangement handled at invoicing time:
-//   - 6-month: pay for 5 (1 month free) — Business & Company
-//   - yearly:  pay for 10 (2 months free) — Business & Company
-//   - Team:    flat $1,000 / 6 months, $2,000 / year
+//   - 6-month: pay for 5 (1 month free) — every priced plan
+//   - yearly:  pay for 10 (2 months free) — every priced plan
+//   - Team:    $1,250 / 6 months, $2,500 / year (at $250/mo)
 // The `price` below is the monthly rate; Charbel applies the multi-month promos
 // per invoice in the admin panel.
 
