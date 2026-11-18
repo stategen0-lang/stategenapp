@@ -58,6 +58,7 @@ export function dbRowToProperty(row: Record<string, unknown>, idx: number): Prop
     aiDescriptionAr: extras.aiDescriptionAr as string | undefined,
     parkings: extras.parkings as number | undefined,
     buildingAge: extras.buildingAge as number | undefined,
+    masterBeds: extras.masterBeds as number | undefined,
     floor: extras.floor as Property['floor'] | undefined,
     needsRenovation: !!(extras.needsRenovation),
     terrace: !!(extras.terrace),

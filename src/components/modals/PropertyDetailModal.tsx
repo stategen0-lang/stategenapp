@@ -270,6 +270,7 @@ export default function PropertyDetailModal({ property: p, agent, onClose, onEdi
                 // photograph of a field.
                 ...(has('size') ? [{ label: 'Size', value: `${p.size} m²` }] : []),
                 ...(has('beds') ? [{ label: 'Bedrooms', value: p.beds > 0 ? String(p.beds) : 'N/A' }] : []),
+                ...(has('beds') && (p.masterBeds ?? 0) > 0 ? [{ label: 'Master bedrooms', value: String(p.masterBeds) }] : []),
                 ...(has('baths') ? [{ label: 'Bathrooms', value: String(p.baths) }] : []),
                 ...(has('view') ? [{ label: 'View', value: p.view || '—' }] : []),
                 ...(has('garden') ? [{ label: 'Garden', value: p.garden ? 'Yes' : 'No' }] : []),

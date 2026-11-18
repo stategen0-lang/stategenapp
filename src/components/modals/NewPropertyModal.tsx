@@ -41,6 +41,7 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
     area: [initial?.district, initial?.city].filter(Boolean).join(', '),
     size: initial?.size ? String(initial.size) : '',
     beds: initial?.beds ? String(initial.beds) : '',
+    masterBeds: initial?.masterBeds ? String(initial.masterBeds) : '',
     baths: initial?.baths ? String(initial.baths) : '',
     parkings: initial?.parkings ? String(initial.parkings) : '',
     buildingAge: initial?.buildingAge ? String(initial.buildingAge) : '',
@@ -557,6 +558,17 @@ export default function NewPropertyModal({ onClose, onSaved, onDeleted, initial 
               </div>
             )}
           </div>
+
+          {/* Master bedrooms: how many of the beds above. The description lists
+              them apart ("1 Master Bedroom, 2 Regular Bedrooms"). */}
+          {shows('beds') && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={label} style={labelStyle}>Master bedrooms</label>
+                <input className={inp} style={inpStyle} type="number" min={0} value={form.masterBeds} onChange={e => set('masterBeds', e.target.value)} placeholder="Of the beds, e.g. 1" />
+              </div>
+            </div>
+          )}
 
           {/* View + Building Age */}
           {(shows('view') || shows('buildingAge')) && (

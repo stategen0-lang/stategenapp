@@ -246,20 +246,21 @@ test('fitToListing: drops the model talking about the template (the real #286 op
   assert.doesNotMatch(out, /template/i)
 })
 
-test('fitToListing: a rental never opens "Own this" or keeps the sale commission', async () => {
+test('fitToListing: a rental never opens "Own this"; its commission is a month, not 2.5%', async () => {
   const { fitToListing } = await import('./description-prompts.ts')
   const out = fitToListing('Own this 70 SQM apartment in Zouk Mikael. Now available for sale.\n\nPrice: 500$/month + 2.5% Commission\n\nBook a viewing today!', { transaction: 'For Rent' })
   assert.match(out, /^Rent this 70 SQM/)
   assert.match(out, /available for rent/)
-  assert.match(out, /^Price: 500\$\/month$/m)
+  assert.match(out, /^Price: 500\$\/month \+ 1 month Commission$/m)
 })
 
 test('fitToListing: the advance payment is added to the price line when the model left it out', async () => {
   const { fitToListing } = await import('./description-prompts.ts')
-  assert.match(fitToListing('Rent this flat.\n\nPrice: 900$ per month\n\nBook a viewing today!', { transaction: 'For Rent', advancedPayment: '3 months' }), /^Price: 900\$ per month \+ 3 months advanced payment$/m)
-  // Already there: left alone, not doubled.
+  assert.match(fitToListing('Rent this flat.\n\nPrice: 900$ per month\n\nBook a viewing today!', { transaction: 'For Rent', advancedPayment: '3 months' }), /^Price: 900\$ per month \+ 1 month Commission \+ 3 months advanced payment$/m)
+  // Already there: left alone, not doubled — and the commission goes before it.
   const once = fitToListing('Rent this flat.\n\nPrice: 500$/month + 3 months advanced payment', { transaction: 'For Rent', advancedPayment: '3 months' })
   assert.equal(once.match(/advance/gi).length, 1)
+  assert.match(once, /^Price: 500\$\/month \+ 1 month Commission \+ 3 months advanced payment$/m)
   // No price line at all: it still gets said.
   assert.match(fitToListing('A lovely flat in Sarba.', { transaction: 'For Rent', advancedPayment: '6 months' }), /Advanced payment: 6 months$/)
 })
@@ -270,4 +271,30 @@ test('fitToListing: a sale is left as the agency wrote it', async () => {
   assert.equal(fitToListing(sale, { transaction: 'For Sale' }), sale)
   // One paragraph is never dropped, even if it says "template".
   assert.equal(fitToListing('Template-quality finishes throughout.', { transaction: 'For Sale' }), 'Template-quality finishes throughout.')
+})
+
+// ── Commission next to the price; master bedrooms ───────────────────────────
+
+test('fitToListing: a sale gets "+ 2.5% Commission" when the model left it off, never twice', async () => {
+  const { fitToListing } = await import('./description-prompts.ts')
+  assert.match(fitToListing('Own this flat.\n\nPrice: 175,000$\n\nBook a viewing today!', { transaction: 'For Sale' }), /^Price: 175,000\$ \+ 2\.5% Commission$/m)
+  const once = fitToListing('Own this flat.\n\nPrice: 175,000$ + 2.5% Commission', { transaction: 'For Sale' })
+  assert.equal(once.match(/commission/gi).length, 1)
+  // Prose with no price line is left to the prompt.
+  assert.equal(fitToListing('A bright flat in Naccache.', { transaction: 'For Sale' }), 'A bright flat in Naccache.')
+})
+
+test('the facts carry the commission, the master bedrooms and the new tick-boxes', async () => {
+  const { buildFacts, buildPrompts } = await import('./description-prompts.ts')
+  const sale = buildFacts({ type: 'Apartment', transaction: 'For Sale', price: 175000, city: 'Naccache', beds: 3, masterBeds: 1, amenities: ['Decorated', 'Fireplace', 'Heating System', 'Near Highway'], buildingFeatures: ['Water Tank', 'Solar Panels', 'Visitors Parking'] })
+  assert.match(sale, /Price: USD 175,000 \+ 2\.5% Commission/)
+  assert.match(sale, /Master bedrooms: 1 of the 3 \(so 2 regular\)/)
+  assert.match(sale, /Features: Decorated, Fireplace, Heating System, Near Highway/)
+  assert.match(sale, /Building has: Water Tank, Solar Panels, Visitors Parking/)
+  assert.match(buildFacts({ type: 'Apartment', transaction: 'For Rent', rent: 500, city: 'Sarba' }), /Price: USD 500\/month \+ 1 month Commission/)
+  // More master bedrooms than bedrooms is a typo, not a fact to print.
+  assert.match(buildFacts({ type: 'Apartment', transaction: 'For Sale', price: 1, beds: 2, masterBeds: 5 }), /Master bedrooms: 2 of the 2 \(so 0 regular\)/)
+  assert.doesNotMatch(buildFacts({ type: 'Apartment', transaction: 'For Sale', price: 1, beds: 2 }), /Master/)
+  const t = buildPrompts({ type: 'Apartment', transaction: 'For Rent', rent: 500, city: 'Sarba' }, 'Own this … Price: 135,000$ + 2.5% Commission')
+  assert.match(t.prompt, /"\+ 1 month Commission"/)
 })

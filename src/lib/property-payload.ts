@@ -19,6 +19,8 @@ export interface ListingForm {
   area: string
   size: string
   beds: string
+  /** How many of the bedrooms are master bedrooms. */
+  masterBeds: string
   baths: string
   parkings: string
   buildingAge: string
@@ -68,6 +70,7 @@ export function propertyPayload(form: ListingForm, extra: ListingExtras): Record
     city: form.area.trim(),
     size: num(form.size),
     beds: num(form.beds),
+    masterBeds: opt(form.masterBeds),
     baths: num(form.baths),
     parkings: opt(form.parkings),
     buildingAge: opt(form.buildingAge),

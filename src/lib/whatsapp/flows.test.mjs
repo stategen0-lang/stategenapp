@@ -443,7 +443,8 @@ test('seedContext (listing): features tick the form, the rest stays in notes', (
   assert.equal(extra.balcony, true)
   assert.deepEqual(extra.buildingFeatures, ['Elevator', 'Generator'])
   assert.equal(ctx.parkings, 1)                         // the parking step, not a note
-  assert.equal(extra.notes, 'heating system')           // no checkbox → notes
+  assert.deepEqual(extra.amenities, ['Heating System']) // its own checkbox now
+  assert.equal(extra.notes, undefined)
 })
 
 test('seedContext (listing): features the model left in notes are still sorted', () => {

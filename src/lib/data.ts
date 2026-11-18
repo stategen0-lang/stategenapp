@@ -33,9 +33,9 @@ export const FLOORS: Floor[] = ['Ground level', 'Mid floor', 'Last floor']
 // migration). Garden/Balcony/Terrace keep their own booleans for backward
 // compatibility and matching; these are the extras.
 // Things only somewhere you live has.
-const HOME_AMENITIES = ['Pool', "Helper's Room", 'Air Conditioning']
+const HOME_AMENITIES = ['Pool', "Helper's Room", 'Air Conditioning', 'Heating System', 'Fireplace', 'Decorated']
 // Things any listing can have, whatever it is.
-const ANY_AMENITIES = ['Credit Facilities', 'Prime Location']
+const ANY_AMENITIES = ['Credit Facilities', 'Prime Location', 'Near Highway']
 
 export const PROPERTY_AMENITIES = [...HOME_AMENITIES, ...ANY_AMENITIES]
 
@@ -66,6 +66,7 @@ export function amenitiesFor(type: PropertyType): string[] {
 export const BUILDING_FEATURES = [
   'Concierge', '24/7 Security', 'Elevator', 'Gym', 'Shared Pool',
   'Shared Spaces', 'Storage Room', 'Generator', 'Water Well', 'Solar Panels',
+  'Water Tank', 'Visitors Parking',
 ]
 
 // The one canonical list of listing types, in the order shown in every picker.
@@ -101,6 +102,7 @@ export interface Property {
   city: string
   size: number            // m²
   beds: number
+  masterBeds?: number    // how many of the bedrooms are master bedrooms
   baths: number
   garden: boolean
   balcony: boolean

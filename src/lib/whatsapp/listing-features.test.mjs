@@ -16,7 +16,8 @@ test('the reported message: mid floor, heating system, parking, view', () => {
   assert.equal(fields.floor, 'Mid floor')
   assert.equal(fields.parkings, 1)
   assert.equal(fields.view, 'Sea')
-  assert.deepEqual(unmatched, ['heating system'])       // no checkbox → notes
+  assert.deepEqual(fields.amenities, ['Heating System']) // its own checkbox now
+  assert.deepEqual(unmatched, [])
 })
 
 test('building features and amenities tick the right boxes', () => {
@@ -59,7 +60,8 @@ test('extractFeaturesFromNotes: moves only clauses that are just features', () =
   assert.equal(r.fields.floor, 'Mid floor')
   assert.deepEqual(r.fields.buildingFeatures, ['Generator', 'Elevator'])
   assert.equal(r.fields.view, 'Sea')
-  assert.equal(r.notes, 'heating system, owner wants cash only')
+  assert.deepEqual(r.fields.amenities, ['Heating System'])
+  assert.equal(r.notes, 'owner wants cash only')
 })
 
 test('extractFeaturesFromNotes: a number with a thousands comma stays whole', () => {
@@ -84,4 +86,13 @@ test('mergeFeatureFields: stated values win, checkbox lists union', () => {
   assert.equal(out.floor, 'Last floor')
   assert.deepEqual(out.buildingFeatures, ['Elevator', 'Generator'])
   assert.equal(out.garden, true)
+})
+
+test('the new checkboxes, in the words agents use', () => {
+  const { fields, unmatched } = sortListingFeatures('decorated, near highway, chimney, central heating, water tank, solar panels, 1 parking + visitors')
+  assert.deepEqual(fields.amenities?.sort(), ['Decorated', 'Fireplace', 'Heating System', 'Near Highway'])
+  assert.deepEqual(fields.buildingFeatures?.sort(), ['Solar Panels', 'Visitors Parking', 'Water Tank'])
+  assert.equal(fields.parkings, 1)
+  assert.deepEqual(unmatched, [])
+  assert.deepEqual(sortListingFeatures('minutes away from the highway, visitors parking, fireplace').fields.amenities?.sort(), ['Fireplace', 'Near Highway'])
 })

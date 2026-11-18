@@ -19,6 +19,8 @@ export interface DescriptionInput {
   city?: string
   size?: number
   beds?: number
+  /** How many of `beds` are master bedrooms. */
+  masterBeds?: number
   baths?: number
   garden?: boolean
   balcony?: boolean
@@ -45,6 +47,13 @@ export interface DescriptionInput {
   style?: string
 }
 
+/**
+ * The agency's commission, said right after the price in every description:
+ * 2.5% of the price on a sale, one month's rent on a rental — the same 2.5% the
+ * dashboard and reports already assume.
+ */
+export const COMMISSION = { sale: '2.5% Commission', rent: '1 month Commission' } as const
+
 export interface Prompts {
   systemPrompt: string
   prompt: string
@@ -60,8 +69,9 @@ function list(values: string[] | undefined): string {
  *  the model never invents a value for a placeholder. */
 export function buildFacts(d: DescriptionInput): string {
   const priceStr = d.transaction === 'For Rent'
-    ? `USD ${Number(d.rent).toLocaleString()}/month`
-    : `USD ${Number(d.price).toLocaleString()}`
+    ? `USD ${Number(d.rent).toLocaleString()}/month + ${COMMISSION.rent}`
+    : `USD ${Number(d.price).toLocaleString()} + ${COMMISSION.sale}`
+  const master = Math.min(Number(d.masterBeds) || 0, Number(d.beds) || 0)
 
   return [
     d.title ? `Title: ${d.title}` : null,
@@ -74,6 +84,7 @@ export function buildFacts(d: DescriptionInput): string {
     `Location (use this wording, do not add a city or country): ${[d.district, d.city].filter(Boolean).join(', ')}`,
     d.size ? `Size: ${d.size} m²` : null,
     d.beds ? `Bedrooms: ${d.beds}` : null,
+    master ? `Master bedrooms: ${master} of the ${d.beds} (so ${Number(d.beds) - master} regular)` : null,
     d.baths ? `Bathrooms: ${d.baths}` : null,
     d.parkings ? `Parking spaces: ${d.parkings}` : null,
     d.view ? `View: ${d.view}` : null,
@@ -133,13 +144,13 @@ Rules:
 - This property is ${rental ? 'FOR RENT' : 'FOR SALE'}. ${rental
         ? 'Use rental wording throughout: "Rent this …", "available for rent", the price per month. Never "Own this", "for sale" or "buy".'
         : 'Use sale wording throughout: "Own this …", "available for sale". Never "Rent this" or "per month".'}
-- Put EVERY fact from PROPERTY DATA in the listing (except the agent's internal notes). When the template has no line for one, add it as a bullet in its features section.${rental && d.advancedPayment ? `\n- The advance payment goes on the price line, after the rent: "… /month + ${d.advancedPayment} advanced payment".` : ''}
-- A commission in the template's price line is for ${rental ? 'sales: leave it off this rental unless PROPERTY DATA gives one' : 'sales: keep it'}.
+- Put EVERY fact from PROPERTY DATA in the listing (except the agent's internal notes). When the template has no line for one, add it as a bullet in its features section.${rental && d.advancedPayment ? `\n- The advance payment goes on the price line, after the rent and the commission: "… /month + ${COMMISSION.rent} + ${d.advancedPayment} advanced payment".` : ''}
+- The price line always carries the agency commission right after the price, written exactly "+ ${rental ? COMMISSION.rent : COMMISSION.sale}"${rental ? ' (before any advance payment)' : ''}. A commission in the template is the example's; use this one.
 - Use this property's type everywhere (a shop is never "this apartment").
 - Rooms: list the bedrooms, bathrooms, balconies and terrace from PROPERTY DATA, and any room the agent's selling points name. A home may also list a living room and kitchen; never a dining room, maid's room or any other room the data doesn't name, and no rooms at all for a shop, office or plot beyond what the data names.
-- Descriptive lines in the example ("Located in a Calm Neighborhood", "Spacious and decorated", "Elevator 24/24") are claims about that other property. Write one only when PROPERTY DATA supports it, and never one that contradicts the data (a "very crowded area" is not a calm neighborhood).
+- Descriptive lines in the example ("Located in a Calm Neighborhood", "Spacious and decorated", "Elevator 24/24") are claims about that other property. Write one only when PROPERTY DATA supports it, and never one that contradicts the data (a "very crowded area" is not a calm neighborhood). The ticked features are that support: "Near Highway" is what allows a line about the highway, "Decorated" one about the decoration.
 - If a line's data is missing or zero, leave the whole line out. Never invent facts or write "N/A".
-- If the template separates master and regular bedrooms but only a total is known, list the total as bedrooms.
+- Bedrooms: when PROPERTY DATA gives master bedrooms, list them apart ("1 Master Bedroom", "2 Regular Bedrooms"); when only a total is known, list the total as bedrooms.
 - Use the real figures for price and size, formatted the way the template formats them.
 - Work the agent's selling points in, in the template's own voice.
 - Never repeat or hint at the agent's internal notes.
@@ -163,6 +174,7 @@ Rules:
 - Use ONLY the facts in PROPERTY DATA. Never state a view, sea or mountain access, parking, garden, balcony, terrace, pool, furnishing or any other feature that isn't listed there — agents publish this text as written, and a feature the property doesn't have is a false listing
 - Bring out the location's appeal in general terms that are true of the area itself (neighbourhood character, convenience), never as a feature of this property
 - Mention the most attractive listed features naturally
+- When you give the price, follow it with the commission exactly as PROPERTY DATA writes it
 - End with a subtle call to action
 - Do NOT use generic filler phrases like "don't miss this opportunity"
 - Work the agent's selling points in naturally
@@ -234,7 +246,8 @@ export function fitToListing(text: string, d: DescriptionInput): string {
       .replace(/^(\s*)Own this\b/gim, '$1Rent this')
       .replace(/\b(available|offered) for sale\b/gi, '$1 for rent')
       // A percentage commission is the sale commission in the agency's example.
-      .replace(/[ \t]*\+[ \t]*\d+(?:\.\d+)?[ \t]*%[ \t]*commission\b/gi, '')
+      .replace(/[ \t]*\+[ \t]*\d+(?:[.,]\d+)?[ \t]*%[ \t]*commission\b/gi, '')
+    out = withCommission(out, COMMISSION.rent)
 
     const adv = String(d.advancedPayment ?? '').trim()
     if (adv && !/advance/i.test(out)) {
@@ -246,8 +259,23 @@ export function fitToListing(text: string, d: DescriptionInput): string {
     }
   } else if (d.transaction === 'For Sale') {
     out = out.replace(/^(\s*)Rent this\b/gim, '$1Own this').replace(/\b(available|offered) for rent\b/gi, '$1 for sale')
+    out = withCommission(out, COMMISSION.sale)
   }
   return out
+}
+
+/**
+ * The commission on the price line — "Price: 500$/month + 1 month Commission".
+ * Left alone when the line already names a commission; put straight after a
+ * monthly figure, so it comes before an advance payment; otherwise at the end.
+ * A description with no price line is prose, where the prompt asks for it.
+ */
+function withCommission(text: string, commission: string): string {
+  const m = text.match(/^([ \t]*(?:price|rent|rental price)[ \t]*:[^\n]*)$/im)
+  if (!m || /commission/i.test(m[1])) return text
+  const monthly = /(\/[ \t]*month\b|\/[ \t]*mo\b|\bper[ \t]+month\b|\ba[ \t]+month\b)/i
+  const line = monthly.test(m[1]) ? m[1].replace(monthly, `$1 + ${commission}`) : `${m[1]} + ${commission}`
+  return text.replace(m[1], line)
 }
 
 /** Does this text contain Arabic script at all? Guards against a model that answers in English. */

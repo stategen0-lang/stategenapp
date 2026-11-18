@@ -219,10 +219,16 @@ test('mergeExtras: adding a feature keeps the ones already ticked', () => {
 })
 
 test('expandListingFeatures: an update naming features fills the fields', () => {
-  const { fields, unmatched } = expandListingFeatures({ status: 'Available', features: ['generator', 'parking', 'heating'] })
+  const { fields, unmatched } = expandListingFeatures({ status: 'Available', features: ['generator', 'parking', 'jacuzzi'] })
   const u = buildUpdate(fields, PROPERTY_FIELDS)
   assert.deepEqual(u.extras.buildingFeatures, ['Generator'])
   assert.equal(u.extras.parkings, 1)
-  assert.deepEqual(unmatched, ['heating'])
+  assert.deepEqual(unmatched, ['jacuzzi'])           // no checkbox for it
   assert.equal('features' in fields, false)
+})
+
+test('master bedrooms from WhatsApp land where the app reads them', () => {
+  const u = buildUpdate({ beds: 3, masterBeds: 1 }, PROPERTY_FIELDS)
+  assert.equal(u.columns.Bedrooms, 3)
+  assert.equal(u.extras.masterBeds, 1)
 })

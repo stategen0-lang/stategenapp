@@ -11,13 +11,14 @@
 
 // Canonical names must match the web form exactly — its checkboxes compare by
 // string. (Kept in sync with PROPERTY_AMENITIES / BUILDING_FEATURES in data.ts.)
-export const LISTING_AMENITIES = ['Pool', "Helper's Room", 'Air Conditioning', 'Credit Facilities', 'Prime Location'] as const
+export const LISTING_AMENITIES = ['Pool', "Helper's Room", 'Air Conditioning', 'Heating System', 'Fireplace', 'Decorated', 'Credit Facilities', 'Prime Location', 'Near Highway'] as const
 // Land-only boxes (the web form offers these for a plot). Kept as their own
 // list so the sync test can check each against its counterpart in data.ts.
 export const LISTING_LAND_AMENITIES = ['Flat Land (0% slope)', 'Road Access', 'Building Permit'] as const
 export const LISTING_BUILDING_FEATURES = [
   'Concierge', '24/7 Security', 'Elevator', 'Gym', 'Shared Pool',
   'Shared Spaces', 'Storage Room', 'Generator', 'Water Well', 'Solar Panels',
+  'Water Tank', 'Visitors Parking',
 ] as const
 
 export interface ListingFeatureFields {
@@ -87,6 +88,9 @@ const RULES: Rule[] = [
   { test: /^storage(?:\s+room)?$|^depot$|^cave$/i, apply: addTo('buildingFeatures', 'Storage Room') },
   { test: /^(?:water\s+)?well$|^artesian\s+well$/i, apply: addTo('buildingFeatures', 'Water Well') },
   { test: /^solar(?:\s+(?:panels?|energy|system|power))?$/i, apply: addTo('buildingFeatures', 'Solar Panels') },
+  { test: /^(?:(?:private|own|big|large)\s+)?water\s+tanks?$|^(?:water\s+)?(?:tank|reservoir|khazzan|khazen)s?$/i, apply: addTo('buildingFeatures', 'Water Tank') },
+  // "1 parking + visitors" splits into "1 parking" and "visitors".
+  { test: /^(?:visitors?'?|guests?'?)(?:\s+parkings?)?$|^parkings?\s+for\s+(?:visitors|guests)$/i, apply: addTo('buildingFeatures', 'Visitors Parking') },
 
   // Unit amenities
   { test: /^(?:private\s+)?(?:swimming\s+)?pool$/i, apply: addTo('amenities', 'Pool') },
@@ -94,6 +98,10 @@ const RULES: Rule[] = [
   { test: /^(?:a\s*\/?\s*c|air\s*con(?:ditioning|ditioner|ditioners)?|aircon|(?:split|central)\s+(?:a\s*\/?\s*c|air\s*conditioning))$/i, apply: addTo('amenities', 'Air Conditioning') },
   { test: /^(?:credit\s+facilit(?:y|ies)|payment\s+facilit(?:y|ies)|bank\s+loan|housing\s+loan|mortgage|loan|credit|installments?|taksit)$/i, apply: addTo('amenities', 'Credit Facilities') },
   { test: /^(?:prime|premium|top|excellent|great|best)\s+(?:location|spot|area)$/i, apply: addTo('amenities', 'Prime Location') },
+  { test: /^(?:central\s+|full\s+)?heating(?:\s+system)?$|^(?:radiators?|chauffage|chofaj|shofaj)$/i, apply: addTo('amenities', 'Heating System') },
+  { test: /^(?:fire\s*place|chimney|chemin[ée]e|wood\s+(?:stove|fire))$/i, apply: addTo('amenities', 'Fireplace') },
+  { test: /^(?:fully\s+|nicely\s+|beautifully\s+|well\s+)?decorated$|^decor(?:ation)?$/i, apply: addTo('amenities', 'Decorated') },
+  { test: /^(?:(?:near|close\s+to|next\s+to|on|by)\s+(?:the\s+)?|(?:minutes?|\d+\s*min(?:utes?)?)\s+(?:away\s+)?from\s+(?:the\s+)?|walking\s+distance\s+(?:from|to)\s+(?:the\s+)?)(?:highway|autostrade|autoroute)$/i, apply: addTo('amenities', 'Near Highway') },
   // Land only, but harmless anywhere: the stamp and the form read the name.
   { test: /^(?:flat|level|even)(?:\s+land)?$|^(?:0\s*%?\s*|no\s+)slope$/i, apply: addTo('amenities', 'Flat Land (0% slope)') },
   { test: /^(?:road\s+access|on\s+(?:the\s+)?road|accessible\s+by\s+road)$/i, apply: addTo('amenities', 'Road Access') },
